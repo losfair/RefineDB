@@ -41,6 +41,7 @@ pub enum SchemaCompileError {
 #[derive(Copy, Clone, Debug)]
 pub enum PrimitiveType {
   Int64,
+  Double,
   String,
   Bytes,
 }
@@ -52,6 +53,7 @@ impl Display for PrimitiveType {
       "{}",
       match self {
         Self::Int64 => "int64",
+        Self::Double => "double",
         Self::String => "string",
         Self::Bytes => "bytes",
       }
@@ -61,6 +63,7 @@ impl Display for PrimitiveType {
 
 static PRIMITIVE_TYPES: phf::Map<&'static str, PrimitiveType> = phf::phf_map! {
   "int64" => PrimitiveType::Int64,
+  "double" => PrimitiveType::Double,
   "string" => PrimitiveType::String,
   "bytes" => PrimitiveType::Bytes,
 };
