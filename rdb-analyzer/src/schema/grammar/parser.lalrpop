@@ -1,0 +1,97 @@
+use super::ast::*;
+use super::error::SchemaError;
+use lalrpop_util::ParseError;
+
+grammar;
+
+extern {
+  type Error = SchemaError;
+}
+
+pub SchemaSource: Schema = {
+  Comment* <items:SchemaItem*> => Schema {
+    items,
+  }
+}
+
+SchemaItem: SchemaItem = {
+  <x:TypeItem> => SchemaItem::Type(x),
+}
+
+TypeItem: TypeItem = {
+  <location:@L> <annotations: Annotation*> Token<"type"> <name:Identifier> <generics: TypeGenericList?> Token<"{"> ZeroOrMore<TypeField, Token<",">> Token<"}"> => TypeItem {
+    location,
+    annotations,
+    name,
+    generics: generics.unwrap_or_default(),
+  }
+}
+
+TypeGenericList: Vec<Identifier> = {
+  Token<"<"> <x: OneOrMore<Identifier, Token<",">>> Token<">"> => x
+}
+
+TypeField: TypeField = {
+  <location:@L> <annotations: Annotation*> <name:Identifier> Token<":"> <value:TypeExpr> => TypeField { annotations, location, name, value },
+}
+
+Annotation: Annotation = {
+  "@" <name:Identifier> <args: ("(" <OneOrMore<Literal, ",">> ")")?> => Annotation {
+    name,
+    args: args.unwrap_or_default(),
+  }
+}
+
+TypeExpr: TypeExpr = {
+  <x:Identifier> Token<"<"> <args:OneOrMore<TypeExpr, Token<",">>> Token<">"> => TypeExpr::Specialize(x, args),
+  <x:Identifier> => TypeExpr::Unit(x),
+}
+
+Identifier: Identifier = {
+  <s:Token<r"[a-zA-Z_][0-9a-zA-Z_]*">> => Identifier(s.to_string()),
+}
+
+Literal: Literal = {
+  <s:Token<r"[0-9]+">> =>? s.parse().map(Literal::Integer).map_err(|_| ParseError::User {
+    error: SchemaError::InvalidLiteral,
+  }),
+  <s:Token<r"0x[0-9a-fA-F]+">> =>? i64::from_str_radix(s.strip_prefix("0x").unwrap(), 16).map(Literal::Integer).map_err(|_| ParseError::User {
+    error: SchemaError::InvalidLiteral,
+  }),
+  <s:Token<r"0o[0-9a-fA-F]+">> =>? i64::from_str_radix(s.strip_prefix("0o").unwrap(), 8).map(Literal::Integer).map_err(|_| ParseError::User {
+    error: SchemaError::InvalidLiteral,
+  }),
+  <s:Token<r"0b[0-9a-fA-F]+">> =>? i64::from_str_radix(s.strip_prefix("0b").unwrap(), 2).map(Literal::Integer).map_err(|_| ParseError::User {
+    error: SchemaError::InvalidLiteral,
+  }),
+  <s:StringLit> => Literal::String(s),
+}
+
+StringLit: String = {
+  <s:Token<r#""(\\.|[^"])*""#>> =>? serde_json::from_str::<String>(s)
+    .map_err(|_| ParseError::User {
+      error: SchemaError::InvalidLiteral,
+    }),
+}
+
+
+ZeroOrMore<T, Delim>: Vec<T> = {
+  <x:OneOrMore<T, Delim>?> => x.unwrap_or_default()
+}
+
+OneOrMore<T, Delim>: Vec<T> = {
+  <i1: T> <i2:(Delim T)*> => {
+    let mut items = vec![i1];
+    items.extend(i2.into_iter().map(|e| e.1));
+    items
+  }
+}
+
+Token<I>: I = {
+  <s:I> <c:Comment*> => s,
+}
+
+Comment: () = {
+  r"//[^\n\r]*[\n\r]*" => { },
+  r"/\*([^\*]*\*+[^\*/])*([^\*]*\*+|[^\*])*\*/" => { },
+}
