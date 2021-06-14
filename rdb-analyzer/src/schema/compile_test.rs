@@ -16,7 +16,11 @@ fn test_compile_simple() {
       start: T,
       end: T,
     }
+    type Recursive<T> {
+      inner: Recursive<T>?,
+    }
     export Item<Duration<int64>> item;
+    export Recursive<int64> item;
   "#,
   )
   .unwrap();

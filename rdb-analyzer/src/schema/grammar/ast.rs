@@ -28,6 +28,7 @@ pub struct TypeField<'a> {
   pub location: usize,
   pub name: Identifier<'a>,
   pub value: TypeExpr<'a>,
+  pub optional: bool,
 }
 
 pub enum TypeExpr<'a> {

@@ -44,9 +44,9 @@ TypeGenericList: Vec<Identifier<'input>> = {
 }
 
 TypeField: TypeField<'input> = {
-  <location:@L> <annotations: Annotation*> <name:Identifier> Token<":"> <value:TypeExpr> => TypeField {
+  <location:@L> <annotations: Annotation*> <name:Identifier> Token<":"> <value:TypeExpr> <optional:"?"?> => TypeField {
     annotations: Bvec::from_iter_in(annotations.into_iter(), &state.alloc),
-    location, name, value
+    location, name, value, optional: optional.is_some(),
   },
 }
 

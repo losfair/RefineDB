@@ -115,6 +115,7 @@ pub struct SpecializedType {
 pub enum FieldType {
   Named(Arc<str>),
   Primitive(PrimitiveType),
+  Optional(Box<FieldType>),
 }
 
 impl Display for FieldType {
@@ -122,6 +123,7 @@ impl Display for FieldType {
     match self {
       Self::Named(x) => write!(f, "{}", x),
       Self::Primitive(x) => write!(f, "{}", x),
+      Self::Optional(x) => write!(f, "{}?", x),
     }
   }
 }
@@ -251,7 +253,10 @@ impl<'a> TypeResolutionContext<'a> {
           .into(),
         );
       }
-      let ty = self.resolve_type_expr(&local_context, &x.value)?;
+      let mut ty = self.resolve_type_expr(&local_context, &x.value)?;
+      if x.optional {
+        ty = FieldType::Optional(Box::new(ty));
+      }
       fields.insert(Arc::from(x.name.0), ty);
     }
 
