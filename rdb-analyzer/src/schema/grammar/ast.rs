@@ -1,38 +1,48 @@
-pub struct Schema {
-  pub items: Vec<SchemaItem>,
+use bumpalo::collections::vec::Vec;
+
+pub struct Schema<'a> {
+  pub items: Vec<'a, SchemaItem<'a>>,
 }
 
-pub enum SchemaItem {
-  Type(TypeItem),
+pub enum SchemaItem<'a> {
+  Type(&'a TypeItem<'a>),
+  Export(&'a ExportItem<'a>),
 }
 
-pub struct TypeItem {
-  pub annotations: Vec<Annotation>,
+pub struct TypeItem<'a> {
+  pub annotations: Vec<'a, Annotation<'a>>,
   pub location: usize,
-  pub name: Identifier,
-  pub generics: Vec<Identifier>,
+  pub name: Identifier<'a>,
+  pub generics: Vec<'a, Identifier<'a>>,
+  pub fields: Vec<'a, TypeField<'a>>,
 }
 
-pub struct TypeField {
-  pub annotations: Vec<Annotation>,
+pub struct ExportItem<'a> {
   pub location: usize,
-  pub name: Identifier,
-  pub value: TypeExpr,
+  pub ty: TypeExpr<'a>,
+  pub table_name: Identifier<'a>,
 }
 
-pub enum TypeExpr {
-  Unit(Identifier),
-  Specialize(Identifier, Vec<TypeExpr>),
+pub struct TypeField<'a> {
+  pub annotations: Vec<'a, Annotation<'a>>,
+  pub location: usize,
+  pub name: Identifier<'a>,
+  pub value: TypeExpr<'a>,
 }
 
-pub struct Annotation {
-  pub name: Identifier,
-  pub args: Vec<Literal>,
+pub enum TypeExpr<'a> {
+  Unit(Identifier<'a>),
+  Specialize(Identifier<'a>, Vec<'a, TypeExpr<'a>>),
 }
 
-pub struct Identifier(pub String);
+pub struct Annotation<'a> {
+  pub name: Identifier<'a>,
+  pub args: Vec<'a, Literal<'a>>,
+}
 
-pub enum Literal {
+pub struct Identifier<'a>(pub &'a str);
+
+pub enum Literal<'a> {
   Integer(i64),
-  String(String),
+  String(&'a str),
 }

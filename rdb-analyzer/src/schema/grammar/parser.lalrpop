@@ -1,57 +1,75 @@
 use super::ast::*;
 use super::error::SchemaError;
 use lalrpop_util::ParseError;
+use super::State;
+use bumpalo::collections::vec::Vec as Bvec;
 
-grammar;
+grammar(state: &mut State<'input>);
 
 extern {
   type Error = SchemaError;
 }
 
-pub SchemaSource: Schema = {
+pub SchemaSource: Schema<'input> = {
   Comment* <items:SchemaItem*> => Schema {
-    items,
+    items: Bvec::from_iter_in(items.into_iter(), &state.alloc),
   }
 }
 
-SchemaItem: SchemaItem = {
-  <x:TypeItem> => SchemaItem::Type(x),
+SchemaItem: SchemaItem<'input> = {
+  <x:TypeItem> => SchemaItem::Type(state.alloc.alloc(x)),
+  <x:ExportItem> => SchemaItem::Export(state.alloc.alloc(x)),
 }
 
-TypeItem: TypeItem = {
-  <location:@L> <annotations: Annotation*> Token<"type"> <name:Identifier> <generics: TypeGenericList?> Token<"{"> ZeroOrMore<TypeField, Token<",">> Token<"}"> => TypeItem {
+TypeItem: TypeItem<'input> = {
+  <location:@L> <annotations: Annotation*> Token<"type"> <name:Identifier> <generics: TypeGenericList?> Token<"{"> <fields:ZeroOrMore<TypeField, Token<",">>> Token<"}"> Token<";">? => TypeItem {
     location,
-    annotations,
+    annotations: Bvec::from_iter_in(annotations.into_iter(), &state.alloc),
     name,
-    generics: generics.unwrap_or_default(),
+    generics: Bvec::from_iter_in(generics.unwrap_or_default().into_iter(), &state.alloc),
+    fields: Bvec::from_iter_in(fields.into_iter(), &state.alloc),
   }
 }
 
-TypeGenericList: Vec<Identifier> = {
+ExportItem: ExportItem<'input> = {
+  <location:@L> Token<"export"> <ty:TypeExpr> <table_name:Identifier> Token<";"> => ExportItem {
+    location,
+    ty,
+    table_name,
+  }
+}
+
+TypeGenericList: Vec<Identifier<'input>> = {
   Token<"<"> <x: OneOrMore<Identifier, Token<",">>> Token<">"> => x
 }
 
-TypeField: TypeField = {
-  <location:@L> <annotations: Annotation*> <name:Identifier> Token<":"> <value:TypeExpr> => TypeField { annotations, location, name, value },
+TypeField: TypeField<'input> = {
+  <location:@L> <annotations: Annotation*> <name:Identifier> Token<":"> <value:TypeExpr> => TypeField {
+    annotations: Bvec::from_iter_in(annotations.into_iter(), &state.alloc),
+    location, name, value
+  },
 }
 
-Annotation: Annotation = {
+Annotation: Annotation<'input> = {
   "@" <name:Identifier> <args: ("(" <OneOrMore<Literal, ",">> ")")?> => Annotation {
     name,
-    args: args.unwrap_or_default(),
+    args: Bvec::from_iter_in(args.unwrap_or_default().into_iter(), &state.alloc),
   }
 }
 
-TypeExpr: TypeExpr = {
-  <x:Identifier> Token<"<"> <args:OneOrMore<TypeExpr, Token<",">>> Token<">"> => TypeExpr::Specialize(x, args),
+TypeExpr: TypeExpr<'input> = {
+  <x:Identifier> Token<"<"> <args:OneOrMore<TypeExpr, Token<",">>> Token<">"> => TypeExpr::Specialize(
+    x,
+    Bvec::from_iter_in(args.into_iter(), &state.alloc),
+  ),
   <x:Identifier> => TypeExpr::Unit(x),
 }
 
-Identifier: Identifier = {
-  <s:Token<r"[a-zA-Z_][0-9a-zA-Z_]*">> => Identifier(s.to_string()),
+Identifier: Identifier<'input> = {
+  <s:Token<r"[a-zA-Z_][0-9a-zA-Z_]*">> => Identifier(s),
 }
 
-Literal: Literal = {
+Literal: Literal<'input> = {
   <s:Token<r"[0-9]+">> =>? s.parse().map(Literal::Integer).map_err(|_| ParseError::User {
     error: SchemaError::InvalidLiteral,
   }),
@@ -64,7 +82,7 @@ Literal: Literal = {
   <s:Token<r"0b[0-9a-fA-F]+">> =>? i64::from_str_radix(s.strip_prefix("0b").unwrap(), 2).map(Literal::Integer).map_err(|_| ParseError::User {
     error: SchemaError::InvalidLiteral,
   }),
-  <s:StringLit> => Literal::String(s),
+  <s:StringLit> => Literal::String(state.resolve_str(&s)),
 }
 
 StringLit: String = {
@@ -80,7 +98,7 @@ ZeroOrMore<T, Delim>: Vec<T> = {
 }
 
 OneOrMore<T, Delim>: Vec<T> = {
-  <i1: T> <i2:(Delim T)*> => {
+  <i1: T> <i2:(Delim T)*> Delim? => {
     let mut items = vec![i1];
     items.extend(i2.into_iter().map(|e| e.1));
     items
