@@ -1,9 +1,9 @@
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 
 use anyhow::Result;
-use indexmap::IndexMap;
 use thiserror::Error;
 
 use crate::schema::grammar::ast::SchemaItem;
@@ -69,8 +69,8 @@ static PRIMITIVE_TYPES: phf::Map<&'static str, PrimitiveType> = phf::phf_map! {
 };
 
 pub struct CompiledSchema {
-  pub types: IndexMap<Arc<str>, SpecializedType>,
-  pub exports: IndexMap<Arc<str>, FieldType>,
+  pub types: BTreeMap<Arc<str>, SpecializedType>,
+  pub exports: BTreeMap<Arc<str>, FieldType>,
 }
 
 impl Display for CompiledSchema {
@@ -88,8 +88,8 @@ impl Display for CompiledSchema {
 pub fn compile<'a>(input: &ast::Schema<'a>) -> Result<CompiledSchema> {
   let mut resolution_ctx = TypeResolutionContext::new(input)?;
   let mut result = CompiledSchema {
-    types: IndexMap::new(),
-    exports: IndexMap::new(),
+    types: BTreeMap::new(),
+    exports: BTreeMap::new(),
   };
 
   for item in &input.items {
@@ -108,7 +108,7 @@ pub fn compile<'a>(input: &ast::Schema<'a>) -> Result<CompiledSchema> {
 #[derive(Clone)]
 pub struct SpecializedType {
   pub name: Arc<str>,
-  pub fields: IndexMap<Arc<str>, FieldType>,
+  pub fields: BTreeMap<Arc<str>, FieldType>,
 }
 
 #[derive(Clone)]
@@ -141,7 +141,7 @@ impl Display for SpecializedType {
 
 struct TypeResolutionContext<'a> {
   unresolved: HashMap<&'a str, &'a ast::TypeItem<'a>>,
-  resolved: IndexMap<Arc<str>, SpecializedType>,
+  resolved: BTreeMap<Arc<str>, SpecializedType>,
 }
 
 impl<'a> TypeResolutionContext<'a> {
@@ -160,7 +160,7 @@ impl<'a> TypeResolutionContext<'a> {
     }
     Ok(Self {
       unresolved: types,
-      resolved: IndexMap::new(),
+      resolved: BTreeMap::new(),
     })
   }
 
@@ -233,16 +233,16 @@ impl<'a> TypeResolutionContext<'a> {
 
     // First insert with empty fields; fill the actual types in later.
     // This allows us to have recursive types.
-    self.resolved.insert_full(
+    self.resolved.insert(
       repr.clone(),
       SpecializedType {
         name: repr.clone(),
-        fields: IndexMap::new(),
+        fields: BTreeMap::new(),
       },
     );
 
     // Then, recursively resolve the types of fields.
-    let mut fields: IndexMap<Arc<str>, FieldType> = IndexMap::new();
+    let mut fields: BTreeMap<Arc<str>, FieldType> = BTreeMap::new();
     for x in &ty.fields {
       if fields.contains_key(x.name.0) {
         return Err(
