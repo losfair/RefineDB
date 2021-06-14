@@ -1,6 +1,6 @@
 use bumpalo::Bump;
 
-use super::{compile::compile, parse};
+use super::{compile::compile, grammar::parse};
 
 #[test]
 fn test_compile_simple() {

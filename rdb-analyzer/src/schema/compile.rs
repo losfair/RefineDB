@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::schema::grammar::ast::SchemaItem;
 
-use super::ast::{self, TypeExpr};
+use super::grammar::ast::{self, TypeExpr};
 
 #[derive(Error, Debug)]
 pub enum SchemaCompileError {

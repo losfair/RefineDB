@@ -16,6 +16,7 @@ bumpalo = { version = "3.7", features = ["collections"] }
 log = "0.4"
 pretty_env_logger = "0.4"
 indexmap = "1.6"
+phf = "0.8"
 
 [build-dependencies]
 lalrpop = "0.19.6"

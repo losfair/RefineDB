@@ -1,9 +1,5 @@
 pub mod ast;
-pub mod compile;
 pub mod error;
-
-#[cfg(test)]
-mod compile_test;
 
 use std::collections::HashSet;
 
