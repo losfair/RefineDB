@@ -10,9 +10,13 @@ fn test_compile_simple() {
     r#"
     type Item<T> {
       inner: T,
+      something_else: string,
     }
-    type Empty {}
-    export Item<Empty> item;
+    type Duration<T> {
+      start: T,
+      end: T,
+    }
+    export Item<Duration<int64>> item;
   "#,
   )
   .unwrap();

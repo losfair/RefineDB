@@ -12,6 +12,12 @@ use super::grammar::ast::{self, TypeExpr};
 
 #[derive(Error, Debug)]
 pub enum SchemaCompileError {
+  #[error("duplicate type `{0}`")]
+  DuplicateType(String),
+
+  #[error("duplicate field `{field}` in type `{ty}`")]
+  DuplicateField { field: String, ty: String },
+
   #[error("recursive types")]
   RecursiveTypes,
 
@@ -27,11 +33,41 @@ pub enum SchemaCompileError {
 
   #[error("cannot specialize a type parameter `{0}`.")]
   CannotSpecializeTypeParameter(String),
+
+  #[error("cannot specialize a primitive type `{0}`.")]
+  CannotSpecializePrimitiveType(String),
 }
+
+#[derive(Copy, Clone, Debug)]
+pub enum PrimitiveType {
+  Int64,
+  String,
+  Bytes,
+}
+
+impl Display for PrimitiveType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+      f,
+      "{}",
+      match self {
+        Self::Int64 => "int64",
+        Self::String => "string",
+        Self::Bytes => "bytes",
+      }
+    )
+  }
+}
+
+static PRIMITIVE_TYPES: phf::Map<&'static str, PrimitiveType> = phf::phf_map! {
+  "int64" => PrimitiveType::Int64,
+  "string" => PrimitiveType::String,
+  "bytes" => PrimitiveType::Bytes,
+};
 
 pub struct CompiledSchema {
   pub types: IndexMap<Arc<str>, SpecializedType>,
-  pub exports: IndexMap<Arc<str>, Arc<str>>,
+  pub exports: IndexMap<Arc<str>, FieldType>,
 }
 
 impl Display for CompiledSchema {
@@ -47,8 +83,7 @@ impl Display for CompiledSchema {
 }
 
 pub fn compile<'a>(input: &ast::Schema<'a>) -> Result<CompiledSchema> {
-  log::debug!("resolving types");
-  let mut resolution_ctx = TypeResolutionContext::new(input);
+  let mut resolution_ctx = TypeResolutionContext::new(input)?;
   let mut result = CompiledSchema {
     types: IndexMap::new(),
     exports: IndexMap::new(),
@@ -70,7 +105,22 @@ pub fn compile<'a>(input: &ast::Schema<'a>) -> Result<CompiledSchema> {
 #[derive(Clone)]
 pub struct SpecializedType {
   pub name: Arc<str>,
-  pub fields: IndexMap<Arc<str>, Arc<str>>,
+  pub fields: IndexMap<Arc<str>, FieldType>,
+}
+
+#[derive(Clone)]
+pub enum FieldType {
+  Named(Arc<str>),
+  Primitive(PrimitiveType),
+}
+
+impl Display for FieldType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::Named(x) => write!(f, "{}", x),
+      Self::Primitive(x) => write!(f, "{}", x),
+    }
+  }
 }
 
 impl Display for SpecializedType {
@@ -90,26 +140,30 @@ struct TypeResolutionContext<'a> {
 }
 
 impl<'a> TypeResolutionContext<'a> {
-  fn new(schema: &ast::Schema<'a>) -> Self {
-    let types: HashMap<&'a str, &'a ast::TypeItem<'a>> = schema
-      .items
-      .iter()
-      .filter_map(|x| match x {
-        ast::SchemaItem::Type(x) => Some((x.name.0, *x)),
-        _ => None,
-      })
-      .collect();
-    Self {
+  fn new(schema: &ast::Schema<'a>) -> Result<Self> {
+    let mut types: HashMap<&'a str, &'a ast::TypeItem<'a>> = HashMap::new();
+    for item in &schema.items {
+      match item {
+        ast::SchemaItem::Type(x) => {
+          if types.contains_key(x.name.0) {
+            return Err(SchemaCompileError::DuplicateType(x.name.0.to_string()).into());
+          }
+          types.insert(x.name.0, x);
+        }
+        _ => {}
+      }
+    }
+    Ok(Self {
       unresolved: types,
       resolved: IndexMap::new(),
-    }
+    })
   }
 
   fn resolve_type_expr(
     &mut self,
-    local_context: &HashMap<&'a str, &Arc<str>>,
+    local_context: &HashMap<&'a str, &FieldType>,
     e: &TypeExpr<'a>,
-  ) -> Result<Arc<str>> {
+  ) -> Result<FieldType> {
     let (id, args) = match e {
       TypeExpr::Unit(x) => (x, &[] as _),
       TypeExpr::Specialize(x, args) => (x, args.as_slice()),
@@ -121,6 +175,14 @@ impl<'a> TypeResolutionContext<'a> {
         return Err(SchemaCompileError::CannotSpecializeTypeParameter(id.0.to_string()).into());
       }
       return Ok(x.clone());
+    }
+
+    // If this type is a primitive type...
+    if let Some(ty) = PRIMITIVE_TYPES.get(id.0) {
+      if args.len() != 0 {
+        return Err(SchemaCompileError::CannotSpecializePrimitiveType(id.0.to_string()).into());
+      }
+      return Ok(FieldType::Primitive(*ty));
     }
 
     let ty = self
@@ -149,7 +211,7 @@ impl<'a> TypeResolutionContext<'a> {
       id.0,
       args
         .iter()
-        .map(|x| &**self.resolved.get_key_value(x).unwrap().0)
+        .map(|x| format!("{}", x))
         .collect::<Vec<_>>()
         .join(", "),
     ));
@@ -157,11 +219,11 @@ impl<'a> TypeResolutionContext<'a> {
     // Now we have the type itself, let's look at the fields.
     // If the type is already resolved, use it.
     if self.resolved.contains_key(&repr) {
-      return Ok(repr);
+      return Ok(FieldType::Named(repr));
     }
 
     // Construct a new local context: specialized types of the type parameters.
-    let local_context: HashMap<&'a str, &Arc<str>> =
+    let local_context: HashMap<&'a str, &FieldType> =
       ty.generics.iter().map(|x| x.0).zip(args.iter()).collect();
 
     // First insert with empty fields; fill the actual types in later.
@@ -175,17 +237,23 @@ impl<'a> TypeResolutionContext<'a> {
     );
 
     // Then, recursively resolve the types of fields.
-    let fields = ty
-      .fields
-      .iter()
-      .map(|x| {
-        self
-          .resolve_type_expr(&local_context, &x.value)
-          .map(|y| (Arc::from(x.name.0), y))
-      })
-      .collect::<Result<IndexMap<_, _>>>()?;
+    let mut fields: IndexMap<Arc<str>, FieldType> = IndexMap::new();
+    for x in &ty.fields {
+      if fields.contains_key(x.name.0) {
+        return Err(
+          SchemaCompileError::DuplicateField {
+            field: x.name.0.to_string(),
+            ty: ty.name.0.to_string(),
+          }
+          .into(),
+        );
+      }
+      let ty = self.resolve_type_expr(&local_context, &x.value)?;
+      fields.insert(Arc::from(x.name.0), ty);
+    }
+
     self.resolved.get_mut(&repr).unwrap().fields = fields;
 
-    Ok(repr)
+    Ok(FieldType::Named(repr))
   }
 }
