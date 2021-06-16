@@ -15,6 +15,9 @@ pub enum SchemaCompileError {
   #[error("duplicate type `{0}`")]
   DuplicateType(String),
 
+  #[error("duplicate export `{0}`")]
+  DuplicateExport(String),
+
   #[error("duplicate field `{field}` in type `{ty}`")]
   DuplicateField { field: String, ty: String },
 
@@ -36,6 +39,9 @@ pub enum SchemaCompileError {
 
   #[error("cannot specialize a primitive type `{0}`.")]
   CannotSpecializePrimitiveType(String),
+
+  #[error("sets must have exactly one type parameter")]
+  BadSetTypeParameter,
 
   #[error("unknown annotation on field `{0}` of type `{1}`: `{2}`")]
   UnknownAnnotationOnField(String, String, String),
@@ -98,6 +104,9 @@ pub fn compile<'a>(input: &ast::Schema<'a>) -> Result<CompiledSchema> {
   for item in &input.items {
     match item {
       SchemaItem::Export(x) => {
+        if result.exports.contains_key(x.table_name.0) {
+          return Err(SchemaCompileError::DuplicateExport(x.table_name.0.to_string()).into());
+        }
         let ty = resolution_ctx.resolve_type_expr(&HashMap::new(), &x.ty)?;
         result.exports.insert(Arc::from(x.table_name.0), ty);
       }
@@ -135,6 +144,7 @@ impl Display for FieldAnnotation {
 pub enum FieldType {
   Named(Arc<str>),
   Primitive(PrimitiveType),
+  Set(Box<FieldType>),
   Optional(Box<FieldType>),
 }
 
@@ -143,6 +153,7 @@ impl Display for FieldType {
     match self {
       Self::Named(x) => write!(f, "{}", x),
       Self::Primitive(x) => write!(f, "{}", x),
+      Self::Set(x) => write!(f, "set<{}>", x),
       Self::Optional(x) => write!(f, "{}?", x),
     }
   }
@@ -198,6 +209,11 @@ impl<'a> TypeResolutionContext<'a> {
       TypeExpr::Specialize(x, args) => (x, args.as_slice()),
     };
 
+    let args = args
+      .iter()
+      .map(|x| self.resolve_type_expr(local_context, x))
+      .collect::<Result<Vec<_>>>()?;
+
     // If this type is in its local context (type parameters of the type), return it.
     if let Some(&x) = local_context.get(id.0) {
       if args.len() != 0 {
@@ -212,6 +228,14 @@ impl<'a> TypeResolutionContext<'a> {
         return Err(SchemaCompileError::CannotSpecializePrimitiveType(id.0.to_string()).into());
       }
       return Ok(FieldType::Primitive(*ty));
+    }
+
+    // The only special case, `set`...
+    if id.0 == "set" {
+      if args.len() != 1 {
+        return Err(SchemaCompileError::BadSetTypeParameter.into());
+      }
+      return Ok(FieldType::Set(Box::new(args[0].clone())));
     }
 
     let ty = self
@@ -229,11 +253,6 @@ impl<'a> TypeResolutionContext<'a> {
         .into(),
       );
     }
-
-    let args = args
-      .iter()
-      .map(|x| self.resolve_type_expr(local_context, x))
-      .collect::<Result<Vec<_>>>()?;
 
     let repr = Arc::from(format!(
       "{}<{}>",

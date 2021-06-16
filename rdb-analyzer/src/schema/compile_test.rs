@@ -19,7 +19,7 @@ fn test_compile_simple() {
     type Recursive<T> {
       inner: Recursive<T>?,
     }
-    export Item<Duration<int64>> item;
+    export set<Item<Duration<int64>>> items;
     export Recursive<int64> item;
   "#,
   )
