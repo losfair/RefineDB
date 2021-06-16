@@ -8,7 +8,7 @@ mod planner_test;
 
 pub type StorageKey = [u8; 16];
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct StoragePlan {
   pub nodes: BTreeMap<Arc<str>, StorageNode>,
 }

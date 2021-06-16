@@ -77,7 +77,7 @@ static PRIMITIVE_TYPES: phf::Map<&'static str, PrimitiveType> = phf::phf_map! {
   "bytes" => PrimitiveType::Bytes,
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct CompiledSchema {
   pub types: BTreeMap<Arc<str>, SpecializedType>,
   pub exports: BTreeMap<Arc<str>, FieldType>,

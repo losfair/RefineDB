@@ -4,6 +4,7 @@ use super::{compile::compile, grammar::parse};
 
 #[test]
 fn test_compile_simple() {
+  let _ = pretty_env_logger::try_init();
   let alloc = Bump::new();
   let ast = parse(
     &alloc,
