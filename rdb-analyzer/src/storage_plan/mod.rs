@@ -1,7 +1,5 @@
-use std::{collections::BTreeMap, fmt::Display, sync::Arc};
-
-use crate::schema::compile::FieldType;
 use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 
 pub mod planner;
 
@@ -17,7 +15,6 @@ pub struct StoragePlan {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StorageNode {
-  pub ty: FieldType,
   pub key: Option<StorageNodeKey>,
   pub subspace_reference: bool,
   pub packed: bool,
@@ -52,8 +49,7 @@ impl StorageNode {
   fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(
       f,
-      " {} {}{}{}",
-      self.ty,
+      " {}{}{}",
       self
         .key
         .as_ref()

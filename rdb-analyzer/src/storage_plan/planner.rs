@@ -60,7 +60,6 @@ fn generate_subspace(
   // If this subspace is already generated, return a `subspace_reference` leaf node...
   if let Some(storage_key) = plan_st.subspaces_assigned.get(&key) {
     return Ok(StorageNode {
-      ty: field.clone(),
       key: Some(StorageNodeKey::Const(*storage_key)),
       subspace_reference: true,
       packed: false,
@@ -103,7 +102,6 @@ fn generate_field(
       // For packed types, don't go down further...
       if annotations.iter().find(|x| x.is_packed()).is_some() {
         return Ok(StorageNode {
-          ty: field.clone(),
           key: Some(StorageNodeKey::Const(rand_storage_key())),
           subspace_reference: false,
           packed: true,
@@ -142,7 +140,6 @@ fn generate_field(
       subspace_st.fields_in_stack.remove(&key);
 
       Ok(StorageNode {
-        ty: field.clone(),
         key: None,
         subspace_reference: false,
         packed: false,
@@ -152,7 +149,6 @@ fn generate_field(
     FieldType::Primitive(_) => {
       // This is a primitive type (leaf node).
       Ok(StorageNode {
-        ty: field.clone(),
         key: Some(StorageNodeKey::Const(rand_storage_key())),
         subspace_reference: false,
         packed: false,
@@ -163,7 +159,6 @@ fn generate_field(
       // This is a set with dynamic node key.
       let inner = generate_field(plan_st, subspace_st, schema, x, annotations)?;
       Ok(StorageNode {
-        ty: field.clone(),
         key: Some(StorageNodeKey::Set(Box::new(inner))),
         subspace_reference: false,
         packed: false,
