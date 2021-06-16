@@ -1,6 +1,11 @@
+use std::convert::TryFrom;
+
 use bumpalo::Bump;
 
-use crate::schema::{compile::compile, grammar::parse};
+use crate::{
+  schema::{compile::compile, grammar::parse},
+  storage_plan::StoragePlan,
+};
 
 use super::planner::generate_plan_for_schema;
 
@@ -42,7 +47,28 @@ fn test_planner_simple() {
   drop(ast);
   drop(alloc);
   let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &output).unwrap();
-  println!("{}", plan);
+  println!(
+    "{}",
+    serde_yaml::to_string(&StoragePlan::<String>::from(&plan)).unwrap()
+  );
+}
+
+#[test]
+fn test_yaml_serialization() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(&alloc, SIMPLE_SCHEMA).unwrap();
+  let output = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &output).unwrap();
+  let plan2 = serde_yaml::to_string(&StoragePlan::<String>::from(&plan)).unwrap();
+  let plan2: StoragePlan<String> = serde_yaml::from_str(&plan2).unwrap();
+  let plan2 = StoragePlan::try_from(&plan2).unwrap();
+  assert_eq!(
+    plan.serialize_compressed().unwrap(),
+    plan2.serialize_compressed().unwrap()
+  );
 }
 
 #[test]

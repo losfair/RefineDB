@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt::Display, io::Write, sync::Arc};
 
+pub mod conversion;
 pub mod planner;
 
 #[cfg(test)]
@@ -9,23 +10,23 @@ mod planner_test;
 
 pub type StorageKey = [u8; 8];
 
-#[derive(Default, Serialize, Deserialize)]
-pub struct StoragePlan {
-  pub nodes: BTreeMap<Arc<str>, StorageNode>,
+#[derive(Default, Clone, Serialize, Deserialize)]
+pub struct StoragePlan<SK = StorageKey> {
+  pub nodes: BTreeMap<Arc<str>, StorageNode<SK>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StorageNode {
-  pub key: Option<StorageNodeKey>,
+pub struct StorageNode<SK = StorageKey> {
+  pub key: Option<StorageNodeKey<SK>>,
   pub subspace_reference: bool,
   pub packed: bool,
-  pub children: BTreeMap<Arc<str>, StorageNode>,
+  pub children: BTreeMap<Arc<str>, StorageNode<SK>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum StorageNodeKey {
-  Const(StorageKey),
-  Set(Box<StorageNode>),
+pub enum StorageNodeKey<SK = StorageKey> {
+  Const(SK),
+  Set(Box<StorageNode<SK>>),
 }
 
 impl StoragePlan {

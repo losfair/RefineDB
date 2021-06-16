@@ -21,6 +21,8 @@ rand = "0.8"
 hex = "0.4"
 rmp-serde = "0.15"
 snap = "1"
+serde_yaml = "0.8"
+base64 = "0.13"
 
 [build-dependencies]
 lalrpop = "0.19.6"
