@@ -46,6 +46,38 @@ fn test_planner_simple() {
 }
 
 #[test]
+fn test_many_binary_trees() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+    type BinaryTree<T> {
+      left: BinaryTree<T>?,
+      right: BinaryTree<T>?,
+      value: T?,
+    }
+    type Tuple<A, B> {
+      first: A,
+      second: B,
+    }
+    export BinaryTree<int64> binary_tree;
+    export set<BinaryTree<int64>> set_of_binary_trees;
+    export BinaryTree<set<int64>> binary_tree_of_sets;
+    export BinaryTree<BinaryTree<int64>> binary_tree_of_binary_trees;
+    export BinaryTree<Tuple<BinaryTree<int64>, BinaryTree<string>>> complex_structure;
+  "#,
+  )
+  .unwrap();
+  let output = compile(&ast).unwrap();
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &output).unwrap();
+  println!(
+    "test_many_binary_trees: serialized size of plan: {}",
+    plan.serialize_compressed().unwrap().len()
+  );
+}
+
+#[test]
 fn test_planner_migration_identity() {
   let _ = pretty_env_logger::try_init();
   let alloc = Bump::new();
@@ -63,7 +95,7 @@ fn test_planner_migration_identity() {
 
   let plan2 = generate_plan_for_schema(&plan1, &schema1, &schema2).unwrap();
   assert_eq!(
-    rmp_serde::to_vec_named(&plan1).unwrap(),
-    rmp_serde::to_vec_named(&plan2).unwrap()
+    plan1.serialize_compressed().unwrap(),
+    plan2.serialize_compressed().unwrap(),
   )
 }

@@ -20,6 +20,7 @@ pub enum PlannerError {
 struct PlanState<'a> {
   subspaces_assigned: HashMap<usize, StorageKey>,
   old_schema: &'a CompiledSchema,
+  used_storage_keys: HashSet<StorageKey>,
 }
 
 #[derive(Default)]
@@ -212,7 +213,15 @@ pub fn generate_plan_for_schema(
   let mut plan_st = PlanState {
     subspaces_assigned: HashMap::new(),
     old_schema,
+    used_storage_keys: HashSet::new(),
   };
+  for (_, node) in &old_plan.nodes {
+    collect_storage_keys(node, &mut plan_st.used_storage_keys);
+  }
+  log::debug!(
+    "collected {} storage keys from old plan",
+    plan_st.used_storage_keys.len()
+  );
   let mut plan = StoragePlan {
     nodes: BTreeMap::new(),
   };
@@ -269,7 +278,7 @@ fn generate_subspace(
   // Otherwise, generate the subspace.
   let storage_key = old_point
     .and_then(|x| x.storage_key())
-    .unwrap_or_else(|| rand_storage_key());
+    .unwrap_or_else(|| rand_storage_key(plan_st));
   plan_st.subspaces_assigned.insert(key, storage_key);
 
   let mut subspace_st = SubspaceState {
@@ -322,7 +331,7 @@ fn generate_field(
           key: Some(StorageNodeKey::Const(
             old_point
               .and_then(|x| x.storage_key())
-              .unwrap_or_else(|| rand_storage_key()),
+              .unwrap_or_else(|| rand_storage_key(plan_st)),
           )),
           subspace_reference: false,
           packed: true,
@@ -383,7 +392,7 @@ fn generate_field(
         key: Some(StorageNodeKey::Const(
           old_point
             .and_then(|x| x.storage_key())
-            .unwrap_or_else(|| rand_storage_key()),
+            .unwrap_or_else(|| rand_storage_key(plan_st)),
         )),
         subspace_reference: false,
         packed: false,
@@ -416,8 +425,24 @@ fn field_type_key(x: &FieldType) -> usize {
   x as *const _ as usize
 }
 
-fn rand_storage_key() -> StorageKey {
-  let mut ret = [0u8; 16];
-  rand::thread_rng().fill_bytes(&mut ret);
-  ret
+fn rand_storage_key(st: &mut PlanState) -> StorageKey {
+  loop {
+    let mut ret = [0u8; 8];
+    rand::thread_rng().fill_bytes(&mut ret);
+    if st.used_storage_keys.insert(ret) {
+      break ret;
+    }
+  }
+}
+
+fn collect_storage_keys(node: &StorageNode, sink: &mut HashSet<StorageKey>) {
+  if let Some(StorageNodeKey::Const(x)) = &node.key {
+    sink.insert(*x);
+  }
+  if let Some(StorageNodeKey::Set(x)) = &node.key {
+    collect_storage_keys(x, sink);
+  }
+  for (_, child) in &node.children {
+    collect_storage_keys(child, sink);
+  }
 }

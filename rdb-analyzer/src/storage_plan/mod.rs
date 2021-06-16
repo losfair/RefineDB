@@ -1,12 +1,13 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt::Display, sync::Arc};
+use std::{collections::BTreeMap, fmt::Display, io::Write, sync::Arc};
 
 pub mod planner;
 
 #[cfg(test)]
 mod planner_test;
 
-pub type StorageKey = [u8; 16];
+pub type StorageKey = [u8; 8];
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct StoragePlan {
@@ -25,6 +26,15 @@ pub struct StorageNode {
 pub enum StorageNodeKey {
   Const(StorageKey),
   Set(Box<StorageNode>),
+}
+
+impl StoragePlan {
+  pub fn serialize_compressed(&self) -> Result<Vec<u8>> {
+    let serialized = rmp_serde::to_vec_named(self)?;
+    let mut buf = Vec::new();
+    snap::write::FrameEncoder::new(&mut buf).write_all(&serialized)?;
+    Ok(buf)
+  }
 }
 
 impl Display for StorageNodeKey {
