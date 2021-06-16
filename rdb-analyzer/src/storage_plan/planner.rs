@@ -21,6 +21,7 @@ struct PlanState {
   subspaces_assigned: HashMap<usize, StorageKey>,
 }
 
+#[derive(Default)]
 struct SubspaceState {
   fields_in_stack: HashSet<usize>,
 }
@@ -34,7 +35,14 @@ pub fn generate_plan_for_schema(schema: &CompiledSchema) -> Result<StoragePlan> 
   };
 
   for (export_name, export_field) in &schema.exports {
-    let node = generate_subspace(&mut plan_st, schema, export_field)?;
+    // Here we don't generate using `generate_subspace`, because root nodes might be a `set`
+    // but `generate_subspace` is only supposed to be used on user-defined named types.
+    let node = generate_field(
+      &mut plan_st,
+      &mut SubspaceState::default(),
+      schema,
+      export_field,
+    )?;
     plan.nodes.insert(export_name.clone(), node);
   }
   Ok(plan)
@@ -66,7 +74,12 @@ fn generate_subspace(
   };
   let res = generate_field(plan_st, &mut subspace_st, schema, field);
   plan_st.subspaces_assigned.remove(&key);
-  res
+
+  // Tag result with subspace key
+  let mut res = res?;
+  res.key = Some(StorageNodeKey::Const(storage_key));
+
+  Ok(res)
 }
 
 fn generate_field(
@@ -82,6 +95,11 @@ fn generate_field(
     }
     FieldType::Named(x) => {
       // This type has children. Push down.
+      // First, check whether we are resolving something recursively...
+      if subspace_st.fields_in_stack.contains(&field_type_key(field)) {
+        return generate_subspace(plan_st, schema, field);
+      }
+
       let ty = schema
         .types
         .get(x)
@@ -95,14 +113,7 @@ fn generate_field(
 
       // Iterate over the fields & recursively generate storage nodes.
       for subfield in &ty.fields {
-        // If this is recursive, we need a new subspace.
-        let res = if subspace_st.fields_in_stack.contains(&field_type_key(field)) {
-          generate_subspace(plan_st, schema, field)
-        } else {
-          generate_field(plan_st, subspace_st, schema, &subfield.1 .0)
-        };
-
-        match res {
+        match generate_field(plan_st, subspace_st, schema, &subfield.1 .0) {
           Ok(x) => {
             children.insert(subfield.0.clone(), x);
           }
