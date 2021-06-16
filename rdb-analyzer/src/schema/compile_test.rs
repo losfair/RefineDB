@@ -9,7 +9,7 @@ fn test_compile_simple() {
     &alloc,
     r#"
     type Item<T> {
-      inner: T,
+      @packed inner: T,
       something_else: string,
     }
     type Duration<T> {
