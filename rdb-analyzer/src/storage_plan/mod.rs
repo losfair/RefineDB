@@ -13,7 +13,7 @@ pub struct StoragePlan {
   pub nodes: BTreeMap<Arc<str>, StorageNode>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StorageNode {
   pub key: Option<StorageNodeKey>,
   pub subspace_reference: bool,
@@ -21,7 +21,7 @@ pub struct StorageNode {
   pub children: BTreeMap<Arc<str>, StorageNode>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum StorageNodeKey {
   Const(StorageKey),
   Set(Box<StorageNode>),

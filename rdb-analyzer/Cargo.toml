@@ -19,6 +19,7 @@ indexmap = "1.6"
 phf = { version = "0.8", features = ["macros"] }
 rand = "0.8"
 hex = "0.4"
+rmp-serde = "0.15"
 
 [build-dependencies]
 lalrpop = "0.19.6"

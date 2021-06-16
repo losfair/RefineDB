@@ -39,6 +39,12 @@ struct OldTreePoint<'a> {
 impl<'a> OldTreePoint<'a> {
   fn reduce_optional(mut self) -> Self {
     if let FieldType::Optional(x) = self.ty {
+      log::trace!(
+        "optional field `{}` of type `{}` reduced to `{}`.",
+        self.name,
+        self.ty,
+        x
+      );
       self.ty = &**x;
     } else {
       log::info!("field `{}` was mandatory but now optional", self.name);
@@ -49,8 +55,23 @@ impl<'a> OldTreePoint<'a> {
 
   fn reduce_set(mut self) -> Option<Self> {
     if let FieldType::Set(x) = self.ty {
+      log::trace!(
+        "set `{}` of type `{}` reduced to `{}`.",
+        self.name,
+        self.ty,
+        x
+      );
       self.ty = &**x;
-      Some(self)
+      match &self.node.key {
+        Some(StorageNodeKey::Set(x)) => {
+          self.node = &**x;
+          Some(self)
+        }
+        _ => {
+          log::error!("inconsistency detected: a storage node for the `set` type does not have a `StorageNodeKey::Set` storage key. dropping field. node: {:?}", self.node);
+          None
+        }
+      }
     } else {
       log::warn!(
         "field `{}` becomes a set - previous value will not be preserved",
@@ -116,8 +137,9 @@ impl<'a> OldTreePoint<'a> {
       Some(x)
     } else {
       log::warn!(
-        "requesting non-present storage key of field `{}` - previous value will not be preserved",
-        self.name
+        "requesting non-present storage key of field `{}` (type `{}`) - previous value will not be preserved",
+        self.name,
+        self.ty,
       );
       None
     }
@@ -128,13 +150,20 @@ impl<'a> OldTreePoint<'a> {
       Some(x) => x,
       None => {
         log::info!(
-          "subfield `{}` of type `{}` does not exist in the old plan - creating",
+          "subfield `{}` of type `{}` does not exist in the old plan - creating. {:?}",
           name,
           self.ty,
+          self.node.children
         );
         return None;
       }
     };
+    log::trace!(
+      "subfield `{}` of type `{}` resolved to `{:?}`.",
+      name,
+      self.ty,
+      child_node
+    );
     let ty = match self.ty {
       FieldType::Named(type_name) => match plan_st.old_schema.types.get(type_name) {
         Some(x) => x,
