@@ -6,9 +6,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use thiserror::Error;
 
-use crate::schema::grammar::ast::SchemaItem;
-
 use super::grammar::ast::{self, TypeExpr};
+use crate::schema::grammar::ast::SchemaItem;
+use serde::{Deserialize, Serialize};
 
 #[derive(Error, Debug)]
 pub enum SchemaCompileError {
@@ -47,7 +47,7 @@ pub enum SchemaCompileError {
   UnknownAnnotationOnField(String, String, String),
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum PrimitiveType {
   Int64,
   Double,
@@ -77,6 +77,7 @@ static PRIMITIVE_TYPES: phf::Map<&'static str, PrimitiveType> = phf::phf_map! {
   "bytes" => PrimitiveType::Bytes,
 };
 
+#[derive(Serialize, Deserialize)]
 pub struct CompiledSchema {
   pub types: BTreeMap<Arc<str>, SpecializedType>,
   pub exports: BTreeMap<Arc<str>, FieldType>,
@@ -117,13 +118,13 @@ pub fn compile<'a>(input: &ast::Schema<'a>) -> Result<CompiledSchema> {
   Ok(result)
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SpecializedType {
   pub name: Arc<str>,
   pub fields: BTreeMap<Arc<str>, (FieldType, Vec<FieldAnnotation>)>,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FieldAnnotation {
   PrimaryKey,
   Index,
@@ -140,7 +141,7 @@ impl Display for FieldAnnotation {
   }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FieldType {
   Named(Arc<str>),
   Primitive(PrimitiveType),
