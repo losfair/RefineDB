@@ -126,7 +126,7 @@ pub struct SpecializedType {
 
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FieldAnnotation {
-  PrimaryKey,
+  Unique,
   Index,
   Packed,
 }
@@ -143,7 +143,7 @@ impl FieldAnnotation {
 impl Display for FieldAnnotation {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      Self::PrimaryKey => write!(f, "@primary_key"),
+      Self::Unique => write!(f, "@unique"),
       Self::Index => write!(f, "@index"),
       Self::Packed => write!(f, "@packed"),
     }
@@ -315,8 +315,8 @@ impl<'a> TypeResolutionContext<'a> {
       let mut annotations = vec![];
       for ann in &x.annotations {
         match (ann.name.0, ann.args.as_slice()) {
-          ("primary_key", []) => {
-            annotations.push(FieldAnnotation::PrimaryKey);
+          ("unique", []) => {
+            annotations.push(FieldAnnotation::Unique);
           }
           ("index", []) => {
             annotations.push(FieldAnnotation::Index);
