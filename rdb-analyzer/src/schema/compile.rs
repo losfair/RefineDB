@@ -36,9 +36,12 @@ pub enum SchemaCompileError {
 
   #[error("cannot specialize a primitive type `{0}`.")]
   CannotSpecializePrimitiveType(String),
+
+  #[error("unknown annotation on field `{0}` of type `{1}`: `{2}`")]
+  UnknownAnnotationOnField(String, String, String),
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum PrimitiveType {
   Int64,
   Double,
@@ -105,13 +108,30 @@ pub fn compile<'a>(input: &ast::Schema<'a>) -> Result<CompiledSchema> {
   Ok(result)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct SpecializedType {
   pub name: Arc<str>,
-  pub fields: BTreeMap<Arc<str>, FieldType>,
+  pub fields: BTreeMap<Arc<str>, (FieldType, Vec<FieldAnnotation>)>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
+pub enum FieldAnnotation {
+  PrimaryKey,
+  Index,
+  Packed,
+}
+
+impl Display for FieldAnnotation {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::PrimaryKey => write!(f, "@primary_key"),
+      Self::Index => write!(f, "@index"),
+      Self::Packed => write!(f, "@packed"),
+    }
+  }
+}
+
+#[derive(Clone, Eq, PartialEq)]
 pub enum FieldType {
   Named(Arc<str>),
   Primitive(PrimitiveType),
@@ -131,8 +151,12 @@ impl Display for FieldType {
 impl Display for SpecializedType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "type {} {{\n", self.name)?;
-    for (k, v) in &self.fields {
-      write!(f, "  {}: {},\n", k, v)?;
+    for (k, (ty, annotations)) in &self.fields {
+      write!(f, "  ")?;
+      for x in annotations {
+        write!(f, "{} ", x)?;
+      }
+      write!(f, "{}: {},\n", k, ty)?;
     }
     write!(f, "}}\n")?;
     Ok(())
@@ -227,11 +251,8 @@ impl<'a> TypeResolutionContext<'a> {
       return Ok(FieldType::Named(repr));
     }
 
-    // Construct a new local context: specialized types of the type parameters.
-    let local_context: HashMap<&'a str, &FieldType> =
-      ty.generics.iter().map(|x| x.0).zip(args.iter()).collect();
-
-    // First insert with empty fields; fill the actual types in later.
+    // Not yet resolved: let's resolve it.
+    // Insert with empty fields; fill the actual types in later.
     // This allows us to have recursive types.
     self.resolved.insert(
       repr.clone(),
@@ -241,8 +262,12 @@ impl<'a> TypeResolutionContext<'a> {
       },
     );
 
+    // Construct a new local context: specialized types of the type parameters.
+    let local_context: HashMap<&'a str, &FieldType> =
+      ty.generics.iter().map(|x| x.0).zip(args.iter()).collect();
+
     // Then, recursively resolve the types of fields.
-    let mut fields: BTreeMap<Arc<str>, FieldType> = BTreeMap::new();
+    let mut fields: BTreeMap<Arc<str>, (FieldType, Vec<FieldAnnotation>)> = BTreeMap::new();
     for x in &ty.fields {
       if fields.contains_key(x.name.0) {
         return Err(
@@ -257,7 +282,32 @@ impl<'a> TypeResolutionContext<'a> {
       if x.optional {
         ty = FieldType::Optional(Box::new(ty));
       }
-      fields.insert(Arc::from(x.name.0), ty);
+
+      let mut annotations = vec![];
+      for ann in &x.annotations {
+        match (ann.name.0, ann.args.as_slice()) {
+          ("primary_key", []) => {
+            annotations.push(FieldAnnotation::PrimaryKey);
+          }
+          ("index", []) => {
+            annotations.push(FieldAnnotation::Index);
+          }
+          ("packed", []) => {
+            annotations.push(FieldAnnotation::Packed);
+          }
+          _ => {
+            return Err(
+              SchemaCompileError::UnknownAnnotationOnField(
+                x.name.0.to_string(),
+                repr.to_string(),
+                ann.name.0.to_string(),
+              )
+              .into(),
+            )
+          }
+        }
+      }
+      fields.insert(Arc::from(x.name.0), (ty, annotations));
     }
 
     self.resolved.get_mut(&repr).unwrap().fields = fields;
