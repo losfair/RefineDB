@@ -18,6 +18,7 @@ pub struct StorageNode {
   pub ty: FieldType,
   pub key: Option<StorageNodeKey>,
   pub subspace_reference: bool,
+  pub packed: bool,
   pub children: BTreeMap<Arc<str>, StorageNode>,
 }
 
@@ -49,7 +50,7 @@ impl StorageNode {
   fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(
       f,
-      " {} {}{}",
+      " {} {}{}{}",
       self.ty,
       self
         .key
@@ -60,7 +61,8 @@ impl StorageNode {
         " subspace_reference"
       } else {
         ""
-      }
+      },
+      if self.packed { " packed" } else { "" },
     )?;
     write!(f, "\n")?;
 

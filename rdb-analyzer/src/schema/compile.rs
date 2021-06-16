@@ -131,6 +131,15 @@ pub enum FieldAnnotation {
   Packed,
 }
 
+impl FieldAnnotation {
+  pub fn is_packed(&self) -> bool {
+    match self {
+      FieldAnnotation::Packed => true,
+      _ => false,
+    }
+  }
+}
+
 impl Display for FieldAnnotation {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {

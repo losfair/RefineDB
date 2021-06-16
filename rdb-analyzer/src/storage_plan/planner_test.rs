@@ -12,6 +12,7 @@ fn test_planner_simple() {
     r#"
     type Item<T> {
       @packed inner: T,
+      inner2: T,
       something_else: string,
     }
     type Duration<T> {

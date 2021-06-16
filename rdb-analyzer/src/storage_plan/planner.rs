@@ -6,7 +6,7 @@ use std::{
 use anyhow::Result;
 use rand::RngCore;
 
-use crate::schema::compile::{CompiledSchema, FieldType};
+use crate::schema::compile::{CompiledSchema, FieldAnnotation, FieldType};
 
 use super::{StorageKey, StorageNode, StorageNodeKey, StoragePlan};
 use thiserror::Error;
@@ -42,6 +42,7 @@ pub fn generate_plan_for_schema(schema: &CompiledSchema) -> Result<StoragePlan> 
       &mut SubspaceState::default(),
       schema,
       export_field,
+      &[],
     )?;
     plan.nodes.insert(export_name.clone(), node);
   }
@@ -52,6 +53,7 @@ fn generate_subspace(
   plan_st: &mut PlanState,
   schema: &CompiledSchema,
   field: &FieldType,
+  annotations: &[FieldAnnotation],
 ) -> Result<StorageNode> {
   let key = field_type_key(field);
 
@@ -61,6 +63,7 @@ fn generate_subspace(
       ty: field.clone(),
       key: Some(StorageNodeKey::Const(*storage_key)),
       subspace_reference: true,
+      packed: false,
       children: BTreeMap::new(),
     });
   }
@@ -72,7 +75,7 @@ fn generate_subspace(
   let mut subspace_st = SubspaceState {
     fields_in_stack: HashSet::new(),
   };
-  let res = generate_field(plan_st, &mut subspace_st, schema, field);
+  let res = generate_field(plan_st, &mut subspace_st, schema, field, annotations);
   plan_st.subspaces_assigned.remove(&key);
 
   // Tag result with subspace key
@@ -87,17 +90,30 @@ fn generate_field(
   subspace_st: &mut SubspaceState,
   schema: &CompiledSchema,
   field: &FieldType,
+  annotations: &[FieldAnnotation],
 ) -> Result<StorageNode> {
   match field {
     FieldType::Optional(x) => {
       // Push down optional
-      generate_field(plan_st, subspace_st, schema, x)
+      generate_field(plan_st, subspace_st, schema, x, annotations)
     }
     FieldType::Named(x) => {
       // This type has children. Push down.
+
+      // For packed types, don't go down further...
+      if annotations.iter().find(|x| x.is_packed()).is_some() {
+        return Ok(StorageNode {
+          ty: field.clone(),
+          key: Some(StorageNodeKey::Const(rand_storage_key())),
+          subspace_reference: false,
+          packed: true,
+          children: BTreeMap::new(),
+        });
+      }
+
       // First, check whether we are resolving something recursively...
       if subspace_st.fields_in_stack.contains(&field_type_key(field)) {
-        return generate_subspace(plan_st, schema, field);
+        return generate_subspace(plan_st, schema, field, annotations);
       }
 
       let ty = schema
@@ -113,7 +129,7 @@ fn generate_field(
 
       // Iterate over the fields & recursively generate storage nodes.
       for subfield in &ty.fields {
-        match generate_field(plan_st, subspace_st, schema, &subfield.1 .0) {
+        match generate_field(plan_st, subspace_st, schema, &subfield.1 .0, &subfield.1 .1) {
           Ok(x) => {
             children.insert(subfield.0.clone(), x);
           }
@@ -129,6 +145,7 @@ fn generate_field(
         ty: field.clone(),
         key: None,
         subspace_reference: false,
+        packed: false,
         children,
       })
     }
@@ -138,16 +155,18 @@ fn generate_field(
         ty: field.clone(),
         key: Some(StorageNodeKey::Const(rand_storage_key())),
         subspace_reference: false,
+        packed: false,
         children: BTreeMap::new(),
       })
     }
     FieldType::Set(x) => {
       // This is a set with dynamic node key.
-      let inner = generate_field(plan_st, subspace_st, schema, x)?;
+      let inner = generate_field(plan_st, subspace_st, schema, x, annotations)?;
       Ok(StorageNode {
         ty: field.clone(),
         key: Some(StorageNodeKey::Set(Box::new(inner))),
         subspace_reference: false,
+        packed: false,
         children: BTreeMap::new(),
       })
     }
