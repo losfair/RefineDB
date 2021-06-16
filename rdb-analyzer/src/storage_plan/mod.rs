@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 
 use crate::schema::compile::FieldType;
+use serde::{Deserialize, Serialize};
 
 pub mod planner;
 
@@ -9,11 +10,12 @@ mod planner_test;
 
 pub type StorageKey = [u8; 16];
 
+#[derive(Serialize, Deserialize)]
 pub struct StoragePlan {
   pub nodes: BTreeMap<Arc<str>, StorageNode>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct StorageNode {
   pub ty: FieldType,
   pub key: Option<StorageNodeKey>,
@@ -22,7 +24,7 @@ pub struct StorageNode {
   pub children: BTreeMap<Arc<str>, StorageNode>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum StorageNodeKey {
   Const(StorageKey),
   Set(Box<StorageNode>),
