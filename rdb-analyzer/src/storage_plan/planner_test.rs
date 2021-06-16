@@ -40,6 +40,8 @@ fn test_planner_simple() {
   )
   .unwrap();
   let output = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
   let plan = generate_plan_for_schema(&output).unwrap();
   println!("{}", plan);
 }
