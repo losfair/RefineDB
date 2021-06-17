@@ -29,6 +29,17 @@ type BinaryTree<T> {
   right: BinaryTree<T>?,
   value: T?,
 }
+
+// This is slow!
+/*
+type TrinaryTree<T> {
+  left: TrinaryTree<T>?,
+  middle: TrinaryTree<T>?,
+  right: TrinaryTree<T>?,
+  value: T?,
+}
+*/
+
 type InternalSet {
   s: set<int64>,
 }
@@ -38,6 +49,7 @@ export BinaryTree<int64> a_binary_tree;
 export set<BinaryTree<int64>> many_binary_trees;
 export InternalSet an_internal_set;
 export set<InternalSet> nested_internal_sets;
+//export TrinaryTree<int64> a_trinary_tree;
 "#;
 
 #[test]
