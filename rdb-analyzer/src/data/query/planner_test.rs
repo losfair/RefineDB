@@ -16,7 +16,7 @@ fn check_stack(plan: &QueryPlan, start: usize) {
       QueryStep::ExtendPoint(_) => (0, 1),
       QueryStep::LensGet { .. } => (1, 1),
       QueryStep::LensPut { .. } => (2, 0),
-      QueryStep::PeekAndFulfullResult(_) => (1, 1),
+      QueryStep::PeekAndFulfillResult(_) => (1, 1),
       QueryStep::PointGet { .. } => (1, 1),
       QueryStep::PointPut { .. } => (2, 0),
       QueryStep::Pop => (1, 0),

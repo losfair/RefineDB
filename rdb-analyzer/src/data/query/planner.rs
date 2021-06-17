@@ -93,7 +93,7 @@ pub enum QueryStep {
   Const(PrimitiveValue),
 
   /// T -> T
-  PeekAndFulfullResult(usize),
+  PeekAndFulfillResult(usize),
 
   /// T -> U -> (U, T)
   Swap2,
@@ -198,7 +198,7 @@ impl<'a> QueryPlanner<'a> {
             point_ty: PointType::Primitive(x.clone()),
           });
           for &id in &query_node.result_ids {
-            plan.steps.push(QueryStep::PeekAndFulfullResult(id));
+            plan.steps.push(QueryStep::PeekAndFulfillResult(id));
           }
           plan.steps.push(QueryStep::Pop);
         }
