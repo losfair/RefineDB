@@ -1,0 +1,68 @@
+use super::ast::*;
+use super::QueryError;
+use lalrpop_util::ParseError;
+
+grammar;
+
+extern {
+  type Error = QueryError;
+}
+
+pub QueryExpr: QueryExpr = {
+  <segments:OneOrMore<QuerySegment, Token<".">>> <value: ("<-" <Literal>)?> => QueryExpr {
+    segments,
+    value,
+  }
+}
+
+QuerySegment: QuerySegment = {
+  <x:Identifier> => QuerySegment::Field(x),
+  Token<"["> <x:SelectorExpr> Token<"]"> => QuerySegment::Selector(x),
+}
+
+SelectorExpr: SelectorExpr = {
+  <key:Identifier> <condition:SelectorCondition> <value:Literal> => SelectorExpr { key, condition, value }
+}
+
+SelectorCondition: SelectorCondition = {
+  Token<"="> => SelectorCondition::Eq,
+}
+
+OneOrMore<T, Delim>: Vec<T> = {
+  <i1: T> <i2:(Delim T)*> Delim? => {
+    let mut items = vec![i1];
+    items.extend(i2.into_iter().map(|e| e.1));
+    items
+  }
+}
+
+Identifier: String = {
+  <s:Token<r"[a-zA-Z_][0-9a-zA-Z_]*">> => s.to_string(),
+}
+
+Literal: Literal = {
+  <s:Token<r"[0-9]+">> =>? s.parse().map(Literal::Integer).map_err(|_| ParseError::User {
+    error: QueryError::InvalidLiteral,
+  }),
+  <s:Token<r"0x[0-9a-fA-F]+">> =>? i64::from_str_radix(s.strip_prefix("0x").unwrap(), 16).map(Literal::Integer).map_err(|_| ParseError::User {
+    error: QueryError::InvalidLiteral,
+  }),
+  <s:Token<r"0o[0-9a-fA-F]+">> =>? i64::from_str_radix(s.strip_prefix("0o").unwrap(), 8).map(Literal::Integer).map_err(|_| ParseError::User {
+    error: QueryError::InvalidLiteral,
+  }),
+  <s:Token<r"0b[0-9a-fA-F]+">> =>? i64::from_str_radix(s.strip_prefix("0b").unwrap(), 2).map(Literal::Integer).map_err(|_| ParseError::User {
+    error: QueryError::InvalidLiteral,
+  }),
+  <s:StringLit> => Literal::String(s),
+}
+
+StringLit: String = {
+  <s:Token<r#""(\\.|[^"])*""#>> =>? serde_json::from_str::<String>(s)
+    .map_err(|_| ParseError::User {
+      error: QueryError::InvalidLiteral,
+    }),
+}
+
+Token<I>: I = {
+  <s:I> => s,
+}
