@@ -148,13 +148,16 @@ impl<'a> OldTreePoint<'a> {
     }
   }
 
-  fn resolve_subfield(&self, plan_st: &PlanState<'a>, name: &str) -> Option<Self> {
-    let child_node = match self.node.children.get(name) {
+  fn resolve_subfield(&self, plan_st: &PlanState<'a>, altnames: &[&str]) -> Option<Self> {
+    let (name, child_node) = match altnames
+      .iter()
+      .find_map(|x| self.node.children.get(*x).map(|y| (*x, y)))
+    {
       Some(x) => x,
       None => {
         log::info!(
-          "subfield `{}` of type `{}` does not exist in the old plan - creating.",
-          name,
+          "none of the subfields `{:?}` exist in the old version of the type `{}` - creating.",
+          altnames,
           self.ty,
         );
         return None;
@@ -367,8 +370,19 @@ fn generate_field(
 
       // Iterate over the fields & recursively generate storage nodes.
       for subfield in &ty.fields {
+        let (_, annotations) = subfield.1;
+        let mut altnames = vec![&**subfield.0];
+        for ann in annotations {
+          match ann {
+            FieldAnnotation::RenameFrom(x) => {
+              altnames.push(x.as_str());
+            }
+            _ => {}
+          }
+        }
+
         let subfield_old_point = old_point
-          .and_then(|x| x.resolve_subfield(plan_st, &subfield.0))
+          .and_then(|x| x.resolve_subfield(plan_st, &altnames))
           .and_then(|x| x.validate_type(&subfield.1 .0, &subfield.1 .1));
         match generate_field(
           plan_st,

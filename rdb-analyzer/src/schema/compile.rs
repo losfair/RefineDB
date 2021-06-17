@@ -7,6 +7,7 @@ use anyhow::Result;
 use thiserror::Error;
 
 use super::grammar::ast::{self, TypeExpr};
+use crate::schema::grammar::ast::Literal;
 use crate::schema::grammar::ast::SchemaItem;
 use serde::{Deserialize, Serialize};
 
@@ -129,6 +130,7 @@ pub enum FieldAnnotation {
   Unique,
   Index,
   Packed,
+  RenameFrom(String),
 }
 
 impl FieldAnnotation {
@@ -146,6 +148,7 @@ impl Display for FieldAnnotation {
       Self::Unique => write!(f, "@unique"),
       Self::Index => write!(f, "@index"),
       Self::Packed => write!(f, "@packed"),
+      Self::RenameFrom(x) => write!(f, "@rename_from({})", serde_json::to_string(x).unwrap()),
     }
   }
 }
@@ -323,6 +326,9 @@ impl<'a> TypeResolutionContext<'a> {
           }
           ("packed", []) => {
             annotations.push(FieldAnnotation::Packed);
+          }
+          ("rename_from", [Literal::String(x)]) => {
+            annotations.push(FieldAnnotation::RenameFrom(x.to_string()));
           }
           _ => {
             return Err(

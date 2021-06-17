@@ -309,3 +309,30 @@ fn test_planner_migration_add_and_remove_field_complex() {
   assert_eq!(insert_count_2, delete_count_1);
   assert_eq!(delete_count_2, insert_count_1);
 }
+
+#[test]
+fn test_planner_migration_field_rename() {
+  let _ = pretty_env_logger::try_init();
+  let old = r#"
+  type Item {
+    a: int64,
+    c: int64,
+  }
+  export Item data;
+  "#;
+  let new = r#"
+  type Item {
+    @rename_from("a")
+    b: int64,
+    c: int64
+  }
+  export Item data;
+  "#;
+  let (insert_count_1, delete_count_1) = run_planner_migration_stats(old, new);
+  assert_eq!(insert_count_1, 1);
+  assert_eq!(delete_count_1, 1);
+  println!(
+    "test_planner_migration_field_rename: insert {}, delete {}",
+    insert_count_1, delete_count_1
+  );
+}
