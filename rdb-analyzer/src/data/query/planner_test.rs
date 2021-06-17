@@ -154,3 +154,37 @@ fn recursive_set_scan_with_index() {
   check_stack(&plan, 0);
   println!("{}", serde_yaml::to_string(&plan).unwrap());
 }
+
+#[test]
+fn binary_tree() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+  type BinaryTree<T> {
+    left: BinaryTree<T>?,
+    right: BinaryTree<T>?,
+    value: T?,
+  }
+  export BinaryTree<int64> data;
+  "#,
+  )
+  .unwrap();
+  let schema = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
+  let storage_plan =
+    generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
+  println!(
+    "{}",
+    serde_yaml::to_string(&StoragePlan::<String>::from(&storage_plan)).unwrap()
+  );
+  let mut planner = QueryPlanner::new(&schema, &storage_plan);
+  planner
+    .add_query(".data.right.left.left.right.left.right.value")
+    .unwrap();
+  let plan = planner.plan().unwrap();
+  check_stack(&plan, 0);
+  println!("{}", serde_yaml::to_string(&plan).unwrap());
+}
