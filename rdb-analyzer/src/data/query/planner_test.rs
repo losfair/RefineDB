@@ -20,7 +20,11 @@ fn check_stack(plan: &QueryPlan, start: usize) {
       QueryStep::PointGet { .. } => (1, 1),
       QueryStep::PointPut { .. } => (2, 0),
       QueryStep::Pop => (1, 0),
-      QueryStep::RangeScan { subplan } => {
+      QueryStep::RangeScanIndex { subplan } => {
+        check_stack(subplan, 1);
+        (2, 0)
+      }
+      QueryStep::RangeScanKeys { subplan } => {
         check_stack(subplan, 1);
         (2, 0)
       }

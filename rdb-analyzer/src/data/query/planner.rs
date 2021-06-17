@@ -73,7 +73,12 @@ pub enum QueryStep {
   /// PointVec (start point) -> PointVec (end point) -> ()
   ///
   /// The subplan has the currently scanning point on its stack
-  RangeScan { subplan: QueryPlan },
+  RangeScanIndex { subplan: QueryPlan },
+
+  /// PointVec (start point) -> PointVec (end point) -> ()
+  ///
+  /// The subplan has the currently scanning point on its stack
+  RangeScanKeys { subplan: QueryPlan },
 
   /// PackedValue -> Type<PointType>
   LensGet {
@@ -251,87 +256,90 @@ impl<'a> QueryPlanner<'a> {
           }
         }
         FieldType::Set(member_ty) => {
-          // This is a set.
+          // This is a set. And the member type is always a named type (test `no_primitive_types_in_set`).
+          let member_ty_name = if let FieldType::Named(x) = &**member_ty {
+            x
+          } else {
+            return Err(QueryError::Inconsistency.into());
+          };
+
+          let member_specialized_ty = self
+            .schema
+            .types
+            .get(member_ty_name)
+            .ok_or_else(|| QueryError::Inconsistency)?;
+
+          let member_storage = resolve_subspace_reference(
+            storage
+              .set
+              .as_ref()
+              .ok_or_else(|| QueryError::Inconsistency)?,
+            storage_stack,
+          )?;
 
           // Iterate over all its child queries.
           for (child_seg, child_node) in &query_node.subtree.children {
+            // Generate a subplan.
+            let mut subplan = QueryPlan::default();
+            storage_stack.push(member_storage);
+            self.do_plan(
+              &mut subplan,
+              child_seg,
+              child_node,
+              member_ty,
+              storage_stack,
+            )?;
+            storage_stack.pop().unwrap();
+
             // Is there any index to use?
             if let ast::QuerySegment::Selector(expr) = child_seg {
-              if let FieldType::Named(member_ty_name) = &**member_ty {
-                let member_specialized_ty = self
-                  .schema
-                  .types
-                  .get(member_ty_name)
-                  .ok_or_else(|| QueryError::Inconsistency)?;
-
-                let member_storage = resolve_subspace_reference(
-                  storage
-                    .set
-                    .as_ref()
+              if let Some(index_info) = member_specialized_ty.lookup_indexed_field(&expr.key) {
+                // Got the index! Let's use it.
+                let index_storage = resolve_subspace_reference(
+                  member_storage
+                    .children
+                    .get(expr.key.as_str())
                     .ok_or_else(|| QueryError::Inconsistency)?,
                   storage_stack,
                 )?;
 
-                if let Some(index_info) = member_specialized_ty.lookup_indexed_field(&expr.key) {
-                  // Got the index! Let's use it.
-                  let index_storage = resolve_subspace_reference(
-                    member_storage
-                      .children
-                      .get(expr.key.as_str())
-                      .ok_or_else(|| QueryError::Inconsistency)?,
-                    storage_stack,
-                  )?;
+                let index_storage_key =
+                  index_storage.key.ok_or_else(|| QueryError::Inconsistency)?;
 
-                  let index_storage_key =
-                    index_storage.key.ok_or_else(|| QueryError::Inconsistency)?;
+                let value = PrimitiveValue::try_from((&expr.value, index_info.ty, self.schema))?;
 
-                  let value = PrimitiveValue::try_from((&expr.value, index_info.ty, self.schema))?;
+                // The index key format: 0x01 storage_key(12b) value 0x00 index_id(16b)
+                // Build the initial index
+                let mut index_prefix = PointVec::new();
+                index_prefix.extend_from_slice(&[0x01]);
+                index_prefix.extend_from_slice(&index_storage_key);
+                index_prefix.extend_from_slice(value.serialize_raw().as_slice());
+                plan.steps.push(QueryStep::ExtendPoint(index_prefix));
 
-                  let mut subplan = QueryPlan::default();
+                // Then, the real indices for start/end points...
+                plan
+                  .steps
+                  .push(QueryStep::ExtendPoint(PointVec::from_slice(&[0x00u8])));
+                plan.steps.push(QueryStep::CurrentPoint); // start_point
+                plan.steps.push(QueryStep::Swap2);
+                plan.steps.push(QueryStep::Pop);
+                plan.steps.push(QueryStep::Swap2);
+                plan
+                  .steps
+                  .push(QueryStep::ExtendPoint(PointVec::from_slice(&[0x01u8])));
+                plan.steps.push(QueryStep::CurrentPoint); // end_point
+                plan.steps.push(QueryStep::Swap2);
+                plan.steps.push(QueryStep::Pop);
+                plan.steps.push(QueryStep::Swap2);
 
-                  storage_stack.push(member_storage);
-                  self.do_plan(
-                    &mut subplan,
-                    child_seg,
-                    child_node,
-                    member_ty,
-                    storage_stack,
-                  )?;
-                  storage_stack.pop().unwrap();
+                plan.steps.push(QueryStep::Pop);
 
-                  // The index key format: 0x01 storage_key(12b) value 0x00 index_id(16b)
-                  // Build the initial index
-                  let mut index_prefix = PointVec::new();
-                  index_prefix.extend_from_slice(&[0x01]);
-                  index_prefix.extend_from_slice(&index_storage_key);
-                  index_prefix.extend_from_slice(value.serialize_raw().as_slice());
-                  plan.steps.push(QueryStep::ExtendPoint(index_prefix));
+                // Now we have (start_point, end_point) on the top of the stack
+                // Let's do range scan!
+                let step = QueryStep::RangeScanIndex { subplan };
+                plan.steps.push(step);
 
-                  // Then, the real indices for start/end points...
-                  plan
-                    .steps
-                    .push(QueryStep::ExtendPoint(PointVec::from_slice(&[0x00u8])));
-                  plan.steps.push(QueryStep::CurrentPoint); // start_point
-                  plan.steps.push(QueryStep::Swap2);
-                  plan.steps.push(QueryStep::Pop);
-                  plan.steps.push(QueryStep::Swap2);
-                  plan
-                    .steps
-                    .push(QueryStep::ExtendPoint(PointVec::from_slice(&[0x01u8])));
-                  plan.steps.push(QueryStep::CurrentPoint); // end_point
-                  plan.steps.push(QueryStep::Swap2);
-                  plan.steps.push(QueryStep::Pop);
-                  plan.steps.push(QueryStep::Swap2);
-
-                  plan.steps.push(QueryStep::Pop);
-
-                  // Now we have (start_point, end_point) on the top of the stack
-                  // Let's do range scan!
-                  let step = QueryStep::RangeScan { subplan };
-                  plan.steps.push(step);
-
-                  continue;
-                }
+                continue;
               }
             }
 
