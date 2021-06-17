@@ -528,6 +528,7 @@ dependencies = [
  "anyhow",
  "base64",
  "bumpalo",
+ "byteorder",
  "hex",
  "indexmap",
  "lalrpop",

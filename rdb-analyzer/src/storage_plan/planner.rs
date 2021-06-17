@@ -1,9 +1,11 @@
 use std::{
   collections::{BTreeMap, HashMap, HashSet},
   sync::Arc,
+  time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
+use byteorder::{BigEndian, ByteOrder};
 use rand::RngCore;
 
 use crate::schema::compile::{CompiledSchema, FieldAnnotation, FieldType};
@@ -215,6 +217,13 @@ pub fn generate_plan_for_schema(
     old_schema,
     used_storage_keys: HashSet::new(),
   };
+
+  // Deduplicate also against storage keys used in the previous plan.
+  //
+  // This is not strictly effective because we may have more than one historic schema
+  // versions, but in that case the storage key generation mechanism should be enough
+  // to prevent duplicates. (unless we generate a lot of schemas within a single
+  // millisecond?)
   for (_, node) in &old_plan.nodes {
     collect_storage_keys(node, &mut plan_st.used_storage_keys);
   }
@@ -427,8 +436,20 @@ fn field_type_key(x: &FieldType) -> usize {
 
 fn rand_storage_key(st: &mut PlanState) -> StorageKey {
   loop {
-    let mut ret = [0u8; 8];
-    rand::thread_rng().fill_bytes(&mut ret);
+    let now = SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .unwrap()
+      .as_millis() as u64;
+    let mut timebuf = [0u8; 8];
+    BigEndian::write_u64(&mut timebuf, now);
+
+    assert_eq!(timebuf[0], 0);
+    assert_eq!(timebuf[1], 0);
+
+    let mut ret = [0u8; 12];
+    ret[..6].copy_from_slice(&timebuf[2..]);
+    rand::thread_rng().fill_bytes(&mut ret[6..]);
+
     if st.used_storage_keys.insert(ret) {
       break ret;
     }

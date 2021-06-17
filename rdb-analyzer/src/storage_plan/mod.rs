@@ -8,7 +8,7 @@ pub mod planner;
 #[cfg(test)]
 mod planner_test;
 
-pub type StorageKey = [u8; 8];
+pub type StorageKey = [u8; 12];
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct StoragePlan<SK = StorageKey> {

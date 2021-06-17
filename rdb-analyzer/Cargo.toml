@@ -23,6 +23,7 @@ rmp-serde = "0.15"
 snap = "1"
 serde_yaml = "0.8"
 base64 = "0.13"
+byteorder = "1"
 
 [build-dependencies]
 lalrpop = "0.19.6"
