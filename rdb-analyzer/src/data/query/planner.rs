@@ -1,7 +1,7 @@
 use super::{ast, QueryError};
 use crate::{
   data::value::PrimitiveValue,
-  schema::compile::{CompiledSchema, FieldAnnotation, FieldType, PrimitiveType},
+  schema::compile::{CompiledSchema, FieldAnnotationList, FieldType, PrimitiveType},
   storage_plan::{StorageNode, StoragePlan},
 };
 use anyhow::Result;
@@ -151,21 +151,20 @@ impl<'a> QueryPlanner<'a> {
         .get(field_name.as_str())
         .ok_or_else(|| QueryError::Inconsistency)?;
       let mut storage_stack = vec![storage];
-      self.do_plan(&mut plan, seg, node, ty, &[], &mut storage_stack)?;
+      self.do_plan(&mut plan, seg, node, ty, &mut storage_stack)?;
     }
     Ok(plan)
   }
 
   /// Recursively generate plan on a given query segment.
   ///
-  /// `point` should NOT contain data of the current node, but all other parameters should be consistent.
+  /// All parameters should be consistent.
   fn do_plan(
     &self,
     plan: &mut QueryPlan,
     query_seg: &ast::QuerySegment,
     query_node: &QueryNode,
     ty: &FieldType,
-    _annotations: &[FieldAnnotation],
     storage_stack: &mut Vec<&StorageNode>,
   ) -> Result<()> {
     let storage = *storage_stack.last().unwrap();
@@ -199,7 +198,6 @@ impl<'a> QueryPlanner<'a> {
           plan.steps.push(QueryStep::Pop);
         }
         FieldType::Named(type_name) => {
-          // TODO: Packed
           // This is a named type - let's get its fields.
           let specialized_ty = self
             .schema
@@ -228,17 +226,15 @@ impl<'a> QueryPlanner<'a> {
                   storage_stack,
                 )?;
 
+                // TODO: Packed
+                if field_type.1.as_slice().is_packed() {
+                  return Err(QueryError::PackedFieldUnsupported(field_name.clone()).into());
+                }
+
                 storage_stack.push(field_storage);
 
                 // Then, recurse into the field.
-                self.do_plan(
-                  plan,
-                  child_seg,
-                  child_node,
-                  &field_type.0,
-                  &field_type.1,
-                  storage_stack,
-                )?;
+                self.do_plan(plan, child_seg, child_node, &field_type.0, storage_stack)?;
                 storage_stack.pop().unwrap();
               }
               _ => {
@@ -299,7 +295,6 @@ impl<'a> QueryPlanner<'a> {
                     child_seg,
                     child_node,
                     member_ty,
-                    &[],
                     storage_stack,
                   )?;
                   storage_stack.pop().unwrap();

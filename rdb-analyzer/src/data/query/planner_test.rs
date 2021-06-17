@@ -62,6 +62,33 @@ fn simple_point_get() {
 }
 
 #[test]
+fn packed_point_get() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+  type Item {
+    @packed a: int64,
+    b: string,
+  }
+  export Item item;
+  "#,
+  )
+  .unwrap();
+  let schema = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
+  let storage_plan =
+    generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
+  let mut planner = QueryPlanner::new(&schema, &storage_plan);
+  planner.add_query(".item.a").unwrap();
+  assert!(
+    format!("{}", planner.plan().unwrap_err()).contains("packed fields are not yet supported")
+  );
+}
+
+#[test]
 fn simple_set_scan_with_index() {
   let _ = pretty_env_logger::try_init();
   let alloc = Bump::new();

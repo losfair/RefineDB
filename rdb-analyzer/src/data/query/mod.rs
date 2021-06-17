@@ -33,4 +33,7 @@ pub enum QueryError {
 
   #[error("selectors cannot be used at the root level: `{0}`")]
   SelectorOnRoot(String),
+
+  #[error("packed fields are not yet supported: `{0}`")]
+  PackedFieldUnsupported(String),
 }
