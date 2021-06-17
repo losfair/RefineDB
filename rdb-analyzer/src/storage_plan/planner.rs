@@ -153,10 +153,9 @@ impl<'a> OldTreePoint<'a> {
       Some(x) => x,
       None => {
         log::info!(
-          "subfield `{}` of type `{}` does not exist in the old plan - creating. {:?}",
+          "subfield `{}` of type `{}` does not exist in the old plan - creating.",
           name,
           self.ty,
-          self.node.children
         );
         return None;
       }
