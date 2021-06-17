@@ -128,12 +128,52 @@ pub struct SpecializedType {
   pub fields: BTreeMap<Arc<str>, (FieldType, Vec<FieldAnnotation>)>,
 }
 
+pub struct IndexedField<'a> {
+  pub ty: &'a FieldType,
+  pub annotations: &'a [FieldAnnotation],
+  pub is_unique: bool,
+}
+
+impl SpecializedType {
+  pub fn lookup_indexed_field<'a>(&'a self, name: &str) -> Option<IndexedField<'a>> {
+    self
+      .fields
+      .get(name)
+      .filter(|x| x.1.as_slice().is_unique() || x.1.as_slice().is_index())
+      .map(|x| IndexedField {
+        ty: &x.0,
+        annotations: &x.1,
+        is_unique: x.1.as_slice().is_unique(),
+      })
+  }
+}
+
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FieldAnnotation {
   Unique,
   Index,
   Packed,
   RenameFrom(String),
+}
+
+pub trait FieldAnnotationList {
+  fn is_unique(&self) -> bool;
+  fn is_index(&self) -> bool;
+  fn is_packed(&self) -> bool;
+}
+
+impl FieldAnnotationList for &[FieldAnnotation] {
+  fn is_unique(&self) -> bool {
+    self.iter().find(|x| x.is_unique()).is_some()
+  }
+
+  fn is_index(&self) -> bool {
+    self.iter().find(|x| x.is_index()).is_some()
+  }
+
+  fn is_packed(&self) -> bool {
+    self.iter().find(|x| x.is_packed()).is_some()
+  }
 }
 
 impl FieldAnnotation {
@@ -168,7 +208,7 @@ impl Display for FieldAnnotation {
   }
 }
 
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
 pub enum FieldType {
   Named(Arc<str>),
   Primitive(PrimitiveType),

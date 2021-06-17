@@ -25,6 +25,7 @@ serde_yaml = "0.8"
 base64 = "0.13"
 byteorder = "1"
 similar = { version = "1", features = ["inline"] }
+smallvec = { version = "1", features = ["serde"] }
 
 [build-dependencies]
 lalrpop = "0.19.6"

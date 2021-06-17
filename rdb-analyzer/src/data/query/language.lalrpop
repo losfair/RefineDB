@@ -9,14 +9,14 @@ extern {
 }
 
 pub QueryExpr: QueryExpr = {
-  <segments:OneOrMore<QuerySegment, Token<".">>> <value: ("<-" <Literal>)?> => QueryExpr {
+  <segments:QuerySegment+> <value: ("<-" <Literal>)?> => QueryExpr {
     segments,
     value,
   }
 }
 
 QuerySegment: QuerySegment = {
-  <x:Identifier> => QuerySegment::Field(x),
+  "." <x:Identifier> => QuerySegment::Field(x),
   Token<"["> <x:SelectorExpr> Token<"]"> => QuerySegment::Selector(x),
 }
 
