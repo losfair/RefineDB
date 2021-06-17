@@ -17,16 +17,11 @@ pub struct StoragePlan<SK = StorageKey> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StorageNode<SK = StorageKey> {
-  pub key: Option<StorageNodeKey<SK>>,
+  pub key: Option<SK>,
   pub subspace_reference: bool,
   pub packed: bool,
+  pub set: Option<Box<StorageNode<SK>>>,
   pub children: BTreeMap<Arc<str>, StorageNode<SK>>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum StorageNodeKey<SK = StorageKey> {
-  Const(SK),
-  Set(Box<StorageNode<SK>>),
 }
 
 impl StoragePlan {
@@ -35,15 +30,6 @@ impl StoragePlan {
     let mut buf = Vec::new();
     snap::write::FrameEncoder::new(&mut buf).write_all(&serialized)?;
     Ok(buf)
-  }
-}
-
-impl Display for StorageNodeKey {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      StorageNodeKey::Const(x) => write!(f, "{}", hex::encode(x)),
-      StorageNodeKey::Set(_) => write!(f, "set_key"),
-    }
   }
 }
 
@@ -64,7 +50,7 @@ impl StorageNode {
       self
         .key
         .as_ref()
-        .map(|x| format!("{}", x))
+        .map(|x| format!("{}", hex::encode(&x)))
         .unwrap_or_else(|| "no_key".to_string()),
       if self.subspace_reference {
         " subspace_reference"
@@ -75,8 +61,8 @@ impl StorageNode {
     )?;
     write!(f, "\n")?;
 
-    match &self.key {
-      Some(StorageNodeKey::Set(x)) => {
+    match &self.set {
+      Some(x) => {
         for _ in 0..indent + 1 {
           write!(f, ".")?;
         }

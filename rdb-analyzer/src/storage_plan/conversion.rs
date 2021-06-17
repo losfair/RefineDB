@@ -2,7 +2,7 @@ use std::convert::{TryFrom, TryInto};
 
 use thiserror::Error;
 
-use super::{StorageKey, StorageNode, StorageNodeKey, StoragePlan};
+use super::{StorageKey, StorageNode, StoragePlan};
 
 #[derive(Error, Debug)]
 pub enum StorageKeyConversionError {
@@ -25,23 +25,15 @@ impl From<&StoragePlan<StorageKey>> for StoragePlan<String> {
 impl From<&StorageNode<StorageKey>> for StorageNode<String> {
   fn from(that: &StorageNode<StorageKey>) -> Self {
     Self {
-      key: that.key.as_ref().map(StorageNodeKey::<String>::from),
+      key: that.key.as_ref().map(|x| base64::encode(x)),
       subspace_reference: that.subspace_reference,
       packed: that.packed,
+      set: that.set.as_ref().map(|x| Box::new(Self::from(&**x))),
       children: that
         .children
         .iter()
         .map(|(k, v)| (k.clone(), Self::from(v)))
         .collect(),
-    }
-  }
-}
-
-impl From<&StorageNodeKey<StorageKey>> for StorageNodeKey<String> {
-  fn from(that: &StorageNodeKey<StorageKey>) -> Self {
-    match that {
-      StorageNodeKey::Const(x) => Self::Const(base64::encode(x)),
-      StorageNodeKey::Set(x) => Self::Set(Box::new(StorageNode::<String>::from(&**x))),
     }
   }
 }
@@ -68,31 +60,27 @@ impl TryFrom<&StorageNode<String>> for StorageNode<StorageKey> {
       key: that
         .key
         .as_ref()
-        .map(StorageNodeKey::<StorageKey>::try_from)
+        .map(|x| {
+          base64::decode(x)
+            .map_err(|_| StorageKeyConversionError::Base64Decode)
+            .and_then(|x| {
+              x.try_into()
+                .map_err(|_| StorageKeyConversionError::Base64Decode)
+            })
+        })
         .transpose()?,
       subspace_reference: that.subspace_reference,
       packed: that.packed,
+      set: that
+        .set
+        .as_ref()
+        .map(|x| Self::try_from(&**x).map(Box::new))
+        .transpose()?,
       children: that
         .children
         .iter()
         .map(|(k, v)| Self::try_from(v).map(|v| (k.clone(), v)))
         .collect::<Result<_, StorageKeyConversionError>>()?,
-    })
-  }
-}
-
-impl TryFrom<&StorageNodeKey<String>> for StorageNodeKey<StorageKey> {
-  type Error = StorageKeyConversionError;
-
-  fn try_from(that: &StorageNodeKey<String>) -> Result<Self, Self::Error> {
-    Ok(match that {
-      StorageNodeKey::Const(x) => Self::Const(
-        base64::decode(x)
-          .map_err(|_| StorageKeyConversionError::Base64Decode)?
-          .try_into()
-          .map_err(|_| StorageKeyConversionError::Base64Decode)?,
-      ),
-      StorageNodeKey::Set(x) => Self::Set(Box::new(StorageNode::<StorageKey>::try_from(&**x)?)),
     })
   }
 }

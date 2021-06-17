@@ -104,6 +104,29 @@ fn test_many_binary_trees() {
 }
 
 #[test]
+fn test_tuple_set() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+    type Tuple<A, B> {
+      first: A,
+      second: B,
+    }
+    type SetBox<T> {
+      inner: set<T>,
+    }
+    export Tuple<SetBox<string>, set<bytes>> something;
+  "#,
+  )
+  .unwrap();
+  let output = compile(&ast).unwrap();
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &output).unwrap();
+  println!("{}", plan);
+}
+
+#[test]
 fn test_planner_migration_identity() {
   let _ = pretty_env_logger::try_init();
   let alloc = Bump::new();

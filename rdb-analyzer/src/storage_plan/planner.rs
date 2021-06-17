@@ -10,7 +10,7 @@ use rand::RngCore;
 
 use crate::schema::compile::{CompiledSchema, FieldAnnotation, FieldType};
 
-use super::{StorageKey, StorageNode, StorageNodeKey, StoragePlan};
+use super::{StorageKey, StorageNode, StoragePlan};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -65,13 +65,13 @@ impl<'a> OldTreePoint<'a> {
         x
       );
       self.ty = &**x;
-      match &self.node.key {
-        Some(StorageNodeKey::Set(x)) => {
+      match &self.node.set {
+        Some(x) => {
           self.node = &**x;
           Some(self)
         }
-        _ => {
-          log::error!("inconsistency detected: a storage node for the `set` type does not have a `StorageNodeKey::Set` storage key. dropping field. node: {:?}", self.node);
+        None => {
+          log::error!("inconsistency detected: a storage node for the `set` type does not have an element node. dropping field. node: {:?}", self.node);
           None
         }
       }
@@ -136,7 +136,7 @@ impl<'a> OldTreePoint<'a> {
   }
 
   fn storage_key(&self) -> Option<StorageKey> {
-    if let Some(StorageNodeKey::Const(x)) = self.node.key {
+    if let Some(x) = self.node.key {
       Some(x)
     } else {
       log::warn!(
@@ -277,9 +277,10 @@ fn generate_subspace(
   // If this subspace is already generated, return a `subspace_reference` leaf node...
   if let Some(storage_key) = plan_st.subspaces_assigned.get(&key) {
     return Ok(StorageNode {
-      key: Some(StorageNodeKey::Const(*storage_key)),
+      key: Some(*storage_key),
       subspace_reference: true,
       packed: false,
+      set: None,
       children: BTreeMap::new(),
     });
   }
@@ -305,7 +306,7 @@ fn generate_subspace(
 
   // Tag result with subspace key
   let mut res = res?;
-  res.key = Some(StorageNodeKey::Const(storage_key));
+  res.key = Some(storage_key);
 
   Ok(res)
 }
@@ -337,13 +338,14 @@ fn generate_field(
       // For packed types, don't go down further...
       if annotations.iter().find(|x| x.is_packed()).is_some() {
         return Ok(StorageNode {
-          key: Some(StorageNodeKey::Const(
+          key: Some(
             old_point
               .and_then(|x| x.storage_key())
               .unwrap_or_else(|| rand_storage_key(plan_st)),
-          )),
+          ),
           subspace_reference: false,
           packed: true,
+          set: None,
           children: BTreeMap::new(),
         });
       }
@@ -392,19 +394,21 @@ fn generate_field(
         key: None,
         subspace_reference: false,
         packed: false,
+        set: None,
         children,
       })
     }
     FieldType::Primitive(_) => {
       // This is a primitive type (leaf node).
       Ok(StorageNode {
-        key: Some(StorageNodeKey::Const(
+        key: Some(
           old_point
             .and_then(|x| x.storage_key())
             .unwrap_or_else(|| rand_storage_key(plan_st)),
-        )),
+        ),
         subspace_reference: false,
         packed: false,
+        set: None,
         children: BTreeMap::new(),
       })
     }
@@ -421,9 +425,14 @@ fn generate_field(
           .and_then(|y| y.validate_type(x, annotations)),
       )?;
       Ok(StorageNode {
-        key: Some(StorageNodeKey::Set(Box::new(inner))),
+        key: Some(
+          old_point
+            .and_then(|x| x.storage_key())
+            .unwrap_or_else(|| rand_storage_key(plan_st)),
+        ),
         subspace_reference: false,
         packed: false,
+        set: Some(Box::new(inner)),
         children: BTreeMap::new(),
       })
     }
@@ -457,10 +466,10 @@ fn rand_storage_key(st: &mut PlanState) -> StorageKey {
 }
 
 fn collect_storage_keys(node: &StorageNode, sink: &mut HashSet<StorageKey>) {
-  if let Some(StorageNodeKey::Const(x)) = &node.key {
+  if let Some(x) = &node.key {
     sink.insert(*x);
   }
-  if let Some(StorageNodeKey::Set(x)) = &node.key {
+  if let Some(x) = &node.set {
     collect_storage_keys(x, sink);
   }
   for (_, child) in &node.children {
