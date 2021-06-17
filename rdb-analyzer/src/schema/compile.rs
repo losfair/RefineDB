@@ -46,6 +46,9 @@ pub enum SchemaCompileError {
 
   #[error("unknown annotation on field `{0}` of type `{1}`: `{2}`")]
   UnknownAnnotationOnField(String, String, String),
+
+  #[error("field `{0}` of type `{1}`: indexes are only allowed on primitive or packed fields")]
+  IndexOnNonPrimitiveOrPackedField(String, String),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -140,6 +143,18 @@ impl FieldAnnotation {
       _ => false,
     }
   }
+  pub fn is_index(&self) -> bool {
+    match self {
+      FieldAnnotation::Index => true,
+      _ => false,
+    }
+  }
+  pub fn is_unique(&self) -> bool {
+    match self {
+      FieldAnnotation::Unique => true,
+      _ => false,
+    }
+  }
 }
 
 impl Display for FieldAnnotation {
@@ -159,6 +174,15 @@ pub enum FieldType {
   Primitive(PrimitiveType),
   Set(Box<FieldType>),
   Optional(Box<FieldType>),
+}
+
+impl FieldType {
+  pub fn optional_unwrapped(&self) -> &Self {
+    match self {
+      Self::Optional(x) => &**x,
+      _ => self,
+    }
+  }
 }
 
 impl Display for FieldType {
@@ -310,9 +334,9 @@ impl<'a> TypeResolutionContext<'a> {
           .into(),
         );
       }
-      let mut ty = self.resolve_type_expr(&local_context, &x.value)?;
+      let mut field_ty = self.resolve_type_expr(&local_context, &x.value)?;
       if x.optional {
-        ty = FieldType::Optional(Box::new(ty));
+        field_ty = FieldType::Optional(Box::new(field_ty));
       }
 
       let mut annotations = vec![];
@@ -342,7 +366,31 @@ impl<'a> TypeResolutionContext<'a> {
           }
         }
       }
-      fields.insert(Arc::from(x.name.0), (ty, annotations));
+
+      // Validate index constraints.
+      //
+      // Currently, a unique/non-unique index is only allowed on either packed or primitive fields.
+      if annotations
+        .iter()
+        .find(|x| x.is_unique() || x.is_index())
+        .is_some()
+      {
+        match field_ty.optional_unwrapped() {
+          FieldType::Primitive(_) => {}
+          _ => {
+            if annotations.iter().find(|x| x.is_packed()).is_none() {
+              return Err(
+                SchemaCompileError::IndexOnNonPrimitiveOrPackedField(
+                  x.name.0.to_string(),
+                  ty.name.0.to_string(),
+                )
+                .into(),
+              );
+            }
+          }
+        }
+      }
+      fields.insert(Arc::from(x.name.0), (field_ty, annotations));
     }
 
     self.resolved.get_mut(&repr).unwrap().fields = fields;
