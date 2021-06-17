@@ -41,7 +41,7 @@ pub enum SchemaCompileError {
   #[error("cannot specialize a primitive type `{0}`.")]
   CannotSpecializePrimitiveType(String),
 
-  #[error("sets must have exactly one type parameter")]
+  #[error("sets must have exactly one named type parameter")]
   BadSetTypeParameter,
 
   #[error("unknown annotation on field `{0}` of type `{1}`: `{2}`")]
@@ -312,7 +312,11 @@ impl<'a> TypeResolutionContext<'a> {
       if args.len() != 1 {
         return Err(SchemaCompileError::BadSetTypeParameter.into());
       }
-      return Ok(FieldType::Set(Box::new(args[0].clone())));
+      if let FieldType::Named(_) = &args[0] {
+        return Ok(FieldType::Set(Box::new(args[0].clone())));
+      } else {
+        return Err(SchemaCompileError::BadSetTypeParameter.into());
+      }
     }
 
     let ty = self
@@ -418,7 +422,7 @@ impl<'a> TypeResolutionContext<'a> {
         match field_ty.optional_unwrapped() {
           FieldType::Primitive(_) => {}
           _ => {
-            if annotations.iter().find(|x| x.is_packed()).is_none() {
+            if !annotations.as_slice().is_packed() {
               return Err(
                 SchemaCompileError::IndexOnNonPrimitiveOrPackedField(
                   x.name.0.to_string(),

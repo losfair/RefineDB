@@ -73,3 +73,17 @@ fn index_constraints_case_2() {
   .unwrap();
   assert!(compile(&ast).is_err());
 }
+
+#[test]
+fn no_primitive_types_in_set() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+    export set<int64> something;
+  "#,
+  )
+  .unwrap();
+  assert!(compile(&ast).is_err());
+}

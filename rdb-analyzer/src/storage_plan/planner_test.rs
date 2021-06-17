@@ -41,8 +41,13 @@ type TrinaryTree<T> {
 */
 
 type InternalSet {
-  s: set<int64>,
+  s: set<Wrapper<int64>>,
 }
+
+type Wrapper<T> {
+  value: T,
+}
+
 export set<Item<Duration<int64>>> items;
 export Recursive<int64> item;
 export BinaryTree<int64> a_binary_tree;
@@ -103,7 +108,7 @@ fn test_many_binary_trees() {
     }
     export BinaryTree<int64> binary_tree;
     export set<BinaryTree<int64>> set_of_binary_trees;
-    export BinaryTree<set<int64>> binary_tree_of_sets;
+    export BinaryTree<set<Tuple<int64, int64>>> binary_tree_of_sets;
     export BinaryTree<BinaryTree<int64>> binary_tree_of_binary_trees;
     export BinaryTree<Tuple<BinaryTree<int64>, BinaryTree<string>>> complex_structure;
   "#,
@@ -129,9 +134,12 @@ fn test_tuple_set() {
       second: B,
     }
     type SetBox<T> {
-      inner: set<T>,
+      inner: set<Box<T>>,
     }
-    export Tuple<SetBox<string>, set<bytes>> something;
+    type Box<T> {
+      inner: T,
+    }
+    export Tuple<SetBox<string>, set<Box<bytes>>> something;
   "#,
   )
   .unwrap();
