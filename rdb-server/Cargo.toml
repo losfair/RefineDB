@@ -6,3 +6,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+grpcio = { version = "0.9", features = ["openssl"] }
+rdb-analyzer = { path = "../rdb-analyzer" }
+protobuf = "2"
+
+[build-dependencies]
+protoc-grpcio = "3.0.0"
