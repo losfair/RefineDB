@@ -2,4 +2,6 @@
 members = [
   "rdb-server",
   "rdb-analyzer",
+  "rdbctl",
+  "rdb-proto",
 ]

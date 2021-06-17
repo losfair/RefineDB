@@ -999,14 +999,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "rdb-server"
+name = "rdb-proto"
 version = "0.1.0"
 dependencies = [
  "grpcio",
  "protobuf",
  "protoc-grpcio",
- "rdb-analyzer",
 ]
+
+[[package]]
+name = "rdb-server"
+version = "0.1.0"
+dependencies = [
+ "rdb-analyzer",
+ "rdb-proto",
+]
+
+[[package]]
+name = "rdbctl"
+version = "0.1.0"
 
 [[package]]
 name = "redox_syscall"
