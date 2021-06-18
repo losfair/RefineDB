@@ -8,7 +8,7 @@ use anyhow::Result;
 use byteorder::{BigEndian, ByteOrder};
 use rand::RngCore;
 
-use crate::schema::compile::{CompiledSchema, FieldAnnotation, FieldType};
+use crate::schema::compile::{CompiledSchema, FieldAnnotation, FieldAnnotationList, FieldType};
 
 use super::{StorageKey, StorageNode, StoragePlan};
 use thiserror::Error;
@@ -20,14 +20,10 @@ pub enum PlannerError {
 }
 
 struct PlanState<'a> {
-  subspaces_assigned: HashMap<usize, StorageKey>,
   old_schema: &'a CompiledSchema,
   used_storage_keys: HashSet<StorageKey>,
-}
-
-#[derive(Default)]
-struct SubspaceState {
-  fields_in_stack: HashSet<usize>,
+  recursive_types: HashSet<usize>,
+  fields_in_stack: HashMap<usize, StorageKey>,
 }
 
 /// A point on the old tree.
@@ -214,10 +210,26 @@ pub fn generate_plan_for_schema(
   old_schema: &CompiledSchema,
   schema: &CompiledSchema,
 ) -> Result<StoragePlan> {
+  // Collect recursive types
+  let mut recursive_types: HashSet<usize> = HashSet::new();
+  for (_, export_field) in &schema.exports {
+    collect_recursive_types(
+      export_field,
+      schema,
+      &mut HashSet::new(),
+      &mut recursive_types,
+    )?;
+  }
+  log::debug!(
+    "collected {} recursive types reachable from exports",
+    recursive_types.len()
+  );
+
   let mut plan_st = PlanState {
-    subspaces_assigned: HashMap::new(),
     old_schema,
     used_storage_keys: HashSet::new(),
+    recursive_types,
+    fields_in_stack: HashMap::new(),
   };
 
   // Deduplicate also against storage keys used in the previous plan.
@@ -251,72 +263,15 @@ pub fn generate_plan_for_schema(
       })
       .and_then(|x| x.validate_type(export_field, &[]));
 
-    // Here we don't generate using `generate_subspace`, because root nodes might be a `set`
-    // but `generate_subspace` is only supposed to be used on user-defined named types.
-    let node = generate_field(
-      &mut plan_st,
-      &mut SubspaceState::default(),
-      schema,
-      export_field,
-      &[],
-      old_point,
-    )?;
+    let node = generate_field(&mut plan_st, schema, export_field, &[], old_point)?;
     plan.nodes.insert(export_name.clone(), node);
   }
   Ok(plan)
 }
 
 /// The `old_point` parameter must be validated to match `field` before being passed to this function.
-fn generate_subspace(
-  plan_st: &mut PlanState,
-  schema: &CompiledSchema,
-  field: &FieldType,
-  annotations: &[FieldAnnotation],
-  old_point: Option<OldTreePoint>,
-) -> Result<StorageNode> {
-  let key = field_type_key(field);
-
-  // If this subspace is already generated, return a `subspace_reference` leaf node...
-  if let Some(storage_key) = plan_st.subspaces_assigned.get(&key) {
-    return Ok(StorageNode {
-      key: Some(*storage_key),
-      subspace_reference: true,
-      packed: false,
-      set: None,
-      children: BTreeMap::new(),
-    });
-  }
-
-  // Otherwise, generate the subspace.
-  let storage_key = old_point
-    .and_then(|x| x.storage_key())
-    .unwrap_or_else(|| rand_storage_key(plan_st));
-  plan_st.subspaces_assigned.insert(key, storage_key);
-
-  let mut subspace_st = SubspaceState {
-    fields_in_stack: HashSet::new(),
-  };
-  let res = generate_field(
-    plan_st,
-    &mut subspace_st,
-    schema,
-    field,
-    annotations,
-    old_point,
-  );
-  plan_st.subspaces_assigned.remove(&key);
-
-  // Tag result with subspace key
-  let mut res = res?;
-  res.key = Some(storage_key);
-
-  Ok(res)
-}
-
-/// The `old_point` parameter must be validated to match `field` before being passed to this function.
 fn generate_field(
   plan_st: &mut PlanState,
-  subspace_st: &mut SubspaceState,
   schema: &CompiledSchema,
   field: &FieldType,
   annotations: &[FieldAnnotation],
@@ -327,7 +282,6 @@ fn generate_field(
       // Push down optional
       generate_field(
         plan_st,
-        subspace_st,
         schema,
         x,
         annotations,
@@ -353,8 +307,14 @@ fn generate_field(
       }
 
       // First, check whether we are resolving something recursively...
-      if subspace_st.fields_in_stack.contains(&field_type_key(field)) {
-        return generate_subspace(plan_st, schema, field, annotations, old_point);
+      if let Some(key) = plan_st.fields_in_stack.get(&field_type_key(field)) {
+        return Ok(StorageNode {
+          key: Some(*key),
+          subspace_reference: true,
+          packed: false,
+          set: None,
+          children: BTreeMap::new(),
+        });
       }
 
       let ty = schema
@@ -364,7 +324,15 @@ fn generate_field(
 
       // Push the current state.
       let key = field_type_key(field);
-      subspace_st.fields_in_stack.insert(key);
+      let mut storage_key = None;
+      if plan_st.recursive_types.contains(&key) {
+        storage_key = Some(
+          old_point
+            .and_then(|x| x.storage_key())
+            .unwrap_or_else(|| rand_storage_key(plan_st)),
+        );
+        plan_st.fields_in_stack.insert(key, storage_key.unwrap());
+      }
 
       let mut children: BTreeMap<Arc<str>, StorageNode> = BTreeMap::new();
 
@@ -386,7 +354,6 @@ fn generate_field(
           .and_then(|x| x.validate_type(&subfield.1 .0, &subfield.1 .1));
         match generate_field(
           plan_st,
-          subspace_st,
           schema,
           &subfield.1 .0,
           &subfield.1 .1,
@@ -396,15 +363,16 @@ fn generate_field(
             children.insert(subfield.0.clone(), x);
           }
           Err(e) => {
-            subspace_st.fields_in_stack.remove(&key);
             return Err(e);
           }
         }
       }
-      subspace_st.fields_in_stack.remove(&key);
+      if plan_st.recursive_types.contains(&key) {
+        plan_st.fields_in_stack.remove(&key);
+      }
 
       Ok(StorageNode {
-        key: None,
+        key: storage_key,
         subspace_reference: false,
         packed: false,
         set: None,
@@ -429,7 +397,6 @@ fn generate_field(
       // This is a set with dynamic node key.
       let inner = generate_field(
         plan_st,
-        subspace_st,
         schema,
         x,
         annotations,
@@ -487,5 +454,44 @@ fn collect_storage_keys(node: &StorageNode, sink: &mut HashSet<StorageKey>) {
   }
   for (_, child) in &node.children {
     collect_storage_keys(child, sink);
+  }
+}
+
+fn collect_recursive_types(
+  ty: &FieldType,
+  schema: &CompiledSchema,
+  state: &mut HashSet<usize>,
+  sink: &mut HashSet<usize>,
+) -> Result<()> {
+  match ty {
+    FieldType::Optional(x) => collect_recursive_types(x, schema, state, sink),
+    FieldType::Set(x) => collect_recursive_types(x, schema, state, sink),
+    FieldType::Primitive(_) => Ok(()),
+    FieldType::Named(x) => {
+      let type_key = field_type_key(ty);
+
+      // if a cycle is detected...
+      if state.insert(type_key) == false {
+        sink.insert(type_key);
+        return Ok(());
+      }
+
+      let specialized_ty = schema
+        .types
+        .get(x)
+        .ok_or_else(|| PlannerError::MissingType(x.clone()))?;
+
+      for (_, (field, annotations)) in &specialized_ty.fields {
+        // Skip packed fields
+        if annotations.as_slice().is_packed() {
+          continue;
+        }
+
+        collect_recursive_types(field, schema, state, sink)?;
+      }
+
+      state.remove(&type_key);
+      Ok(())
+    }
   }
 }
