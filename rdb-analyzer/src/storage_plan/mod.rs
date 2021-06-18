@@ -47,7 +47,7 @@ impl StorageNode {
   fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(
       f,
-      " {}{}{}",
+      " {}{}{}{}",
       hex::encode(&self.key.as_ref()),
       if self.subspace_reference {
         " subspace_reference"
@@ -55,6 +55,7 @@ impl StorageNode {
         ""
       },
       if self.packed { " packed" } else { "" },
+      if self.flattened { " flattened" } else { "" },
     )?;
     write!(f, "\n")?;
 
