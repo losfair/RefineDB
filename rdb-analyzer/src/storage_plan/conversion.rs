@@ -25,7 +25,8 @@ impl From<&StoragePlan<StorageKey>> for StoragePlan<String> {
 impl From<&StorageNode<StorageKey>> for StorageNode<String> {
   fn from(that: &StorageNode<StorageKey>) -> Self {
     Self {
-      key: that.key.as_ref().map(|x| base64::encode(x)),
+      key: base64::encode(&that.key),
+      flattened: that.flattened,
       subspace_reference: that.subspace_reference,
       packed: that.packed,
       set: that.set.as_ref().map(|x| Box::new(Self::from(&**x))),
@@ -57,18 +58,13 @@ impl TryFrom<&StorageNode<String>> for StorageNode<StorageKey> {
 
   fn try_from(that: &StorageNode<String>) -> Result<Self, Self::Error> {
     Ok(Self {
-      key: that
-        .key
-        .as_ref()
-        .map(|x| {
-          base64::decode(x)
+      key: base64::decode(&that.key)
+        .map_err(|_| StorageKeyConversionError::Base64Decode)
+        .and_then(|x| {
+          x.try_into()
             .map_err(|_| StorageKeyConversionError::Base64Decode)
-            .and_then(|x| {
-              x.try_into()
-                .map_err(|_| StorageKeyConversionError::Base64Decode)
-            })
-        })
-        .transpose()?,
+        })?,
+      flattened: that.flattened,
       subspace_reference: that.subspace_reference,
       packed: that.packed,
       set: that

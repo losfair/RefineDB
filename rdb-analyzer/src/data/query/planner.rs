@@ -173,10 +173,10 @@ impl<'a> QueryPlanner<'a> {
     storage_stack: &mut Vec<&StorageNode>,
   ) -> Result<()> {
     let storage = *storage_stack.last().unwrap();
-    if let Some(x) = storage.key {
+    if !storage.flattened {
       plan
         .steps
-        .push(QueryStep::ExtendPoint(PointVec::from_slice(&x)));
+        .push(QueryStep::ExtendPoint(PointVec::from_slice(&storage.key)));
     }
 
     match &query_node.kind {
@@ -303,16 +303,13 @@ impl<'a> QueryPlanner<'a> {
                   storage_stack,
                 )?;
 
-                let index_storage_key =
-                  index_storage.key.ok_or_else(|| QueryError::Inconsistency)?;
-
                 let value = PrimitiveValue::try_from((&expr.value, index_info.ty, self.schema))?;
 
                 // The index key format: 0x01 storage_key(12b) value 0x00 index_id(16b)
                 // Build the initial index
                 let mut index_prefix = PointVec::new();
                 index_prefix.extend_from_slice(&[0x01]);
-                index_prefix.extend_from_slice(&index_storage_key);
+                index_prefix.extend_from_slice(&index_storage.key);
                 index_prefix.extend_from_slice(value.serialize_raw().as_slice());
                 plan.steps.push(QueryStep::ExtendPoint(index_prefix));
 
@@ -354,7 +351,7 @@ impl<'a> QueryPlanner<'a> {
       }
     }
 
-    if storage.key.is_some() {
+    if !storage.flattened {
       plan.steps.push(QueryStep::Pop);
     }
     Ok(())
@@ -366,9 +363,8 @@ fn resolve_subspace_reference<'a>(
   stack: &Vec<&'a StorageNode>,
 ) -> Result<&'a StorageNode> {
   if source.subspace_reference {
-    let key = source.key.ok_or_else(|| QueryError::Inconsistency)?;
     for x in stack.iter().rev() {
-      if x.key == Some(key) {
+      if x.key == source.key {
         if x.subspace_reference {
           return Err(QueryError::Inconsistency.into());
         }

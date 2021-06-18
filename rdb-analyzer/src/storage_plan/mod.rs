@@ -17,7 +17,8 @@ pub struct StoragePlan<SK = StorageKey> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StorageNode<SK = StorageKey> {
-  pub key: Option<SK>,
+  pub key: SK,
+  pub flattened: bool,
   pub subspace_reference: bool,
   pub packed: bool,
   pub set: Option<Box<StorageNode<SK>>>,
@@ -47,11 +48,7 @@ impl StorageNode {
     write!(
       f,
       " {}{}{}",
-      self
-        .key
-        .as_ref()
-        .map(|x| format!("{}", hex::encode(&x)))
-        .unwrap_or_else(|| "no_key".to_string()),
+      hex::encode(&self.key.as_ref()),
       if self.subspace_reference {
         " subspace_reference"
       } else {

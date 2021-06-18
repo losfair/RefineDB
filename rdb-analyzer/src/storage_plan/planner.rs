@@ -131,19 +131,6 @@ impl<'a> OldTreePoint<'a> {
     Some(self)
   }
 
-  fn storage_key(&self) -> Option<StorageKey> {
-    if let Some(x) = self.node.key {
-      Some(x)
-    } else {
-      log::warn!(
-        "requesting non-present storage key of field `{}` (type `{}`) - previous value will not be preserved",
-        self.name,
-        self.ty,
-      );
-      None
-    }
-  }
-
   fn resolve_subfield(&self, plan_st: &PlanState<'a>, altnames: &[&str]) -> Option<Self> {
     let (name, child_node) = match altnames
       .iter()
@@ -294,11 +281,10 @@ fn generate_field(
       // For packed types, don't go down further...
       if annotations.iter().find(|x| x.is_packed()).is_some() {
         return Ok(StorageNode {
-          key: Some(
-            old_point
-              .and_then(|x| x.storage_key())
-              .unwrap_or_else(|| rand_storage_key(plan_st)),
-          ),
+          key: old_point
+            .map(|x| x.node.key)
+            .unwrap_or_else(|| rand_storage_key(plan_st)),
+          flattened: false,
           subspace_reference: false,
           packed: true,
           set: None,
@@ -309,7 +295,8 @@ fn generate_field(
       // First, check whether we are resolving something recursively...
       if let Some(key) = plan_st.fields_in_stack.get(&field_type_key(field)) {
         return Ok(StorageNode {
-          key: Some(*key),
+          key: *key,
+          flattened: false,
           subspace_reference: true,
           packed: false,
           set: None,
@@ -324,14 +311,17 @@ fn generate_field(
 
       // Push the current state.
       let key = field_type_key(field);
-      let mut storage_key = None;
+      let flattened;
+      let storage_key = old_point
+        .map(|x| x.node.key)
+        .unwrap_or_else(|| rand_storage_key(plan_st));
+
+      // Recursive types cannot be flattened
       if plan_st.recursive_types.contains(&key) {
-        storage_key = Some(
-          old_point
-            .and_then(|x| x.storage_key())
-            .unwrap_or_else(|| rand_storage_key(plan_st)),
-        );
-        plan_st.fields_in_stack.insert(key, storage_key.unwrap());
+        flattened = false;
+        plan_st.fields_in_stack.insert(key, storage_key);
+      } else {
+        flattened = true;
       }
 
       let mut children: BTreeMap<Arc<str>, StorageNode> = BTreeMap::new();
@@ -373,6 +363,7 @@ fn generate_field(
 
       Ok(StorageNode {
         key: storage_key,
+        flattened,
         subspace_reference: false,
         packed: false,
         set: None,
@@ -382,11 +373,10 @@ fn generate_field(
     FieldType::Primitive(_) => {
       // This is a primitive type (leaf node).
       Ok(StorageNode {
-        key: Some(
-          old_point
-            .and_then(|x| x.storage_key())
-            .unwrap_or_else(|| rand_storage_key(plan_st)),
-        ),
+        key: old_point
+          .map(|x| x.node.key)
+          .unwrap_or_else(|| rand_storage_key(plan_st)),
+        flattened: false,
         subspace_reference: false,
         packed: false,
         set: None,
@@ -405,11 +395,10 @@ fn generate_field(
           .and_then(|y| y.validate_type(x, annotations)),
       )?;
       Ok(StorageNode {
-        key: Some(
-          old_point
-            .and_then(|x| x.storage_key())
-            .unwrap_or_else(|| rand_storage_key(plan_st)),
-        ),
+        key: old_point
+          .map(|x| x.node.key)
+          .unwrap_or_else(|| rand_storage_key(plan_st)),
+        flattened: false,
         subspace_reference: false,
         packed: false,
         set: Some(Box::new(inner)),
@@ -446,9 +435,7 @@ fn rand_storage_key(st: &mut PlanState) -> StorageKey {
 }
 
 fn collect_storage_keys(node: &StorageNode, sink: &mut HashSet<StorageKey>) {
-  if let Some(x) = &node.key {
-    sink.insert(*x);
-  }
+  sink.insert(node.key);
   if let Some(x) = &node.set {
     collect_storage_keys(x, sink);
   }
