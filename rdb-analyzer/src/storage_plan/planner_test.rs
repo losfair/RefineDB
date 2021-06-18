@@ -341,3 +341,20 @@ fn test_planner_migration_field_rename() {
     insert_count_1, delete_count_1
   );
 }
+
+#[test]
+fn primitive_exports() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+    export int64 a;
+    export string b;
+  "#,
+  )
+  .unwrap();
+  let output = compile(&ast).unwrap();
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &output).unwrap();
+  println!("{}", plan);
+}
