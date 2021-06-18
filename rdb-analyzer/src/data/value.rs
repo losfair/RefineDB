@@ -4,6 +4,8 @@ use byteorder::{BigEndian, ByteOrder};
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
+use crate::schema::compile::PrimitiveType;
+
 #[derive(Serialize, Deserialize)]
 pub enum PackedValue {
   /// Primitive value.
@@ -28,6 +30,15 @@ pub enum PrimitiveValue {
 const TOP_BIT: u64 = 1u64 << 63;
 
 impl PrimitiveValue {
+  pub fn get_type(&self) -> PrimitiveType {
+    match self {
+      PrimitiveValue::Bytes(_) => PrimitiveType::Bytes,
+      PrimitiveValue::String(_) => PrimitiveType::String,
+      PrimitiveValue::Int64(_) => PrimitiveType::Int64,
+      PrimitiveValue::Double(_) => PrimitiveType::Double,
+    }
+  }
+
   /// https://activesphere.com/blog/2018/08/17/order-preserving-serialization
   pub fn serialize_raw(&self) -> SmallVec<[u8; 8]> {
     match self {
