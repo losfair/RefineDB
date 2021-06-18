@@ -21,9 +21,9 @@ pub enum QueryError {
   Inconsistency,
 
   #[error(
-    "segment `{0}` refers to a named type `{1}` and can only be queried by a field. got `{2}`"
+    "segment `{0}` refers to a table type `{1}` and can only be queried by a field. got `{2}`"
   )]
-  QueryNamedTypeWithNonField(String, Arc<str>, String),
+  QueryTableTypeWithNonField(String, Arc<str>, String),
 
   #[error("field `{0}` not found on type `{1}`")]
   FieldNotFound(String, Arc<str>),

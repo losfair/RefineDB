@@ -41,7 +41,7 @@ pub enum SchemaCompileError {
   #[error("cannot specialize a primitive type `{0}`.")]
   CannotSpecializePrimitiveType(String),
 
-  #[error("sets must have exactly one named type parameter")]
+  #[error("sets must have exactly one table type parameter")]
   BadSetTypeParameter,
 
   #[error("unknown annotation on field `{0}` of type `{1}`: `{2}`")]
@@ -210,7 +210,7 @@ impl Display for FieldAnnotation {
 
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
 pub enum FieldType {
-  Named(Arc<str>),
+  Table(Arc<str>),
   Primitive(PrimitiveType),
   Set(Box<FieldType>),
   Optional(Box<FieldType>),
@@ -228,7 +228,7 @@ impl FieldType {
 impl Display for FieldType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      Self::Named(x) => write!(f, "{}", x),
+      Self::Table(x) => write!(f, "{}", x),
       Self::Primitive(x) => write!(f, "{}", x),
       Self::Set(x) => write!(f, "set<{}>", x),
       Self::Optional(x) => write!(f, "{}?", x),
@@ -312,7 +312,7 @@ impl<'a> TypeResolutionContext<'a> {
       if args.len() != 1 {
         return Err(SchemaCompileError::BadSetTypeParameter.into());
       }
-      if let FieldType::Named(_) = &args[0] {
+      if let FieldType::Table(_) = &args[0] {
         return Ok(FieldType::Set(Box::new(args[0].clone())));
       } else {
         return Err(SchemaCompileError::BadSetTypeParameter.into());
@@ -348,7 +348,7 @@ impl<'a> TypeResolutionContext<'a> {
     // Now we have the type itself, let's look at the fields.
     // If the type is already resolved, use it.
     if self.resolved.contains_key(&repr) {
-      return Ok(FieldType::Named(repr));
+      return Ok(FieldType::Table(repr));
     }
 
     // Not yet resolved: let's resolve it.
@@ -439,6 +439,6 @@ impl<'a> TypeResolutionContext<'a> {
 
     self.resolved.get_mut(&repr).unwrap().fields = fields;
 
-    Ok(FieldType::Named(repr))
+    Ok(FieldType::Table(repr))
   }
 }

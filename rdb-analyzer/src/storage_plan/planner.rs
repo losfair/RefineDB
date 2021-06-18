@@ -153,7 +153,7 @@ impl<'a> OldTreePoint<'a> {
       child_node
     );
     let ty = match self.ty {
-      FieldType::Named(type_name) => match plan_st.old_schema.types.get(type_name) {
+      FieldType::Table(type_name) => match plan_st.old_schema.types.get(type_name) {
         Some(x) => x,
         None => {
           log::warn!(
@@ -166,7 +166,7 @@ impl<'a> OldTreePoint<'a> {
       },
       _ => {
         log::warn!(
-          "cannot get subfield `{}` on an unnamed type `{}`",
+          "cannot get subfield `{}` on a non-table type `{}`",
           name,
           self.ty
         );
@@ -275,7 +275,7 @@ fn generate_field(
         old_point.map(|x| x.reduce_optional()),
       )
     }
-    FieldType::Named(x) => {
+    FieldType::Table(x) => {
       // This type has children. Push down.
 
       // For packed types, don't go down further...
@@ -454,7 +454,7 @@ fn collect_recursive_types(
     FieldType::Optional(x) => collect_recursive_types(x, schema, state, sink),
     FieldType::Set(x) => collect_recursive_types(x, schema, state, sink),
     FieldType::Primitive(_) => Ok(()),
-    FieldType::Named(x) => {
+    FieldType::Table(x) => {
       let type_key = field_type_key(ty);
 
       // if a cycle is detected...

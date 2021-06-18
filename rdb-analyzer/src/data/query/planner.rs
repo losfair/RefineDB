@@ -202,8 +202,8 @@ impl<'a> QueryPlanner<'a> {
           }
           plan.steps.push(QueryStep::Pop);
         }
-        FieldType::Named(type_name) => {
-          // This is a named type - let's get its fields.
+        FieldType::Table(type_name) => {
+          // This is a table type - let's get its fields.
           let specialized_ty = self
             .schema
             .types
@@ -214,7 +214,7 @@ impl<'a> QueryPlanner<'a> {
           for (child_seg, child_node) in &query_node.subtree.children {
             match child_seg {
               ast::QuerySegment::Field(field_name) => {
-                // This is a named type. Only the `Field` type of selector can be used.
+                // This is a table type. Only the `Field` type of selector can be used.
                 // Resolve type and storage plan of the queried field.
                 let field_type =
                   specialized_ty
@@ -244,7 +244,7 @@ impl<'a> QueryPlanner<'a> {
               }
               _ => {
                 return Err(
-                  QueryError::QueryNamedTypeWithNonField(
+                  QueryError::QueryTableTypeWithNonField(
                     format!("{:?}", query_seg),
                     type_name.clone(),
                     format!("{:?}", child_seg),
@@ -256,8 +256,8 @@ impl<'a> QueryPlanner<'a> {
           }
         }
         FieldType::Set(member_ty) => {
-          // This is a set. And the member type is always a named type (test `no_primitive_types_in_set`).
-          let member_ty_name = if let FieldType::Named(x) = &**member_ty {
+          // This is a set. And the member type is always a table type (test `no_primitive_types_in_set`).
+          let member_ty_name = if let FieldType::Table(x) = &**member_ty {
             x
           } else {
             return Err(QueryError::Inconsistency.into());
