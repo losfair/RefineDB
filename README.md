@@ -32,7 +32,7 @@ The primitive types are:
 - `bytes`: Byte array.
 - `set<T>`: A set with element type `T`.
 
-Note that *infinite types* are allowed and you can actually construct something like a binary tree:
+Note that *recursive types* are allowed and you can actually construct something like a binary tree:
 
 ```
 type BinaryTree<T> {
@@ -43,8 +43,7 @@ type BinaryTree<T> {
 export BinaryTree<int64> data;
 ```
 
-But currently RefineDB aggressively unrolls recursive fields and generates an exponentially large storage plan for any type
-with more than one of them. So be careful.
+But currently recursive types are represented using key subspaces and the performance might be suboptimal.
 
 Sum types are nice to have too, but I haven't implemented it yet.
 
