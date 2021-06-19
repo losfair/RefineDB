@@ -15,6 +15,7 @@ const SIMPLE_SCHEMA: &str = r#"
 type Item<T> {
   @packed inner: T,
   inner2: T,
+  @primary
   something_else: string,
 }
 type Duration<T> {
@@ -38,17 +39,19 @@ type TrinaryTree<T> {
 }
 
 type InternalSet {
+  @primary
+  key: bytes,
   s: set<Wrapper<int64>>,
 }
 
 type Wrapper<T> {
+  @primary
   value: T,
 }
 
 export set<Item<Duration<int64>>> items;
 export Recursive<int64> item;
 export BinaryTree<int64> a_binary_tree;
-export set<BinaryTree<int64>> many_binary_trees;
 export InternalSet an_internal_set;
 export set<InternalSet> nested_internal_sets;
 export TrinaryTree<int64> a_trinary_tree;
@@ -100,14 +103,15 @@ fn test_many_binary_trees() {
       value: T?,
     }
     type Tuple<A, B> {
+      @primary
       first: A,
       second: B,
     }
     export BinaryTree<int64> binary_tree;
-    export set<BinaryTree<int64>> set_of_binary_trees;
+    export set<Tuple<bytes, BinaryTree<int64>>> set_of_binary_trees;
     export BinaryTree<set<Tuple<int64, int64>>> binary_tree_of_sets;
     export BinaryTree<BinaryTree<int64>> binary_tree_of_binary_trees;
-    export BinaryTree<Tuple<BinaryTree<int64>, BinaryTree<string>>> complex_structure;
+    export BinaryTree<Tuple<string, BinaryTree<string>>> complex_structure;
   "#,
   )
   .unwrap();
@@ -134,6 +138,7 @@ fn test_tuple_set() {
       inner: set<Box<T>>,
     }
     type Box<T> {
+      @primary
       inner: T,
     }
     export Tuple<SetBox<string>, set<Box<bytes>>> something;
@@ -143,6 +148,46 @@ fn test_tuple_set() {
   let output = compile(&ast).unwrap();
   let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &output).unwrap();
   println!("{}", plan);
+}
+
+#[test]
+fn test_set_member_with_primary_key() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+    type A {
+      @primary
+      a: int64,
+    }
+    export set<A> some_set;
+  "#,
+  )
+  .unwrap();
+  let output = compile(&ast).unwrap();
+  generate_plan_for_schema(&Default::default(), &Default::default(), &output).unwrap();
+}
+
+#[test]
+fn test_set_member_without_primary_key() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+    type A {
+      a: int64,
+    }
+    export set<A> some_set;
+  "#,
+  )
+  .unwrap();
+  let output = compile(&ast).unwrap();
+  match generate_plan_for_schema(&Default::default(), &Default::default(), &output) {
+    Ok(_) => panic!("test_set_member_without_primary_key: did not get expected error"),
+    Err(e) => assert!(e.to_string().contains("has no primary key")),
+  }
 }
 
 fn run_planner_migration_stats(old: &str, new: &str) -> (usize, usize) {

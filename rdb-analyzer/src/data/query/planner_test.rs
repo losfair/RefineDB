@@ -100,7 +100,7 @@ fn simple_set_scan_with_index() {
     &alloc,
     r#"
   type Item {
-    @unique
+    @primary
     a: int64,
     b: string,
   }
@@ -129,7 +129,7 @@ fn recursive_set_scan_with_index() {
     &alloc,
     r#"
   type Item {
-    @unique
+    @primary
     a: int64,
     b: set<Item>,
   }
@@ -205,7 +205,7 @@ fn binary_tree_and_sets() {
     inner: T,
   }
   type Keyed<K, V> {
-    @unique
+    @primary
     key: K,
     value: V,
   }

@@ -17,12 +17,16 @@ use thiserror::Error;
 pub enum PlannerError {
   #[error("missing type: {0}")]
   MissingType(Arc<str>),
+
+  #[error("set member type `{0}` has no primary key")]
+  SetMemberTypeWithoutPrimaryKey(Arc<str>),
 }
 
 struct PlanState<'a> {
   old_schema: &'a CompiledSchema,
   used_storage_keys: HashSet<StorageKey>,
   recursive_types: HashSet<usize>,
+  set_member_types: HashSet<usize>,
   fields_in_stack: HashMap<usize, StorageKey>,
 }
 
@@ -199,17 +203,23 @@ pub fn generate_plan_for_schema(
 ) -> Result<StoragePlan> {
   // Collect recursive types
   let mut recursive_types: HashSet<usize> = HashSet::new();
+  let mut set_member_types: HashSet<usize> = HashSet::new();
   for (_, export_field) in &schema.exports {
-    collect_recursive_types(
+    collect_special_types(
       export_field,
       schema,
       &mut HashSet::new(),
       &mut recursive_types,
+      &mut set_member_types,
     )?;
   }
   log::debug!(
     "collected {} recursive types reachable from exports",
     recursive_types.len()
+  );
+  log::debug!(
+    "collected {} set member types reachable from exports",
+    set_member_types.len()
   );
 
   let mut plan_st = PlanState {
@@ -217,6 +227,7 @@ pub fn generate_plan_for_schema(
     used_storage_keys: HashSet::new(),
     recursive_types,
     fields_in_stack: HashMap::new(),
+    set_member_types,
   };
 
   // Deduplicate also against storage keys used in the previous plan.
@@ -325,6 +336,7 @@ fn generate_field(
       }
 
       let mut children: BTreeMap<Arc<str>, StorageNode> = BTreeMap::new();
+      let mut has_primary_key = false;
 
       // Iterate over the fields & recursively generate storage nodes.
       for subfield in &ty.fields {
@@ -356,9 +368,14 @@ fn generate_field(
             return Err(e);
           }
         }
+        has_primary_key |= annotations.as_slice().is_primary();
       }
       if plan_st.recursive_types.contains(&key) {
         plan_st.fields_in_stack.remove(&key);
+      }
+
+      if plan_st.set_member_types.contains(&key) && !has_primary_key {
+        return Err(PlannerError::SetMemberTypeWithoutPrimaryKey(ty.name.clone()).into());
       }
 
       Ok(StorageNode {
@@ -444,22 +461,38 @@ fn collect_storage_keys(node: &StorageNode, sink: &mut HashSet<StorageKey>) {
   }
 }
 
-fn collect_recursive_types(
+fn collect_special_types(
   ty: &FieldType,
   schema: &CompiledSchema,
   state: &mut HashSet<usize>,
-  sink: &mut HashSet<usize>,
+  recursive_types_sink: &mut HashSet<usize>,
+  set_member_types_sink: &mut HashSet<usize>,
 ) -> Result<()> {
   match ty {
-    FieldType::Optional(x) => collect_recursive_types(x, schema, state, sink),
-    FieldType::Set(x) => collect_recursive_types(x, schema, state, sink),
+    FieldType::Optional(x) => collect_special_types(
+      x,
+      schema,
+      state,
+      recursive_types_sink,
+      set_member_types_sink,
+    ),
+    FieldType::Set(x) => {
+      set_member_types_sink.insert(field_type_key(x));
+      collect_special_types(
+        x,
+        schema,
+        state,
+        recursive_types_sink,
+        set_member_types_sink,
+      )
+    }
     FieldType::Primitive(_) => Ok(()),
     FieldType::Table(x) => {
       let type_key = field_type_key(ty);
 
       // if a cycle is detected...
       if state.insert(type_key) == false {
-        sink.insert(type_key);
+        recursive_types_sink.insert(type_key);
         return Ok(());
       }
 
@@ -474,7 +507,13 @@ fn collect_recursive_types(
           continue;
         }
 
-        collect_recursive_types(field, schema, state, sink)?;
+        collect_special_types(
+          field,
+          schema,
+          state,
+          recursive_types_sink,
+          set_member_types_sink,
+        )?;
       }
 
       state.remove(&type_key);

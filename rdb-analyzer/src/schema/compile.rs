@@ -145,7 +145,9 @@ impl SpecializedType {
     self
       .fields
       .get(name)
-      .filter(|x| x.1.as_slice().is_unique() || x.1.as_slice().is_index())
+      .filter(|x| {
+        x.1.as_slice().is_primary() || x.1.as_slice().is_unique() || x.1.as_slice().is_index()
+      })
       .map(|x| IndexedField {
         ty: &x.0,
         annotations: &x.1,
