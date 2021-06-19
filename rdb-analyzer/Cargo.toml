@@ -27,6 +27,7 @@ byteorder = "1"
 similar = { version = "1", features = ["inline"] }
 smallvec = { version = "1", features = ["serde"] }
 rpds = "0.9"
+async-trait = "0.1"
 
 [build-dependencies]
 lalrpop = "0.19.6"

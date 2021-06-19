@@ -5,6 +5,7 @@ use super::vm_value::VmConst;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TwScript {
   pub graphs: Vec<TwGraph>,
+  pub entry: u32,
   pub consts: Vec<VmConst>,
   pub idents: Vec<String>,
 }
