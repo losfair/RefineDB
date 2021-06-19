@@ -389,7 +389,7 @@ fn generate_field(
         plan_st,
         schema,
         x,
-        annotations,
+        &[],
         old_point
           .and_then(|x| x.reduce_set())
           .and_then(|y| y.validate_type(x, annotations)),
