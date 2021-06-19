@@ -150,6 +150,13 @@ impl<'a> From<&'a FieldType> for VmType<&'a str> {
 }
 
 impl<'a> VmType<&'a str> {
+  pub fn is_null(&self) -> bool {
+    match self {
+      Self::Null => true,
+      _ => false,
+    }
+  }
+
   pub fn is_covariant_from(&self, that: &VmType<&'a str>) -> bool {
     if self == that {
       true

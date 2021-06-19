@@ -102,4 +102,7 @@ pub enum TwGraphNode {
 
   /// T -> T -> Bool
   Eq,
+
+  /// Optional<T> -> T
+  UnwrapOptional,
 }

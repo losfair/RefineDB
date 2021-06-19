@@ -64,6 +64,8 @@ pub enum TypeckError {
   ExpectingBoolOutputForFilterSubgraphs(String),
   #[error("field `{0}` is not present in table `{1}`")]
   FieldNotPresentInTable(String, Arc<str>),
+  #[error("cannot unwrap non-optional type `{0}`")]
+  CannotUnwrapNonOptional(String),
 }
 
 pub fn typeck_graph<'a>(vm: &TwVm<'a>, g: &TwGraph) -> Result<Vec<Option<VmType<&'a str>>>> {
@@ -345,6 +347,10 @@ pub fn typeck_graph<'a>(vm: &TwVm<'a>, g: &TwGraph) -> Result<Vec<Option<VmType<
         ensure_covariant(left, right)?;
         Some(VmType::Bool)
       }
+      TwGraphNode::UnwrapOptional => {
+        let [input] = validate_in_edges::<1>(node, in_edges, &types)?;
+        Some(unwrap_optional(input.clone())?)
+      }
     };
     types.push(ty);
   }
@@ -421,5 +427,21 @@ fn extract_set_element_type<'a, 'b>(x: &'b VmType<&'a str>) -> Result<&'b VmType
   match x {
     VmType::Set(x) => Ok(&*x.ty),
     _ => Err(TypeckError::ExpectingSet(format!("{:?}", x)).into()),
+  }
+}
+
+fn unwrap_optional<'a, 'b>(x: VmType<&'a str>) -> Result<VmType<&'a str>, TypeckError> {
+  match x {
+    VmType::OneOf(x) if x.iter().find(|x| x.is_null()).is_some() => Ok(flatten_oneof(
+      VmType::OneOf(x.into_iter().filter(|x| !x.is_null()).collect()),
+    )),
+    _ => return Err(TypeckError::CannotUnwrapNonOptional(format!("{:?}", x))),
+  }
+}
+
+fn flatten_oneof<'a>(x: VmType<&'a str>) -> VmType<&'a str> {
+  match x {
+    VmType::OneOf(x) if x.len() == 1 => x.into_iter().next().unwrap(),
+    _ => x,
   }
 }
