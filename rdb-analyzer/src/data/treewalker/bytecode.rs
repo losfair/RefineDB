@@ -40,35 +40,8 @@ pub enum TwGraphNode {
   /// Const param: ident (table_type)
   BuildTable(u32),
 
-  /// Table<T> -> T
-  ///
-  /// Const param: ident
-  GetTableField(u32),
-
   /// List<T> -> Set<T>
   BuildSet,
-
-  /// Selector -> Set<T> -> T
-  ///
-  /// Filter the set with the given subgraph.
-  ///
-  /// Const param: subgraph_index
-  GetSetElement(u32),
-
-  /// T -> Set<T> -> ()
-  ///
-  /// This is an effect node.
-  ///
-  /// Const param: ident
-  InsertIntoSet(u32),
-
-  /// List<T>
-  ///
-  /// Const param: type
-  CreateList(u32),
-
-  /// T -> List<T> -> List<T>
-  AppendList,
 
   /// Map
   CreateMap,
@@ -78,13 +51,44 @@ pub enum TwGraphNode {
   /// Const param: ident
   GetMapField(u32),
 
+  /// Table<T> -> T
+  ///
+  /// Const param: ident
+  GetTableField(u32),
+
+  /// U (subgraph parameter) -> Set<T> -> T
+  ///
+  /// Filter the set with the given subgraph.
+  ///
+  /// Const param: subgraph_index
+  GetSetElement(u32),
+
   /// T -> Map -> Map
   ///
   /// Const param: ident
   InsertIntoMap(u32),
 
+  /// T -> Table<T> -> ()
+  ///
+  /// This is an effect node.
+  ///
+  /// Const param: ident
+  InsertIntoTable(u32),
+
+  /// T -> Set<T> -> ()
+  ///
+  /// This is an effect node.
+  InsertIntoSet,
+
   /// Map -> Map
   ///
   /// Const param: ident
   DeleteFromMap(u32),
+
+  /// Table<T> -> ()
+  ///
+  /// This is an effect node.
+  ///
+  /// Const param: ident
+  DeleteFromTable(u32),
 }

@@ -15,6 +15,10 @@ pub enum VmValue<'a> {
   Table(VmTableValue<'a>),
   Set(VmSetValue<'a>),
 
+  /// VM-only
+  Bool(bool),
+
+  /// VM-only
   Map(VmMapValue<'a>),
 
   Null,
@@ -22,8 +26,15 @@ pub enum VmValue<'a> {
 
 #[derive(Debug)]
 pub struct VmResidentPath<'a> {
-  pub storage_key: &'a [u8],
+  pub storage_key: VmResidentStorageKey<'a>,
   pub prev: Option<Arc<VmResidentPath<'a>>>,
+}
+
+#[derive(Debug)]
+pub enum VmResidentStorageKey<'a> {
+  Fixed(&'a [u8]),
+  SetPrimaryKey,
+  SetIndex { field: &'a [u8] },
 }
 
 #[derive(Debug)]
@@ -34,7 +45,7 @@ pub struct VmTableValue<'a> {
 
 #[derive(Debug)]
 pub enum VmTableValueKind<'a> {
-  Resident(VmResidentPath<'a>),
+  Resident(Arc<VmResidentPath<'a>>),
   Fresh(BTreeMap<&'a str, VmValue<'a>>),
 }
 
@@ -46,7 +57,7 @@ pub struct VmSetValue<'a> {
 
 #[derive(Debug)]
 pub enum VmSetValueKind<'a> {
-  Resident(VmResidentPath<'a>),
+  Resident(Arc<VmResidentPath<'a>>),
   Fresh(Vec<VmValue<'a>>),
 }
 
@@ -58,9 +69,12 @@ pub struct VmMapValue<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum VmType<'a> {
   Primitive(PrimitiveType),
-  Table(&'a str),
-  Set(Box<VmType<'a>>),
+  Table(VmTableType<'a>),
+  Set(VmSetType<'a>),
   Null,
+
+  /// VM-only
+  Bool,
 
   /// VM-only
   List(Box<VmType<'a>>),
@@ -71,12 +85,25 @@ pub enum VmType<'a> {
   OneOf(Vec<VmType<'a>>),
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct VmSetType<'a> {
+  pub ty: Box<VmType<'a>>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct VmTableType<'a> {
+  pub name: &'a str,
+}
+
 impl<'a> From<&VmValue<'a>> for VmType<'a> {
   fn from(that: &VmValue<'a>) -> Self {
     match that {
       VmValue::Primitive(x) => VmType::Primitive(x.get_type()),
-      VmValue::Table(x) => VmType::Table(x.ty),
-      VmValue::Set(x) => VmType::Set(Box::new(x.member_ty.clone())),
+      VmValue::Table(x) => VmType::Table(VmTableType { name: x.ty }),
+      VmValue::Set(x) => VmType::Set(VmSetType {
+        ty: Box::new(x.member_ty.clone()),
+      }),
+      VmValue::Bool(_) => VmType::Bool,
       VmValue::Map(x) => VmType::Map(
         x.elements
           .iter()
@@ -93,8 +120,10 @@ impl<'a> From<&'a FieldType> for VmType<'a> {
     match that {
       FieldType::Optional(x) => VmType::OneOf(vec![VmType::Null, VmType::from(&**x)]),
       FieldType::Primitive(x) => VmType::Primitive(*x),
-      FieldType::Table(x) => VmType::Table(&**x),
-      FieldType::Set(x) => VmType::Set(Box::new(VmType::from(&**x))),
+      FieldType::Table(x) => VmType::Table(VmTableType { name: &**x }),
+      FieldType::Set(x) => VmType::Set(VmSetType {
+        ty: Box::new(VmType::from(&**x)),
+      }),
     }
   }
 }
@@ -121,6 +150,9 @@ pub enum VmConst {
   Primitive(PrimitiveValue),
   Table(VmConstTableValue),
   Set(VmConstSetValue),
+
+  Bool(bool),
+
   Null,
 }
 
@@ -195,7 +227,9 @@ impl<'a> VmValue<'a> {
           .types
           .get(x.member_ty.as_str())
           .ok_or_else(|| VmValueError::TypeNotFound(x.member_ty.clone()))?;
-        let member_ty = VmType::Table(&*member_ty.name);
+        let member_ty = VmType::Table(VmTableType {
+          name: &*member_ty.name,
+        });
         let mut members = Vec::with_capacity(x.members.len());
         for member in &x.members {
           let member = Self::from_const(schema, member)?;
@@ -216,6 +250,7 @@ impl<'a> VmValue<'a> {
           kind: VmSetValueKind::Fresh(members),
         }))
       }
+      VmConst::Bool(x) => Ok(Self::Bool(*x)),
     }
   }
 }
