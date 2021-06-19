@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 use thiserror::Error;
 
 use crate::{
@@ -106,6 +106,8 @@ pub enum VmValueError {
   FieldNotFound(String, String),
   #[error("field type `{0}` cannot be converted from value type `{1}`")]
   IncompatibleFieldAndValueType(String, String),
+  #[error("missing field `{0}` of type `{1}`")]
+  MissingField(Arc<str>, Arc<str>),
 }
 
 impl<'a> VmValue<'a> {
@@ -135,6 +137,14 @@ impl<'a> VmValue<'a> {
             );
           }
           fields.insert(&**field_name, field_value);
+        }
+        for (name, (field_ty, _)) in &ty.fields {
+          if !fields.contains_key(&**name) {
+            if let FieldType::Optional(_) = field_ty {
+            } else {
+              return Err(VmValueError::MissingField(name.clone(), ty.name.clone()).into());
+            }
+          }
         }
         Ok(Self::Table(VmTableValue {
           ty: &*ty.name,
