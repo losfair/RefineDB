@@ -1,9 +1,7 @@
 use anyhow::Result;
+use rpds::RedBlackTreeMapSync;
 use serde::{Deserialize, Serialize};
-use std::{
-  collections::{BTreeMap, BTreeSet},
-  sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 use thiserror::Error;
 
 use crate::{
@@ -54,7 +52,7 @@ pub enum VmSetValueKind<'a> {
 
 #[derive(Debug)]
 pub struct VmMapValue<'a> {
-  pub elements: BTreeMap<&'a str, VmValue<'a>>,
+  pub elements: RedBlackTreeMapSync<&'a str, VmValue<'a>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,7 +66,7 @@ pub enum VmType<'a> {
   List(Box<VmType<'a>>),
 
   /// VM-only
-  Map(BTreeSet<&'a str>),
+  Map(RedBlackTreeMapSync<&'a str, VmType<'a>>),
 
   OneOf(Vec<VmType<'a>>),
 }
@@ -79,7 +77,12 @@ impl<'a> From<&VmValue<'a>> for VmType<'a> {
       VmValue::Primitive(x) => VmType::Primitive(x.get_type()),
       VmValue::Table(x) => VmType::Table(x.ty),
       VmValue::Set(x) => VmType::Set(Box::new(x.member_ty.clone())),
-      VmValue::Map(x) => VmType::Map(x.elements.iter().map(|(k, _)| *k).collect()),
+      VmValue::Map(x) => VmType::Map(
+        x.elements
+          .iter()
+          .map(|(k, v)| (*k, VmType::from(v)))
+          .collect(),
+      ),
       VmValue::Null => VmType::Null,
     }
   }

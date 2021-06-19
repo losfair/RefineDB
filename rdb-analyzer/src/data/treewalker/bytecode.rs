@@ -11,8 +11,16 @@ pub struct TwScript {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TwGraph {
+  /// Topologically sorted nodes.
+  ///
   /// (node, in_edges)
   pub nodes: Vec<(TwGraphNode, Vec<u32>)>,
+
+  /// The output value of this graph.
+  pub output: Option<u32>,
+
+  /// The effects of this graph.
+  pub effects: Vec<u32>,
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -29,7 +37,7 @@ pub enum TwGraphNode {
 
   /// Map -> Table<T>
   ///
-  /// Const param: type
+  /// Const param: ident (table_type)
   BuildTable(u32),
 
   /// Table<T> -> T
@@ -38,9 +46,7 @@ pub enum TwGraphNode {
   GetTableField(u32),
 
   /// List<T> -> Set<T>
-  ///
-  /// Const param: type
-  BuildSet(u32),
+  BuildSet,
 
   /// Selector -> Set<T> -> T
   ///
