@@ -49,6 +49,9 @@ pub enum SchemaCompileError {
 
   #[error("field `{0}` of type `{1}`: indexes are only allowed on primitive or packed fields")]
   IndexOnNonPrimitiveOrPackedField(String, String),
+
+  #[error("field `{0}` of type `{1}` is a primary key and cannot be optional")]
+  OptionalPrimaryKey(String, String),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -81,7 +84,7 @@ static PRIMITIVE_TYPES: phf::Map<&'static str, PrimitiveType> = phf::phf_map! {
   "bytes" => PrimitiveType::Bytes,
 };
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CompiledSchema {
   pub types: BTreeMap<Arc<str>, SpecializedType>,
   pub exports: BTreeMap<Arc<str>, FieldType>,
@@ -122,7 +125,7 @@ pub fn compile<'a>(input: &ast::Schema<'a>) -> Result<CompiledSchema> {
   Ok(result)
 }
 
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SpecializedType {
   pub name: Arc<str>,
   pub fields: BTreeMap<Arc<str>, (FieldType, Vec<FieldAnnotation>)>,
@@ -148,8 +151,9 @@ impl SpecializedType {
   }
 }
 
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FieldAnnotation {
+  PrimaryKey,
   Unique,
   Index,
   Packed,
@@ -157,12 +161,17 @@ pub enum FieldAnnotation {
 }
 
 pub trait FieldAnnotationList {
+  fn is_primary(&self) -> bool;
   fn is_unique(&self) -> bool;
   fn is_index(&self) -> bool;
   fn is_packed(&self) -> bool;
 }
 
 impl FieldAnnotationList for &[FieldAnnotation] {
+  fn is_primary(&self) -> bool {
+    self.iter().find(|x| x.is_primary()).is_some()
+  }
+
   fn is_unique(&self) -> bool {
     self.iter().find(|x| x.is_unique()).is_some()
   }
@@ -195,11 +204,18 @@ impl FieldAnnotation {
       _ => false,
     }
   }
+  pub fn is_primary(&self) -> bool {
+    match self {
+      FieldAnnotation::PrimaryKey => true,
+      _ => false,
+    }
+  }
 }
 
 impl Display for FieldAnnotation {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
+      Self::PrimaryKey => write!(f, "@primary"),
       Self::Unique => write!(f, "@unique"),
       Self::Index => write!(f, "@index"),
       Self::Packed => write!(f, "@packed"),
@@ -386,6 +402,9 @@ impl<'a> TypeResolutionContext<'a> {
       let mut annotations = vec![];
       for ann in &x.annotations {
         match (ann.name.0, ann.args.as_slice()) {
+          ("primary", []) => {
+            annotations.push(FieldAnnotation::PrimaryKey);
+          }
           ("unique", []) => {
             annotations.push(FieldAnnotation::Unique);
           }
@@ -412,11 +431,10 @@ impl<'a> TypeResolutionContext<'a> {
       }
 
       // Validate index constraints.
-      //
-      // Currently, a unique/non-unique index is only allowed on either packed or primitive fields.
+      // Rule 1: Currently, a primary/unique/non-unique index is only allowed on either packed or primitive fields.
       if annotations
         .iter()
-        .find(|x| x.is_unique() || x.is_index())
+        .find(|x| x.is_primary() || x.is_unique() || x.is_index())
         .is_some()
       {
         match field_ty.optional_unwrapped() {
@@ -432,6 +450,18 @@ impl<'a> TypeResolutionContext<'a> {
               );
             }
           }
+        }
+      }
+      // Rule 2: Primary keys cannot be optional.
+      if annotations.as_slice().is_primary() {
+        match field_ty {
+          FieldType::Optional(_) => {
+            return Err(
+              SchemaCompileError::OptionalPrimaryKey(x.name.0.to_string(), ty.name.0.to_string())
+                .into(),
+            );
+          }
+          _ => {}
         }
       }
       fields.insert(Arc::from(x.name.0), (field_ty, annotations));

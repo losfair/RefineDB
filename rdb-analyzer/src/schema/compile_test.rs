@@ -87,3 +87,40 @@ fn no_primitive_types_in_set() {
   .unwrap();
   assert!(compile(&ast).is_err());
 }
+
+#[test]
+fn primary_keys() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+    type Item<T> {
+      @primary key: T,
+    }
+    export Item<int64> something;
+  "#,
+  )
+  .unwrap();
+  compile(&ast).unwrap();
+}
+
+#[test]
+fn primary_keys_cannot_be_optional() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+    type Item<T> {
+      @primary key: T?,
+    }
+    export Item<int64> something;
+  "#,
+  )
+  .unwrap();
+  assert!(compile(&ast)
+    .unwrap_err()
+    .to_string()
+    .contains("is a primary key and cannot be optional"));
+}
