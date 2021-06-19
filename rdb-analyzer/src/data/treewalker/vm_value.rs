@@ -46,56 +46,77 @@ pub struct VmTableValue<'a> {
 #[derive(Debug)]
 pub enum VmTableValueKind<'a> {
   Resident(Arc<VmResidentPath<'a>>),
-  Fresh(BTreeMap<&'a str, VmValue<'a>>),
+  Fresh(BTreeMap<&'a str, Arc<VmValue<'a>>>),
 }
 
 #[derive(Debug)]
 pub struct VmSetValue<'a> {
-  pub member_ty: VmType<'a>,
+  pub member_ty: VmType<&'a str>,
   pub kind: VmSetValueKind<'a>,
 }
 
 #[derive(Debug)]
 pub enum VmSetValueKind<'a> {
   Resident(Arc<VmResidentPath<'a>>),
-  Fresh(Vec<VmValue<'a>>),
+  Fresh(Vec<Arc<VmValue<'a>>>),
 }
 
 #[derive(Debug)]
 pub struct VmMapValue<'a> {
-  pub elements: RedBlackTreeMapSync<&'a str, VmValue<'a>>,
+  pub elements: RedBlackTreeMapSync<&'a str, Arc<VmValue<'a>>>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum VmType<'a> {
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum VmType<K: Clone + Ord + PartialOrd + Eq + PartialEq> {
   Primitive(PrimitiveType),
-  Table(VmTableType<'a>),
-  Set(VmSetType<'a>),
+  Table(VmTableType<K>),
+  Set(VmSetType<K>),
   Null,
 
   /// VM-only
   Bool,
 
   /// VM-only
-  List(Box<VmType<'a>>),
+  List(Box<VmType<K>>),
 
   /// VM-only
-  Map(RedBlackTreeMapSync<&'a str, VmType<'a>>),
+  Map(RedBlackTreeMapSync<K, VmType<K>>),
 
-  OneOf(Vec<VmType<'a>>),
+  OneOf(Vec<VmType<K>>),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct VmSetType<'a> {
-  pub ty: Box<VmType<'a>>,
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct VmSetType<K: Clone + Ord + PartialOrd + Eq + PartialEq> {
+  pub ty: Box<VmType<K>>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct VmTableType<'a> {
-  pub name: &'a str,
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct VmTableType<K> {
+  pub name: K,
 }
 
-impl<'a> From<&VmValue<'a>> for VmType<'a> {
+impl<'a, T: AsRef<str> + Clone + Ord + PartialOrd + Eq + PartialEq> From<&'a VmType<T>>
+  for VmType<&'a str>
+{
+  fn from(that: &'a VmType<T>) -> Self {
+    match that {
+      VmType::Primitive(x) => VmType::Primitive(x.clone()),
+      VmType::Table(x) => VmType::Table(VmTableType {
+        name: x.name.as_ref(),
+      }),
+      VmType::Set(x) => VmType::Set(VmSetType {
+        ty: Box::new(Self::from(&*x.ty)),
+      }),
+      VmType::Null => VmType::Null,
+      VmType::Bool => VmType::Bool,
+      VmType::List(x) => VmType::List(Box::new(Self::from(&**x))),
+      VmType::Map(x) => VmType::Map(x.iter().map(|(k, v)| (k.as_ref(), Self::from(v))).collect()),
+      VmType::OneOf(x) => VmType::OneOf(x.iter().map(|x| Self::from(x)).collect()),
+    }
+  }
+}
+
+impl<'a> From<&VmValue<'a>> for VmType<&'a str> {
   fn from(that: &VmValue<'a>) -> Self {
     match that {
       VmValue::Primitive(x) => VmType::Primitive(x.get_type()),
@@ -107,7 +128,7 @@ impl<'a> From<&VmValue<'a>> for VmType<'a> {
       VmValue::Map(x) => VmType::Map(
         x.elements
           .iter()
-          .map(|(k, v)| (*k, VmType::from(v)))
+          .map(|(k, v)| (*k, VmType::from(&**v)))
           .collect(),
       ),
       VmValue::Null => VmType::Null,
@@ -115,7 +136,7 @@ impl<'a> From<&VmValue<'a>> for VmType<'a> {
   }
 }
 
-impl<'a> From<&'a FieldType> for VmType<'a> {
+impl<'a> From<&'a FieldType> for VmType<&'a str> {
   fn from(that: &'a FieldType) -> Self {
     match that {
       FieldType::Optional(x) => VmType::OneOf(vec![VmType::Null, VmType::from(&**x)]),
@@ -128,8 +149,8 @@ impl<'a> From<&'a FieldType> for VmType<'a> {
   }
 }
 
-impl<'a> VmType<'a> {
-  pub fn is_covariant_from(&self, that: &VmType<'a>) -> bool {
+impl<'a> VmType<&'a str> {
+  pub fn is_covariant_from(&self, that: &VmType<&'a str>) -> bool {
     if self == that {
       true
     } else if let VmType::OneOf(x) = self {
@@ -206,7 +227,7 @@ impl<'a> VmValue<'a> {
               .into(),
             );
           }
-          fields.insert(&**field_name, field_value);
+          fields.insert(&**field_name, Arc::new(field_value));
         }
         for (name, (field_ty, _)) in &ty.fields {
           if !fields.contains_key(&**name) {
@@ -243,7 +264,7 @@ impl<'a> VmValue<'a> {
               .into(),
             );
           }
-          members.push(member);
+          members.push(Arc::new(member));
         }
         Ok(Self::Set(VmSetValue {
           member_ty,

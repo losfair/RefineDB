@@ -52,17 +52,21 @@ pub enum TypeckError {
   GraphOutputIndexOob,
   #[error("graph effect index out of bounds")]
   GraphEffectIndexOob,
+  #[error("param type index out of bounds")]
+  ParamTypeIndexOob,
+  #[error("output type index out of bounds")]
+  OutputTypeIndexOob,
+  #[error("output node index out of bounds")]
+  OutputNodeIndexOob,
+  #[error("expected output type `{0}` mismatches with actual output type `{1}`")]
+  OutputTypeMismatch(String, String),
   #[error("expecting bool output for filter subgraphs, got `{0}`")]
   ExpectingBoolOutputForFilterSubgraphs(String),
   #[error("field `{0}` is not present in table `{1}`")]
   FieldNotPresentInTable(String, Arc<str>),
 }
 
-pub fn typeck_graph<'a>(
-  vm: &TwVm<'a>,
-  g: &TwGraph,
-  params: &[&VmType<'a>],
-) -> Result<Vec<Option<VmType<'a>>>> {
+pub fn typeck_graph<'a>(vm: &TwVm<'a>, g: &TwGraph) -> Result<Vec<Option<VmType<&'a str>>>> {
   if let Some(x) = g.output {
     if x as usize >= g.nodes.len() {
       return Err(TypeckError::GraphOutputIndexOob.into());
@@ -75,7 +79,23 @@ pub fn typeck_graph<'a>(
     }
   }
 
-  let mut types: Vec<Option<VmType<'a>>> = Vec::with_capacity(g.nodes.len());
+  let output_type = g
+    .output_type
+    .map(|x| {
+      vm.types
+        .get(x as usize)
+        .ok_or_else(|| TypeckError::OutputTypeIndexOob)
+    })
+    .transpose()?;
+
+  let params = g
+    .param_types
+    .iter()
+    .map(|x| vm.types.get(*x as usize).clone())
+    .collect::<Option<Vec<_>>>()
+    .ok_or_else(|| TypeckError::ParamTypeIndexOob)?;
+
+  let mut types: Vec<Option<VmType<&'a str>>> = Vec::with_capacity(g.nodes.len());
   for (i, (node, in_edges)) in g.nodes.iter().enumerate() {
     // Check in_edges invariant
     for j in in_edges {
@@ -85,17 +105,16 @@ pub fn typeck_graph<'a>(
       }
     }
 
-    let ty: Option<VmType<'a>> = match node {
+    let ty: Option<VmType<&'a str>> = match node {
       TwGraphNode::BuildSet => {
-        let [list_ty] = validate_in_edge_count::<1>(node, in_edges, &types)?;
+        let [list_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
         let element_ty = extract_list_element_type(list_ty)?;
         Some(VmType::Set(VmSetType {
           ty: Box::new(element_ty.clone()),
         }))
       }
       TwGraphNode::BuildTable(table_ty) => {
-        let [map_ty] = validate_in_edge_count::<1>(node, in_edges, &types)?;
-        let map_ty = ensure_type(map_ty)?;
+        let [map_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
         let table_ty = vm
           .script
           .idents
@@ -141,8 +160,7 @@ pub fn typeck_graph<'a>(
       }
       TwGraphNode::CreateMap => Some(VmType::Map(RedBlackTreeMapSync::new_sync())),
       TwGraphNode::DeleteFromMap(key_index) => {
-        let [map_ty] = validate_in_edge_count::<1>(node, in_edges, &types)?;
-        let map_ty = ensure_type(map_ty)?;
+        let [map_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
         let key = vm
           .script
           .idents
@@ -158,8 +176,7 @@ pub fn typeck_graph<'a>(
         }
       }
       TwGraphNode::DeleteFromTable(key_index) => {
-        let [table_ty] = validate_in_edge_count::<1>(node, in_edges, &types)?;
-        let table_ty = ensure_type(table_ty)?;
+        let [table_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
         let key = vm
           .script
           .idents
@@ -181,8 +198,7 @@ pub fn typeck_graph<'a>(
         }
       }
       TwGraphNode::GetMapField(key_index) => {
-        let [map_ty] = validate_in_edge_count::<1>(node, in_edges, &types)?;
-        let map_ty = ensure_type(map_ty)?;
+        let [map_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
         let key = vm
           .script
           .idents
@@ -194,21 +210,34 @@ pub fn typeck_graph<'a>(
         }
       }
       TwGraphNode::GetSetElement(subgraph_index) => {
-        let [subgraph_param, set] = validate_in_edge_count::<2>(node, in_edges, &types)?;
+        let [subgraph_param, set] = validate_in_edges::<2>(node, in_edges, &types)?;
         let set_member_ty = extract_set_element_type(set)?;
-        let subgraph_params: Vec<&VmType<'a>> = match subgraph_param {
-          Some(x) => vec![set_member_ty, x],
-          None => vec![set_member_ty],
-        };
         let subgraph = vm
           .script
           .graphs
           .get(*subgraph_index as usize)
           .ok_or_else(|| TypeckError::SubgraphIndexOob)?;
-        let subgraph_types = typeck_graph(vm, subgraph, &subgraph_params)?;
+        ensure_covariant(
+          ensure_type(
+            subgraph
+              .param_types
+              .get(0)
+              .and_then(|x| vm.types.get(*x as usize)),
+          )?,
+          set_member_ty,
+        )?;
+        ensure_covariant(
+          ensure_type(
+            subgraph
+              .param_types
+              .get(1)
+              .and_then(|x| vm.types.get(*x as usize)),
+          )?,
+          subgraph_param,
+        )?;
         let output = subgraph
-          .output
-          .and_then(|x| subgraph_types[x as usize].clone());
+          .output_type
+          .and_then(|x| vm.script.types.get(x as usize).map(VmType::<&'a str>::from));
         if let Some(VmType::Bool) = output {
           Some(VmType::OneOf(vec![set_member_ty.clone(), VmType::Null]))
         } else {
@@ -218,8 +247,7 @@ pub fn typeck_graph<'a>(
         }
       }
       TwGraphNode::GetTableField(key_index) => {
-        let [table_ty] = validate_in_edge_count::<1>(node, in_edges, &types)?;
-        let table_ty = ensure_type(table_ty)?;
+        let [table_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
         let key = vm
           .script
           .idents
@@ -246,9 +274,7 @@ pub fn typeck_graph<'a>(
         }
       }
       TwGraphNode::InsertIntoMap(key_index) => {
-        let [value_ty, map_ty] = validate_in_edge_count::<2>(node, in_edges, &types)?;
-        let value_ty = ensure_type(value_ty)?;
-        let map_ty = ensure_type(map_ty)?;
+        let [value_ty, map_ty] = validate_in_edges::<2>(node, in_edges, &types)?;
         let key = vm
           .script
           .idents
@@ -264,9 +290,7 @@ pub fn typeck_graph<'a>(
         }
       }
       TwGraphNode::InsertIntoSet => {
-        let [value_ty, set_ty] = validate_in_edge_count::<2>(node, in_edges, &types)?;
-        let value_ty = ensure_type(value_ty)?;
-        let set_ty = ensure_type(set_ty)?;
+        let [value_ty, set_ty] = validate_in_edges::<2>(node, in_edges, &types)?;
         match set_ty {
           VmType::Set(x) => {
             ensure_covariant(&x.ty, value_ty)?;
@@ -276,9 +300,7 @@ pub fn typeck_graph<'a>(
         }
       }
       TwGraphNode::InsertIntoTable(key_index) => {
-        let [value_ty, table_ty] = validate_in_edge_count::<2>(node, in_edges, &types)?;
-        let value_ty = ensure_type(value_ty)?;
-        let table_ty = ensure_type(table_ty)?;
+        let [value_ty, table_ty] = validate_in_edges::<2>(node, in_edges, &types)?;
         let key = vm
           .script
           .idents
@@ -305,7 +327,7 @@ pub fn typeck_graph<'a>(
         }
       }
       TwGraphNode::LoadConst(const_index) => {
-        validate_in_edge_count::<0>(node, in_edges, &types)?;
+        validate_in_edges::<0>(node, in_edges, &types)?;
         let const_value = vm
           .consts
           .get(*const_index as usize)
@@ -318,43 +340,69 @@ pub fn typeck_graph<'a>(
         }
         Some(params[*param_index as usize].clone())
       }
+      TwGraphNode::Eq => {
+        let [left, right] = validate_in_edges::<2>(node, in_edges, &types)?;
+        ensure_covariant(left, right)?;
+        Some(VmType::Bool)
+      }
     };
     types.push(ty);
   }
+
+  let actual_output_ty = g
+    .output
+    .map(|x| {
+      types
+        .get(x as usize)
+        .ok_or_else(|| TypeckError::OutputNodeIndexOob)
+        .and_then(|x| ensure_type(x.as_ref()))
+    })
+    .transpose()?;
+  match (output_type, actual_output_ty) {
+    (Some(a), Some(b)) => ensure_covariant(a, b)?,
+    (None, None) => {}
+    _ => {
+      return Err(
+        TypeckError::OutputTypeMismatch(
+          format!("{:?}", output_type),
+          format!("{:?}", actual_output_ty),
+        )
+        .into(),
+      )
+    }
+  }
+
   Ok(types)
 }
 
-fn validate_in_edge_count<'a, 'b, const N: usize>(
+fn validate_in_edges<'a, 'b, const N: usize>(
   node: &TwGraphNode,
   in_edges: &[u32],
-  types: &'b [Option<VmType<'a>>],
-) -> Result<[&'b Option<VmType<'a>>; N]> {
+  types: &'b [Option<VmType<&'a str>>],
+) -> Result<[&'b VmType<&'a str>; N]> {
   if N != in_edges.len() {
     Err(TypeckError::InEdgeCountMismatch(N, format!("{:?}", node), in_edges.len()).into())
   } else {
-    let mut output: [Option<&'b Option<VmType<'a>>>; N] = [None; N];
+    let mut output: [Option<&'b VmType<&'a str>>; N] = [None; N];
     for i in 0..N {
-      output[i] = Some(&types[in_edges[i] as usize]);
+      output[i] = Some(ensure_type(types[in_edges[i] as usize].as_ref())?);
     }
-
-    // SAFETY: This is safe because we have initialized each element of `output` to `Some`.
-    let output = unsafe {
-      std::mem::transmute_copy::<[Option<&'b Option<VmType<'a>>>; N], [&'b Option<VmType<'a>>; N]>(
+    Ok(unsafe {
+      std::mem::transmute_copy::<[Option<&'b VmType<&'a str>>; N], [&'b VmType<&'a str>; N]>(
         &output,
       )
-    };
-    Ok(output)
+    })
   }
 }
 
-fn ensure_type<'a, 'b>(x: &'b Option<VmType<'a>>) -> Result<&'b VmType<'a>> {
+fn ensure_type<'a, 'b>(x: Option<&'b VmType<&'a str>>) -> Result<&'b VmType<&'a str>, TypeckError> {
   match x {
     Some(x) => Ok(x),
     None => Err(TypeckError::ExpectingTypedNode.into()),
   }
 }
 
-fn ensure_covariant<'a>(dst: &VmType<'a>, src: &VmType<'a>) -> Result<()> {
+fn ensure_covariant<'a>(dst: &VmType<&'a str>, src: &VmType<&'a str>) -> Result<()> {
   if dst.is_covariant_from(src) {
     Ok(())
   } else {
@@ -362,16 +410,16 @@ fn ensure_covariant<'a>(dst: &VmType<'a>, src: &VmType<'a>) -> Result<()> {
   }
 }
 
-fn extract_list_element_type<'a, 'b>(x: &'b Option<VmType<'a>>) -> Result<&'b VmType<'a>> {
+fn extract_list_element_type<'a, 'b>(x: &'b VmType<&'a str>) -> Result<&'b VmType<&'a str>> {
   match x {
-    Some(VmType::List(x)) => Ok(&**x),
+    VmType::List(x) => Ok(&**x),
     _ => Err(TypeckError::ExpectingList(format!("{:?}", x)).into()),
   }
 }
 
-fn extract_set_element_type<'a, 'b>(x: &'b Option<VmType<'a>>) -> Result<&'b VmType<'a>> {
+fn extract_set_element_type<'a, 'b>(x: &'b VmType<&'a str>) -> Result<&'b VmType<&'a str>> {
   match x {
-    Some(VmType::Set(x)) => Ok(&*x.ty),
+    VmType::Set(x) => Ok(&*x.ty),
     _ => Err(TypeckError::ExpectingSet(format!("{:?}", x)).into()),
   }
 }

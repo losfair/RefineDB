@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::vm_value::VmConst;
+use super::vm_value::{VmConst, VmType};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TwScript {
@@ -8,6 +8,7 @@ pub struct TwScript {
   pub entry: u32,
   pub consts: Vec<VmConst>,
   pub idents: Vec<String>,
+  pub types: Vec<VmType<String>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -22,6 +23,12 @@ pub struct TwGraph {
 
   /// The effects of this graph.
   pub effects: Vec<u32>,
+
+  /// Param types.
+  pub param_types: Vec<u32>,
+
+  /// Output type.
+  pub output_type: Option<u32>,
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -92,4 +99,7 @@ pub enum TwGraphNode {
   ///
   /// Const param: ident
   DeleteFromTable(u32),
+
+  /// T -> T -> Bool
+  Eq,
 }
