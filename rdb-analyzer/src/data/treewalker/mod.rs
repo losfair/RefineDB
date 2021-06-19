@@ -3,3 +3,6 @@ pub mod exec;
 pub mod typeck;
 pub mod vm;
 pub mod vm_value;
+
+#[cfg(test)]
+mod typeck_test;
