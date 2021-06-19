@@ -132,3 +132,135 @@ fn basic_typeck() {
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   typeck_graph(&vm, &script.graphs[0]).unwrap();
 }
+
+#[test]
+fn basic_typeck_fail_unknown_name() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(&alloc, SIMPLE_SCHEMA).unwrap();
+  let schema = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
+  let script = TwScript {
+    graphs: vec![TwGraph {
+      nodes: vec![
+        (TwGraphNode::LoadParam(0), vec![]),      // 0
+        (TwGraphNode::GetMapField(0), vec![0]),   // 1
+        (TwGraphNode::GetTableField(1), vec![1]), // 2
+        (TwGraphNode::UnwrapOptional, vec![2]),   // 3
+        (TwGraphNode::GetTableField(2), vec![3]), // 4
+        (TwGraphNode::UnwrapOptional, vec![4]),   // 5
+        (TwGraphNode::GetTableField(3), vec![5]), // 6
+        (TwGraphNode::UnwrapOptional, vec![6]),   // 7
+      ],
+      output: Some(7),
+      effects: vec![],
+      output_type: Some(1),
+      param_types: vec![0],
+    }],
+    entry: 0,
+    consts: vec![],
+    idents: vec![
+      "a_trinary_tree".into(),
+      "middle".into(),
+      "left_".into(),
+      "value".into(),
+    ],
+    types: vec![root_type(), VmType::Primitive(PrimitiveType::Int64)],
+  };
+  let vm = TwVm::new(&schema, &plan, &script).unwrap();
+  assert!(
+    typeck_graph(&vm, &script.graphs[0])
+      .unwrap_err()
+      .to_string()
+      == "field `left_` is not present in table `TrinaryTree<int64>`"
+  );
+}
+
+#[test]
+fn basic_typeck_fail_missing_unwrap() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(&alloc, SIMPLE_SCHEMA).unwrap();
+  let schema = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
+  let script = TwScript {
+    graphs: vec![TwGraph {
+      nodes: vec![
+        (TwGraphNode::LoadParam(0), vec![]),      // 0
+        (TwGraphNode::GetMapField(0), vec![0]),   // 1
+        (TwGraphNode::GetTableField(1), vec![1]), // 2
+        (TwGraphNode::UnwrapOptional, vec![2]),   // 3
+        (TwGraphNode::GetTableField(2), vec![3]), // 4
+        (TwGraphNode::UnwrapOptional, vec![4]),   // 5
+        (TwGraphNode::GetTableField(3), vec![5]), // 6
+      ],
+      output: Some(6),
+      effects: vec![],
+      output_type: Some(1),
+      param_types: vec![0],
+    }],
+    entry: 0,
+    consts: vec![],
+    idents: vec![
+      "a_trinary_tree".into(),
+      "middle".into(),
+      "left".into(),
+      "value".into(),
+    ],
+    types: vec![root_type(), VmType::Primitive(PrimitiveType::Int64)],
+  };
+  let vm = TwVm::new(&schema, &plan, &script).unwrap();
+  assert!(typeck_graph(&vm, &script.graphs[0])
+    .unwrap_err()
+    .to_string()
+    .contains("type `Primitive(Int64)` is not covariant from"));
+}
+
+#[test]
+fn basic_typeck_output_type_mismatch() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(&alloc, SIMPLE_SCHEMA).unwrap();
+  let schema = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
+  let script = TwScript {
+    graphs: vec![TwGraph {
+      nodes: vec![
+        (TwGraphNode::LoadParam(0), vec![]),      // 0
+        (TwGraphNode::GetMapField(0), vec![0]),   // 1
+        (TwGraphNode::GetTableField(1), vec![1]), // 2
+        (TwGraphNode::UnwrapOptional, vec![2]),   // 3
+        (TwGraphNode::GetTableField(2), vec![3]), // 4
+        (TwGraphNode::UnwrapOptional, vec![4]),   // 5
+        (TwGraphNode::GetTableField(3), vec![5]), // 6
+        (TwGraphNode::UnwrapOptional, vec![6]),   // 7
+      ],
+      output: Some(7),
+      effects: vec![],
+      output_type: Some(1),
+      param_types: vec![0],
+    }],
+    entry: 0,
+    consts: vec![],
+    idents: vec![
+      "a_trinary_tree".into(),
+      "middle".into(),
+      "left".into(),
+      "value".into(),
+    ],
+    types: vec![root_type(), VmType::Primitive(PrimitiveType::String)],
+  };
+  let vm = TwVm::new(&schema, &plan, &script).unwrap();
+  assert!(
+    typeck_graph(&vm, &script.graphs[0])
+      .unwrap_err()
+      .to_string()
+      == "type `Primitive(String)` is not covariant from `Primitive(Int64)`"
+  );
+}
