@@ -124,3 +124,24 @@ fn primary_keys_cannot_be_optional() {
     .to_string()
     .contains("is a primary key and cannot be optional"));
 }
+
+#[test]
+fn at_most_one_primary_key() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+    type Item<T> {
+      @primary key1: T,
+      @primary key2: T,
+    }
+    export Item<int64> something;
+  "#,
+  )
+  .unwrap();
+  assert!(compile(&ast)
+    .unwrap_err()
+    .to_string()
+    .contains("has multiple primary keys"));
+}

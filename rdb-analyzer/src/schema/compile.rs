@@ -52,6 +52,9 @@ pub enum SchemaCompileError {
 
   #[error("field `{0}` of type `{1}` is a primary key and cannot be optional")]
   OptionalPrimaryKey(String, String),
+
+  #[error("type `{0}` has multiple primary keys")]
+  MultiplePrimaryKeys(String),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -465,6 +468,19 @@ impl<'a> TypeResolutionContext<'a> {
         }
       }
       fields.insert(Arc::from(x.name.0), (field_ty, annotations));
+    }
+
+    // Validation: At most one primary key
+    {
+      let mut primary_key_count = 0usize;
+      for (_, (_, annotations)) in &fields {
+        if annotations.as_slice().is_primary() {
+          primary_key_count += 1;
+        }
+      }
+      if primary_key_count > 1 {
+        return Err(SchemaCompileError::MultiplePrimaryKeys(ty.name.0.to_string()).into());
+      }
     }
 
     self.resolved.get_mut(&repr).unwrap().fields = fields;
