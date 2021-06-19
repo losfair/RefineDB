@@ -1,6 +1,9 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+  collections::{BTreeMap, BTreeSet},
+  sync::Arc,
+};
 use thiserror::Error;
 
 use crate::{
@@ -13,7 +16,45 @@ pub enum VmValue<'a> {
   Primitive(PrimitiveValue),
   Table(VmTableValue<'a>),
   Set(VmSetValue<'a>),
+
+  Map(VmMapValue<'a>),
+
   Null,
+}
+
+#[derive(Debug)]
+pub struct VmResidentPath<'a> {
+  pub storage_key: &'a [u8],
+  pub prev: Option<Arc<VmResidentPath<'a>>>,
+}
+
+#[derive(Debug)]
+pub struct VmTableValue<'a> {
+  pub ty: &'a str,
+  pub kind: VmTableValueKind<'a>,
+}
+
+#[derive(Debug)]
+pub enum VmTableValueKind<'a> {
+  Resident(VmResidentPath<'a>),
+  Fresh(BTreeMap<&'a str, VmValue<'a>>),
+}
+
+#[derive(Debug)]
+pub struct VmSetValue<'a> {
+  pub member_ty: VmType<'a>,
+  pub kind: VmSetValueKind<'a>,
+}
+
+#[derive(Debug)]
+pub enum VmSetValueKind<'a> {
+  Resident(VmResidentPath<'a>),
+  Fresh(Vec<VmValue<'a>>),
+}
+
+#[derive(Debug)]
+pub struct VmMapValue<'a> {
+  pub elements: BTreeMap<&'a str, VmValue<'a>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -22,6 +63,13 @@ pub enum VmType<'a> {
   Table(&'a str),
   Set(Box<VmType<'a>>),
   Null,
+
+  /// VM-only
+  List(Box<VmType<'a>>),
+
+  /// VM-only
+  Map(BTreeSet<&'a str>),
+
   OneOf(Vec<VmType<'a>>),
 }
 
@@ -31,6 +79,7 @@ impl<'a> From<&VmValue<'a>> for VmType<'a> {
       VmValue::Primitive(x) => VmType::Primitive(x.get_type()),
       VmValue::Table(x) => VmType::Table(x.ty),
       VmValue::Set(x) => VmType::Set(Box::new(x.member_ty.clone())),
+      VmValue::Map(x) => VmType::Map(x.elements.iter().map(|(k, _)| *k).collect()),
       VmValue::Null => VmType::Null,
     }
   }
@@ -62,20 +111,6 @@ impl<'a> VmType<'a> {
       false
     }
   }
-}
-
-#[derive(Debug)]
-pub struct VmTableValue<'a> {
-  pub ty: &'a str,
-
-  /// The lifetime on the key is also a proof that the key exists in the schema.
-  pub fields: BTreeMap<&'a str, VmValue<'a>>,
-}
-
-#[derive(Debug)]
-pub struct VmSetValue<'a> {
-  pub member_ty: VmType<'a>,
-  pub members: Vec<VmValue<'a>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -148,7 +183,7 @@ impl<'a> VmValue<'a> {
         }
         Ok(Self::Table(VmTableValue {
           ty: &*ty.name,
-          fields,
+          kind: VmTableValueKind::Fresh(fields),
         }))
       }
       VmConst::Null => Ok(Self::Null),
@@ -173,7 +208,10 @@ impl<'a> VmValue<'a> {
           }
           members.push(member);
         }
-        Ok(Self::Set(VmSetValue { member_ty, members }))
+        Ok(Self::Set(VmSetValue {
+          member_ty,
+          kind: VmSetValueKind::Fresh(members),
+        }))
       }
     }
   }
