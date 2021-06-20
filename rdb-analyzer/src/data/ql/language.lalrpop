@@ -40,6 +40,7 @@ Literal: Literal<'input> = {
     error: QlError::InvalidLiteral,
   }),
   <s:StringLit> => Literal::String(state.resolve_str(&s)),
+  <s:HexBytesLit> => Literal::HexBytes(s),
 }
 
 StringLit: String = {
@@ -47,6 +48,19 @@ StringLit: String = {
     .map_err(|_| ParseError::User {
       error: QlError::InvalidLiteral,
     }),
+}
+
+HexBytesLit: &'input [u8] = {
+  <s:Token<r#"h"([0-9a-fA-F][0-9a-fA-F])*""#>> =>? serde_json::from_str::<String>(s.strip_prefix("h\"").unwrap().strip_suffix("\"").unwrap())
+    .map_err(|_| ParseError::User {
+      error: QlError::InvalidLiteral,
+    })
+    .and_then(|x| hex::decode(&x)
+      .map_err(|_| ParseError::User {
+        error: QlError::InvalidLiteral,
+      })
+      .map(|x| state.alloc.alloc_slice_copy(&x) as &[u8])
+    ),
 }
 
 ZeroOrMore<T, Delim>: Vec<T> = {

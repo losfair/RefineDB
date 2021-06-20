@@ -10,5 +10,6 @@ pub struct QlGraph<'a> {
 
 pub enum Literal<'a> {
   Integer(i64),
+  HexBytes(&'a [u8]),
   String(&'a str),
 }
