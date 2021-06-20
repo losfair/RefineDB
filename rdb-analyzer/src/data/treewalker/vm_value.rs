@@ -136,12 +136,16 @@ impl<'a> From<&VmValue<'a>> for VmType<&'a str> {
   }
 }
 
-impl<'a> From<&'a FieldType> for VmType<&'a str> {
+impl<'a, T: From<&'a str> + Clone + Ord + PartialOrd + Eq + PartialEq> From<&'a FieldType>
+  for VmType<T>
+{
   fn from(that: &'a FieldType) -> Self {
     match that {
       FieldType::Optional(x) => VmType::OneOf(vec![VmType::Null, VmType::from(&**x)]),
       FieldType::Primitive(x) => VmType::Primitive(*x),
-      FieldType::Table(x) => VmType::Table(VmTableType { name: &**x }),
+      FieldType::Table(x) => VmType::Table(VmTableType {
+        name: T::from(&**x),
+      }),
       FieldType::Set(x) => VmType::Set(VmSetType {
         ty: Box::new(VmType::from(&**x)),
       }),

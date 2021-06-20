@@ -2,14 +2,17 @@ use bumpalo::Bump;
 use rpds::RedBlackTreeMapSync;
 
 use crate::{
-  data::treewalker::{
-    bytecode::{TwGraph, TwGraphNode},
-    typeck::typeck_graph,
-    vm::TwVm,
-    vm_value::VmType,
+  data::{
+    treewalker::{
+      bytecode::{TwGraph, TwGraphNode},
+      typeck::typeck_graph,
+      vm::TwVm,
+      vm_value::{VmConst, VmType},
+    },
+    value::PrimitiveValue,
   },
   schema::{
-    compile::{compile, PrimitiveType},
+    compile::{compile, CompiledSchema, PrimitiveType},
     grammar::parse,
   },
   storage_plan::planner::generate_plan_for_schema,
@@ -82,14 +85,11 @@ fn root_map<'a>(schema: &'a CompiledSchema, plan: &'a StoragePlan) -> VmValue<'a
 }
 */
 
-fn root_type<'a>() -> VmType<String> {
+fn root_type<'a>(schema: &'a CompiledSchema) -> VmType<String> {
   let mut m = RedBlackTreeMapSync::new_sync();
-  m.insert_mut(
-    "a_trinary_tree".to_string(),
-    VmType::Table(VmTableType {
-      name: "TrinaryTree<int64>".to_string(),
-    }),
-  );
+  for (field_name, field_ty) in &schema.exports {
+    m.insert_mut(field_name.to_string(), VmType::<String>::from(field_ty));
+  }
   VmType::Map(m)
 }
 
@@ -127,7 +127,7 @@ fn basic_typeck() {
       "left".into(),
       "value".into(),
     ],
-    types: vec![root_type(), VmType::Primitive(PrimitiveType::Int64)],
+    types: vec![root_type(&schema), VmType::Primitive(PrimitiveType::Int64)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   typeck_graph(&vm, &script.graphs[0]).unwrap();
@@ -167,7 +167,7 @@ fn basic_typeck_fail_unknown_name() {
       "left_".into(),
       "value".into(),
     ],
-    types: vec![root_type(), VmType::Primitive(PrimitiveType::Int64)],
+    types: vec![root_type(&schema), VmType::Primitive(PrimitiveType::Int64)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   assert!(
@@ -211,7 +211,7 @@ fn basic_typeck_fail_missing_unwrap() {
       "left".into(),
       "value".into(),
     ],
-    types: vec![root_type(), VmType::Primitive(PrimitiveType::Int64)],
+    types: vec![root_type(&schema), VmType::Primitive(PrimitiveType::Int64)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   assert!(typeck_graph(&vm, &script.graphs[0])
@@ -254,7 +254,7 @@ fn basic_typeck_output_type_mismatch() {
       "left".into(),
       "value".into(),
     ],
-    types: vec![root_type(), VmType::Primitive(PrimitiveType::String)],
+    types: vec![root_type(&schema), VmType::Primitive(PrimitiveType::String)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   assert!(
@@ -263,4 +263,57 @@ fn basic_typeck_output_type_mismatch() {
       .to_string()
       == "type `Primitive(String)` is not covariant from `Primitive(Int64)`"
   );
+}
+
+#[test]
+fn typeck_set_point_get() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(&alloc, SIMPLE_SCHEMA).unwrap();
+  let schema = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
+  let mut expected_result_type = RedBlackTreeMapSync::new_sync();
+  expected_result_type.insert_mut(
+    "start".to_string(),
+    VmType::<String>::Primitive(PrimitiveType::Int64),
+  );
+  expected_result_type.insert_mut(
+    "the_item".to_string(),
+    VmType::<String>::Table(VmTableType {
+      name: "Item<Duration<int64>>".into(),
+    }),
+  );
+  let script = TwScript {
+    graphs: vec![TwGraph {
+      nodes: vec![
+        (TwGraphNode::LoadParam(0), vec![]),         // 0
+        (TwGraphNode::LoadConst(0), vec![]),         // 1
+        (TwGraphNode::GetMapField(0), vec![0]),      // 2
+        (TwGraphNode::GetSetElement(1), vec![1, 2]), // 3
+        (TwGraphNode::GetTableField(2), vec![3]),    // 4
+        (TwGraphNode::GetTableField(3), vec![4]),    // 5
+        (TwGraphNode::CreateMap, vec![]),            // 6
+        (TwGraphNode::InsertIntoMap(4), vec![3, 6]), // 7
+        (TwGraphNode::InsertIntoMap(3), vec![5, 7]), // 8
+      ],
+      output: Some(8),
+      effects: vec![],
+      output_type: Some(1),
+      param_types: vec![0],
+    }],
+    entry: 0,
+    consts: vec![VmConst::Primitive(PrimitiveValue::String("test".into()))],
+    idents: vec![
+      "items".into(),
+      "something_else".into(),
+      "inner2".into(),
+      "start".into(),
+      "the_item".into(),
+    ],
+    types: vec![root_type(&schema), VmType::Map(expected_result_type)],
+  };
+  let vm = TwVm::new(&schema, &plan, &script).unwrap();
+  typeck_graph(&vm, &script.graphs[0]).unwrap();
 }

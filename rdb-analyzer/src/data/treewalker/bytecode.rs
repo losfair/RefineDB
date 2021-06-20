@@ -64,12 +64,19 @@ pub enum TwGraphNode {
   /// Const param: ident
   GetTableField(u32),
 
+  /// T::PrimaryKeyValue -> Set<T> -> T
+  ///
+  /// Point-get on a set.
+  ///
+  /// Const param: ident
+  GetSetElement(u32),
+
   /// U (subgraph parameter) -> Set<T> -> T
   ///
   /// Filter the set with the given subgraph.
   ///
   /// Const param: subgraph_index
-  GetSetElement(u32),
+  FilterSet(u32),
 
   /// T -> Map -> Map
   ///
