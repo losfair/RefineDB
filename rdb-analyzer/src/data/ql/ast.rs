@@ -44,6 +44,7 @@ pub enum QlExprKind<'a> {
 }
 
 pub enum Literal<'a> {
+  Null,
   Integer(i64),
   HexBytes(&'a [u8]),
   String(&'a str),
