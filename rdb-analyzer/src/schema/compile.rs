@@ -244,6 +244,13 @@ impl FieldType {
       _ => self,
     }
   }
+
+  pub fn is_optional(&self) -> bool {
+    match self {
+      Self::Optional(x) => true,
+      _ => false,
+    }
+  }
 }
 
 impl Display for FieldType {

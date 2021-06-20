@@ -70,6 +70,8 @@ pub enum TypeckError {
   CannotUnwrapNonOptional(String),
   #[error("field `{0}` of type `{1}` is not a primary key")]
   NotPrimaryKey(String, Arc<str>),
+  #[error("deleting non-optional field `{0}` of table `{1}`")]
+  DeletingNonOptionalTableField(String, Arc<str>),
 }
 
 pub fn typeck_graph<'a>(vm: &TwVm<'a>, g: &TwGraph) -> Result<Vec<Option<VmType<&'a str>>>> {
@@ -195,9 +197,15 @@ pub fn typeck_graph<'a>(vm: &TwVm<'a>, g: &TwGraph) -> Result<Vec<Option<VmType<
               .types
               .get(x.name)
               .ok_or_else(|| TypeckError::TableTypeNotFound(x.name.to_string()))?;
-            table_ty.fields.get(key.as_str()).ok_or_else(|| {
+            let (field, _) = table_ty.fields.get(key.as_str()).ok_or_else(|| {
               TypeckError::FieldNotPresentInTable(key.clone(), table_ty.name.clone())
             })?;
+            if !field.is_optional() {
+              return Err(
+                TypeckError::DeletingNonOptionalTableField(key.clone(), table_ty.name.clone())
+                  .into(),
+              );
+            }
             None
           }
           _ => return Err(TypeckError::NotTable(format!("{:?}", table_ty)).into()),
