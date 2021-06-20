@@ -76,7 +76,7 @@ ExprKindL2: QlExprKind<'input> = {
   Token<"{"> <elements:ZeroOrMore<(Identifier ":" Expr), Token<",">>> Token<"}"> => QlExprKind::NewMap(
     Bvec::from_iter_in(elements.into_iter().map(|x| (x.0, x.2)), &state.alloc),
   ),
-  <left:ExprL2> Token<"["> <key:Identifier> Token<"="> <value:Expr> Token<"]"> => QlExprKind::GetSetElement(
+  <left:ExprL2> Token<"["> <key:Identifier> Token<"=="> <value:Expr> Token<"]"> => QlExprKind::GetSetElement(
     state.alloc.alloc(left),
     key,
     state.alloc.alloc(value),
@@ -102,6 +102,7 @@ Literal: Literal<'input> = {
   }),
   <s:StringLit> => Literal::String(state.resolve_str(&s)),
   <s:HexBytesLit> => Literal::HexBytes(s),
+  Token<"null"> => Literal::Null,
 }
 
 StringLit: String = {
