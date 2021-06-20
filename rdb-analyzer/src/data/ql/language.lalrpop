@@ -17,9 +17,70 @@ pub QlRoot: QlRoot<'input> = {
 }
 
 QlGraph: QlGraph<'input> = {
-  "graph" <name:Identifier> "{" "}" => QlGraph {
+  Token<"graph"> <name:Identifier>
+    Token<"("> <params:ZeroOrMore<(Identifier ":" Type), ",">> Token<")">
+    <return_type:(Token<":"> <Type>)?>
+    Token<"{"> <stmts:(@L Stmt)*> Token<"}"> => QlGraph {
+      name,
+      params: Bvec::from_iter_in(params.into_iter().map(|x| (x.0, x.2)), &state.alloc),
+      return_type,
+      stmts: Bvec::from_iter_in(stmts.into_iter().map(|x| QlStmt {
+        location: x.0,
+        kind: x.1,
+      }), &state.alloc)
+    }
+}
+
+Type: QlType<'input> = {
+  <name:Identifier> <params:(Token<"<"> <ZeroOrMore<Type, Token<",">>> Token<">">)?> => QlType {
     name,
+    params: Bvec::from_iter_in(params.unwrap_or_default().into_iter(), &state.alloc),
   }
+}
+
+Stmt: QlStmtKind<'input> = {
+  Token<"let"> <name:Identifier> Token<"="> <value:Expr> Token<";"> => QlStmtKind::Let {
+    name,
+    value,
+  },
+  <base:Expr> Token<"="> <value:Expr> Token<";"> => QlStmtKind::Assign {
+    base, value,
+  },
+  <base:Expr> Token<"<-"> <value:Expr> Token<";"> => QlStmtKind::EffectAssign {
+    base, value,
+  }
+}
+
+Expr: QlExpr<'input> = {
+  <location_start:@L> <kind:ExprKind> <location_end:@R> => QlExpr { location_start, location_end, kind },
+  <e:ExprL2> => e,
+}
+
+ExprKind: QlExprKind<'input> = {
+  Token<"<"> <ty:Type> Token<">"> <that:ExprL2> => QlExprKind::BuildTable(ty, state.alloc.alloc(that)),
+}
+
+ExprL2: QlExpr<'input> = {
+  <location_start:@L> <kind:ExprKindL2> <location_end:@R> => QlExpr { location_start, location_end, kind },
+  Token<"("> <e:Expr> Token<")"> => e,
+}
+
+ExprKindL2: QlExprKind<'input> = {
+  <x:Literal> => QlExprKind::Primitive(x),
+  <id:Identifier> => QlExprKind::ValueRef(id),
+  <left:ExprL2> Token<"."> <right:Identifier> => QlExprKind::GetField(
+    state.alloc.alloc(left),
+    right,
+  ),
+  <x:ExprL2> Token<"!"> => QlExprKind::UnwrapOptional(state.alloc.alloc(x)),
+  Token<"{"> <elements:ZeroOrMore<(Identifier ":" Expr), Token<",">>> Token<"}"> => QlExprKind::NewMap(
+    Bvec::from_iter_in(elements.into_iter().map(|x| (x.0, x.2)), &state.alloc),
+  ),
+  <left:ExprL2> Token<"["> <key:Identifier> Token<"="> <value:Expr> Token<"]"> => QlExprKind::GetSetElement(
+    state.alloc.alloc(left),
+    key,
+    state.alloc.alloc(value),
+  ),
 }
 
 Identifier: &'input str = {
@@ -76,7 +137,7 @@ OneOrMore<T, Delim>: Vec<T> = {
 }
 
 Token<I>: I = {
-  <s:I> <c:Comment*> => s,
+  <s:I> => s,
 }
 
 Comment: () = {
