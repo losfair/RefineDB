@@ -171,6 +171,22 @@ impl<'a> VmType<&'a str> {
         }
       }
       false
+    } else if let VmType::Map(x) = self {
+      if let VmType::Map(y) = that {
+        for (k_x, v_x) in x {
+          if let Some(v_y) = y.get(*k_x) {
+            if v_x.is_covariant_from(v_y) {
+              continue;
+            }
+            return false;
+          } else {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      false
     } else {
       false
     }
