@@ -40,6 +40,8 @@ pub enum TypeckError {
   NotMap(String),
   #[error("type `{0}` is not a table")]
   NotTable(String),
+  #[error("type `{0}` is not a map or table")]
+  NotMapOrTable(String),
   #[error("type `{0}` is not a set")]
   NotSet(String),
   #[error("table type `{0}` not found")]
@@ -201,16 +203,32 @@ pub fn typeck_graph<'a>(vm: &TwVm<'a>, g: &TwGraph) -> Result<Vec<Option<VmType<
           _ => return Err(TypeckError::NotTable(format!("{:?}", table_ty)).into()),
         }
       }
-      TwGraphNode::GetMapField(key_index) => {
-        let [map_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
+      TwGraphNode::GetField(key_index) => {
+        let [map_or_table_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
         let key = vm
           .script
           .idents
           .get(*key_index as usize)
           .ok_or_else(|| TypeckError::IdentIndexOob)?;
-        match map_ty {
+        match map_or_table_ty {
           VmType::Map(x) => Some(x.get(key.as_str()).cloned().unwrap_or_else(|| VmType::Null)),
-          _ => return Err(TypeckError::NotMap(format!("{:?}", map_ty)).into()),
+          VmType::Table(x) => {
+            let table_ty = vm
+              .schema
+              .types
+              .get(x.name)
+              .ok_or_else(|| TypeckError::TableTypeNotFound(x.name.to_string()))?;
+            Some(
+              table_ty
+                .fields
+                .get(key.as_str())
+                .map(|x| VmType::from(&x.0))
+                .ok_or_else(|| {
+                  TypeckError::FieldNotPresentInTable(key.clone(), table_ty.name.clone())
+                })?,
+            )
+          }
+          _ => return Err(TypeckError::NotMapOrTable(format!("{:?}", map_or_table_ty)).into()),
         }
       }
       TwGraphNode::GetSetElement(key_index) => {
@@ -276,33 +294,6 @@ pub fn typeck_graph<'a>(vm: &TwVm<'a>, g: &TwGraph) -> Result<Vec<Option<VmType<
           return Err(
             TypeckError::ExpectingBoolOutputForFilterSubgraphs(format!("{:?}", output)).into(),
           );
-        }
-      }
-      TwGraphNode::GetTableField(key_index) => {
-        let [table_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
-        let key = vm
-          .script
-          .idents
-          .get(*key_index as usize)
-          .ok_or_else(|| TypeckError::IdentIndexOob)?;
-        match table_ty {
-          VmType::Table(x) => {
-            let table_ty = vm
-              .schema
-              .types
-              .get(x.name)
-              .ok_or_else(|| TypeckError::TableTypeNotFound(x.name.to_string()))?;
-            Some(
-              table_ty
-                .fields
-                .get(key.as_str())
-                .map(|x| VmType::from(&x.0))
-                .ok_or_else(|| {
-                  TypeckError::FieldNotPresentInTable(key.clone(), table_ty.name.clone())
-                })?,
-            )
-          }
-          _ => return Err(TypeckError::NotTable(format!("{:?}", table_ty)).into()),
         }
       }
       TwGraphNode::InsertIntoMap(key_index) => {

@@ -105,14 +105,14 @@ fn basic_typeck() {
   let script = TwScript {
     graphs: vec![TwGraph {
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]),      // 0
-        (TwGraphNode::GetMapField(0), vec![0]),   // 1
-        (TwGraphNode::GetTableField(1), vec![1]), // 2
-        (TwGraphNode::UnwrapOptional, vec![2]),   // 3
-        (TwGraphNode::GetTableField(2), vec![3]), // 4
-        (TwGraphNode::UnwrapOptional, vec![4]),   // 5
-        (TwGraphNode::GetTableField(3), vec![5]), // 6
-        (TwGraphNode::UnwrapOptional, vec![6]),   // 7
+        (TwGraphNode::LoadParam(0), vec![]),    // 0
+        (TwGraphNode::GetField(0), vec![0]),    // 1
+        (TwGraphNode::GetField(1), vec![1]),    // 2
+        (TwGraphNode::UnwrapOptional, vec![2]), // 3
+        (TwGraphNode::GetField(2), vec![3]),    // 4
+        (TwGraphNode::UnwrapOptional, vec![4]), // 5
+        (TwGraphNode::GetField(3), vec![5]),    // 6
+        (TwGraphNode::UnwrapOptional, vec![6]), // 7
       ],
       output: Some(7),
       effects: vec![],
@@ -145,14 +145,14 @@ fn basic_typeck_fail_unknown_name() {
   let script = TwScript {
     graphs: vec![TwGraph {
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]),      // 0
-        (TwGraphNode::GetMapField(0), vec![0]),   // 1
-        (TwGraphNode::GetTableField(1), vec![1]), // 2
-        (TwGraphNode::UnwrapOptional, vec![2]),   // 3
-        (TwGraphNode::GetTableField(2), vec![3]), // 4
-        (TwGraphNode::UnwrapOptional, vec![4]),   // 5
-        (TwGraphNode::GetTableField(3), vec![5]), // 6
-        (TwGraphNode::UnwrapOptional, vec![6]),   // 7
+        (TwGraphNode::LoadParam(0), vec![]),    // 0
+        (TwGraphNode::GetField(0), vec![0]),    // 1
+        (TwGraphNode::GetField(1), vec![1]),    // 2
+        (TwGraphNode::UnwrapOptional, vec![2]), // 3
+        (TwGraphNode::GetField(2), vec![3]),    // 4
+        (TwGraphNode::UnwrapOptional, vec![4]), // 5
+        (TwGraphNode::GetField(3), vec![5]),    // 6
+        (TwGraphNode::UnwrapOptional, vec![6]), // 7
       ],
       output: Some(7),
       effects: vec![],
@@ -190,13 +190,13 @@ fn basic_typeck_fail_missing_unwrap() {
   let script = TwScript {
     graphs: vec![TwGraph {
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]),      // 0
-        (TwGraphNode::GetMapField(0), vec![0]),   // 1
-        (TwGraphNode::GetTableField(1), vec![1]), // 2
-        (TwGraphNode::UnwrapOptional, vec![2]),   // 3
-        (TwGraphNode::GetTableField(2), vec![3]), // 4
-        (TwGraphNode::UnwrapOptional, vec![4]),   // 5
-        (TwGraphNode::GetTableField(3), vec![5]), // 6
+        (TwGraphNode::LoadParam(0), vec![]),    // 0
+        (TwGraphNode::GetField(0), vec![0]),    // 1
+        (TwGraphNode::GetField(1), vec![1]),    // 2
+        (TwGraphNode::UnwrapOptional, vec![2]), // 3
+        (TwGraphNode::GetField(2), vec![3]),    // 4
+        (TwGraphNode::UnwrapOptional, vec![4]), // 5
+        (TwGraphNode::GetField(3), vec![5]),    // 6
       ],
       output: Some(6),
       effects: vec![],
@@ -232,14 +232,14 @@ fn basic_typeck_output_type_mismatch() {
   let script = TwScript {
     graphs: vec![TwGraph {
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]),      // 0
-        (TwGraphNode::GetMapField(0), vec![0]),   // 1
-        (TwGraphNode::GetTableField(1), vec![1]), // 2
-        (TwGraphNode::UnwrapOptional, vec![2]),   // 3
-        (TwGraphNode::GetTableField(2), vec![3]), // 4
-        (TwGraphNode::UnwrapOptional, vec![4]),   // 5
-        (TwGraphNode::GetTableField(3), vec![5]), // 6
-        (TwGraphNode::UnwrapOptional, vec![6]),   // 7
+        (TwGraphNode::LoadParam(0), vec![]),    // 0
+        (TwGraphNode::GetField(0), vec![0]),    // 1
+        (TwGraphNode::GetField(1), vec![1]),    // 2
+        (TwGraphNode::UnwrapOptional, vec![2]), // 3
+        (TwGraphNode::GetField(2), vec![3]),    // 4
+        (TwGraphNode::UnwrapOptional, vec![4]), // 5
+        (TwGraphNode::GetField(3), vec![5]),    // 6
+        (TwGraphNode::UnwrapOptional, vec![6]), // 7
       ],
       output: Some(7),
       effects: vec![],
@@ -290,10 +290,10 @@ fn typeck_set_point_get() {
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![]),         // 0
         (TwGraphNode::LoadConst(0), vec![]),         // 1
-        (TwGraphNode::GetMapField(0), vec![0]),      // 2
+        (TwGraphNode::GetField(0), vec![0]),         // 2
         (TwGraphNode::GetSetElement(1), vec![1, 2]), // 3
-        (TwGraphNode::GetTableField(2), vec![3]),    // 4
-        (TwGraphNode::GetTableField(3), vec![4]),    // 5
+        (TwGraphNode::GetField(2), vec![3]),         // 4
+        (TwGraphNode::GetField(3), vec![4]),         // 5
         (TwGraphNode::CreateMap, vec![]),            // 6
         (TwGraphNode::InsertIntoMap(4), vec![3, 6]), // 7
         (TwGraphNode::InsertIntoMap(3), vec![5, 7]), // 8

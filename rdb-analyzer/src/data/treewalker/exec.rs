@@ -141,6 +141,7 @@ impl<'a, 'b> Executor<'a, 'b> {
         Some(Arc::new(VmValue::Map(VmMapValue { elements })))
       }
       TwGraphNode::DeleteFromTable(_key_index) => None,
+      /*
       TwGraphNode::GetMapField(key_index) => {
         let elements = match &*params[0] {
           VmValue::Map(x) => x.elements.clone(),
@@ -154,6 +155,7 @@ impl<'a, 'b> Executor<'a, 'b> {
             .unwrap_or_else(|| Arc::new(VmValue::Null)),
         )
       }
+      */
       _ => todo!(),
     })
   }

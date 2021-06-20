@@ -54,15 +54,10 @@ pub enum TwGraphNode {
   /// Map
   CreateMap,
 
-  /// Map -> T
+  /// (Map | Table<T> -> T
   ///
   /// Const param: ident
-  GetMapField(u32),
-
-  /// Table<T> -> T
-  ///
-  /// Const param: ident
-  GetTableField(u32),
+  GetField(u32),
 
   /// T::PrimaryKeyValue -> Set<T> -> T
   ///
