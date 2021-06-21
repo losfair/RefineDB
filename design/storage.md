@@ -68,90 +68,90 @@ is:
 ```yaml
 nodes:
   items:
-    key: AXosgWZFums2K/zU
+    key: AXotdfGWgwakktB+
     flattened: false
-    subspace_reference: false
+    subspace_reference: ~
     packed: false
     set:
-      key: AXosgWZFL4sleLmR
+      key: AXotdfGWKeLiE7Fz
       flattened: true
-      subspace_reference: false
+      subspace_reference: ~
       packed: false
       set: ~
       children:
         id:
-          key: AXosgWZF0K28ukry
+          key: AXotdfGWA87Wm+Ur
           flattened: false
-          subspace_reference: false
+          subspace_reference: ~
           packed: false
           set: ~
           children: {}
         value:
-          key: AXosgWZF5u3TGalq
+          key: AXotdfGWs5GgKdZm
           flattened: true
-          subspace_reference: false
+          subspace_reference: ~
           packed: false
           set: ~
           children:
             end:
-              key: AXosgWZFwjhc/Tpj
+              key: AXotdfGWbEWE3EGj
               flattened: false
-              subspace_reference: false
+              subspace_reference: ~
               packed: false
               set: ~
               children: {}
             start:
-              key: AXosgWZF+1CAHgVF
+              key: AXotdfGWIeQU3Q0Y
               flattened: false
-              subspace_reference: false
+              subspace_reference: ~
               packed: false
               set: ~
               children: {}
     children: {}
   recursive_items:
-    key: AXosgWZFfTuTFdSE
+    key: AXotdfGW1VpbW1gG
     flattened: false
-    subspace_reference: false
+    subspace_reference: ~
     packed: false
     set:
-      key: AXosgWZFUZV7X+pU
-      flattened: false
-      subspace_reference: false
+      key: AXotdfGWGyKKcTOs
+      flattened: true
+      subspace_reference: ~
       packed: false
       set: ~
       children:
         id:
-          key: AXosgWZFM4IM9jIh
+          key: AXotdfGWf7wisfyA
           flattened: false
-          subspace_reference: false
+          subspace_reference: ~
           packed: false
           set: ~
           children: {}
         recursive:
-          key: AXosgWZFUZV7X+pU
+          key: AXotdfGWTYDkb+12
           flattened: false
-          subspace_reference: true
+          subspace_reference: AXotdfGWGyKKcTOs
           packed: false
           set: ~
           children: {}
         value:
-          key: AXosgWZFBVTr65Uo
+          key: AXotdfGWoLaa9Rub
           flattened: true
-          subspace_reference: false
+          subspace_reference: ~
           packed: false
           set: ~
           children:
             end:
-              key: AXosgWZFGLHaEVTG
+              key: AXotdfGWpTkrojrV
               flattened: false
-              subspace_reference: false
+              subspace_reference: ~
               packed: false
               set: ~
               children: {}
             start:
-              key: AXosgWZFkVcxMnO+
+              key: AXotdfGWY2xf+e24
               flattened: false
-              subspace_reference: false
+              subspace_reference: ~
               packed: false
               set: ~
               children: {}
@@ -161,24 +161,26 @@ nodes:
 The storage plan specifies the paths to all the fields reachable from exports. For example:
 
 ```
-items -> [AXosgWZFums2K/zU]
-items[id == "test"] -> [AXosgWZFums2K/zU] [<set_key>] [AXosgWZFL4sleLmR]
-items[id == "test"].id -> [AXosgWZFums2K/zU] [<set_key>] [AXosgWZF0K28ukry]
-items[id == "test"].value -> [AXosgWZFums2K/zU] [<set_key>] [AXosgWZF5u3TGalq]
-items[id == "test"].value.start -> [AXosgWZFums2K/zU] [<set_key>] [AXosgWZF+1CAHgVF]
-items[id == "test"].value.end -> [AXosgWZFums2K/zU] [<set_key>] [AXosgWZFwjhc/Tpj]
-
-recursive_items -> [AXosgWZFfTuTFdSE]
-items[id == "test"] -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU]
-items[id == "test"].id -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFM4IM9jIh]
-items[id == "test"].value -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFBVTr65Uo]
-items[id == "test"].value.start -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFkVcxMnO+]
-items[id == "test"].value.end -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFGLHaEVTG]
-items[id == "test"].recursive -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFUZV7X+pU]
-items[id == "test"].recursive.id -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFUZV7X+pU] [AXosgWZFM4IM9jIh]
-items[id == "test"].recursive.value -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFUZV7X+pU] [AXosgWZFBVTr65Uo]
-items[id == "test"].recursive.value.start -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFUZV7X+pU] [AXosgWZFkVcxMnO+]
-items[id == "test"].recursive.value.end -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFUZV7X+pU] [AXosgWZFGLHaEVTG]
+items -> [AXotdfGWgwakktB+]
+items[id == String("hello")] -> [AXotdfGWgwakktB+] [AmhlbGxvAA==] [AXotdfGWKeLiE7Fz]
+items[id == String("hello")].id -> [AXotdfGWgwakktB+] [AmhlbGxvAA==] [AXotdfGWA87Wm+Ur]
+items[id == String("hello")].value -> [AXotdfGWgwakktB+] [AmhlbGxvAA==] [AXotdfGWs5GgKdZm]
+items[id == String("hello")].value.end -> [AXotdfGWgwakktB+] [AmhlbGxvAA==] [AXotdfGWbEWE3EGj]
+items[id == String("hello")].value.start -> [AXotdfGWgwakktB+] [AmhlbGxvAA==] [AXotdfGWIeQU3Q0Y]
+recursive_items -> [AXotdfGW1VpbW1gG]
+recursive_items[id == String("hello")] -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWGyKKcTOs]
+recursive_items[id == String("hello")].id -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWf7wisfyA]
+recursive_items[id == String("hello")].recursive -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWTYDkb+12]
+recursive_items[id == String("hello")].recursive! -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWTYDkb+12]
+recursive_items[id == String("hello")].recursive!.id -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWTYDkb+12] [AXotdfGWf7wisfyA]
+recursive_items[id == String("hello")].recursive!.value -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWTYDkb+12] [AXotdfGWoLaa9Rub]
+recursive_items[id == String("hello")].recursive!.value! -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWTYDkb+12] [AXotdfGWoLaa9Rub]
+recursive_items[id == String("hello")].recursive!.value!.end -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWTYDkb+12] [AXotdfGWpTkrojrV]
+recursive_items[id == String("hello")].recursive!.value!.start -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWTYDkb+12] [AXotdfGWY2xf+e24]
+recursive_items[id == String("hello")].value -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWoLaa9Rub]
+recursive_items[id == String("hello")].value! -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWoLaa9Rub]
+recursive_items[id == String("hello")].value!.end -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWpTkrojrV]
+recursive_items[id == String("hello")].value!.start -> [AXotdfGW1VpbW1gG] [AmhlbGxvAA==] [AXotdfGWY2xf+e24]
 ```
 
 The *set key* is derived from the value of the primary key of the member table type.
