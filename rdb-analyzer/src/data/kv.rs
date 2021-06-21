@@ -8,7 +8,7 @@ pub trait KeyValueStore {
 }
 
 #[async_trait]
-pub trait KvTransaction {
+pub trait KvTransaction: Send + Sync {
   async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
   async fn put(&self, key: &[u8], value: &[u8]) -> Result<()>;
   async fn delete(&self, key: &[u8]) -> Result<()>;
@@ -17,7 +17,7 @@ pub trait KvTransaction {
 }
 
 #[async_trait]
-pub trait KvKeyIterator {
+pub trait KvKeyIterator: Send + Sync {
   async fn next(&self) -> Result<Option<Vec<u8>>>;
 }
 

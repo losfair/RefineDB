@@ -10,3 +10,6 @@ mod mock_kv;
 
 #[cfg(test)]
 mod pathwalker_test;
+
+#[cfg(test)]
+mod fixup_test;
