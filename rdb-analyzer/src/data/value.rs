@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, iter::FromIterator};
 
 use byteorder::{BigEndian, ByteOrder};
 use serde::{Deserialize, Serialize};
@@ -40,16 +40,35 @@ impl PrimitiveValue {
   }
 
   /// https://activesphere.com/blog/2018/08/17/order-preserving-serialization
-  pub fn serialize_raw(&self) -> SmallVec<[u8; 8]> {
+  pub fn serialize_for_key_component(&self) -> SmallVec<[u8; 9]> {
     match self {
-      PrimitiveValue::Bytes(x) => SmallVec::from_slice(x),
-      PrimitiveValue::String(x) => SmallVec::from_slice(x.as_bytes()),
+      PrimitiveValue::Bytes(x) => SmallVec::from_iter(
+        std::iter::once(0x01u8)
+          .chain(
+            x.iter()
+              .map(|&x| -> SmallVec<[u8; 2]> {
+                if x == 0 {
+                  smallvec![0x00, 0xff]
+                } else {
+                  smallvec![x]
+                }
+              })
+              .flatten(),
+          )
+          .chain([0x00u8, 0x00u8].iter().copied()),
+      ),
+      PrimitiveValue::String(x) => SmallVec::from_iter(
+        std::iter::once(0x02u8)
+          .chain(x.as_bytes().iter().copied())
+          .chain(std::iter::once(0x00u8)),
+      ),
       PrimitiveValue::Int64(x) => {
         // Flip the top bit for order preservation.
         let x = (*x as u64) ^ TOP_BIT;
 
-        let mut buf = smallvec![0u8; 8];
-        BigEndian::write_u64(&mut buf, x);
+        let mut buf = smallvec![0u8; 9];
+        buf[0] = 0x03;
+        BigEndian::write_u64(&mut buf[1..], x);
         buf
       }
       PrimitiveValue::Double(x) => {
@@ -57,8 +76,9 @@ impl PrimitiveValue {
 
         let x = if x & TOP_BIT != 0 { !x } else { x ^ TOP_BIT };
 
-        let mut buf = smallvec![0u8; 8];
-        BigEndian::write_u64(&mut buf, x);
+        let mut buf = smallvec![0u8; 9];
+        buf[0] = 0x04;
+        BigEndian::write_u64(&mut buf[1..], x);
         buf
       }
     }
