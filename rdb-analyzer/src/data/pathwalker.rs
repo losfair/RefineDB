@@ -23,13 +23,23 @@ pub enum PathWalkerError {
 }
 
 pub struct PathWalker<'a> {
+  /// The "actual" storage node, with subspace references resolved.
   node: &'a StorageNode,
 
-  /// true if this is a dynamic key generated from the primary key of a set.
-  is_dynamic_key: bool,
-
+  /// The current key component.
   key: KeyCow<'a>,
-  keylink: Option<Arc<PathWalker<'a>>>,
+
+  /// Link to the parent node.
+  link: Option<Arc<PathWalker<'a>>>,
+
+  /// Whether this node should be flattened.
+  ///
+  /// False if:
+  /// - `node.flattened == false`.
+  /// - This is a subspace reference.
+  ///
+  /// True otherwise.
+  should_flatten: bool,
 }
 
 #[derive(Clone)]
@@ -57,15 +67,40 @@ impl<'a> PathWalker<'a> {
 
     Ok(Arc::new(Self {
       node: export,
-      is_dynamic_key: false,
       key: KeyCow::Borrowed(&export.key),
-      keylink: None,
+      link: None,
+      should_flatten: export.flattened,
     }))
   }
 }
 
 impl<'a> PathWalker<'a> {
-  pub fn enter_field(self: &Arc<Self>, field_name: &str) -> Result<Self> {
+  pub fn generate_key(&self) -> Vec<u8> {
+    let mut components: Vec<&[u8]> = vec![];
+    let mut len = 0usize;
+
+    // The leaf node should always have its key component appended
+    components.push(&self.key);
+    len += self.key.len();
+
+    let mut link = self.link.as_ref();
+
+    while let Some(x) = link {
+      if !x.should_flatten {
+        components.push(&x.key);
+        len += x.key.len();
+      }
+      link = x.link.as_ref();
+    }
+    let mut key = Vec::with_capacity(len);
+    for c in components.iter().rev() {
+      key.extend_from_slice(*c);
+    }
+    assert_eq!(key.len(), len);
+    key
+  }
+
+  pub fn enter_field(self: &Arc<Self>, field_name: &str) -> Result<Arc<Self>> {
     // This check is not necessary for correctness but let's optimize our error message
     if self.node.set.is_some() {
       return Err(PathWalkerError::EnterFieldOnSet.into());
@@ -80,47 +115,55 @@ impl<'a> PathWalker<'a> {
     if let Some(subspace_reference) = node.subspace_reference {
       // Walk up the list
       let mut me = self;
-      while let Some(link) = &me.keylink {
-        if !link.is_dynamic_key && link.key.deref() == subspace_reference {
-          return Ok(Self {
+      while let Some(link) = &me.link {
+        // Here we use `link.node.key` instead of `link.key` to avoid conflicting with set keys.
+        if link.node.key == subspace_reference {
+          // Use the referenced node, with our own key.
+          // And do not flatten.
+          return Ok(Arc::new(Self {
             node: link.node,
-            is_dynamic_key: false,
             key: KeyCow::Borrowed(&node.key),
-            keylink: Some(self.clone()),
-          });
+            link: Some(self.clone()),
+            should_flatten: false,
+          }));
         }
         me = link;
       }
       return Err(PathWalkerError::ReferenceNodeNotFound.into());
-    } else if node.flattened {
-      Ok(Self {
-        node,
-        is_dynamic_key: false,
-        key: self.key.clone(),
-        keylink: self.keylink.clone(),
-      })
     } else {
-      Ok(Self {
+      Ok(Arc::new(Self {
         node,
-        is_dynamic_key: false,
         key: KeyCow::Borrowed(&node.key),
-        keylink: Some(self.clone()),
-      })
+        link: Some(self.clone()),
+        should_flatten: node.flattened,
+      }))
     }
   }
 
-  pub fn enter_set(self: &Arc<Self>, primary_key: &PrimitiveValue) -> Result<Self> {
+  pub fn enter_set(self: &Arc<Self>, primary_key: &PrimitiveValue) -> Result<Arc<Self>> {
     let set = &**self
       .node
       .set
       .as_ref()
       .ok_or_else(|| PathWalkerError::NotSet)?;
     let primary_key_bytes = primary_key.serialize_for_key_component();
-    Ok(Self {
+
+    let dynamic_key = KeyCow::Owned(Arc::from(primary_key_bytes.as_slice()));
+
+    // The set key.
+    let intermediate = Arc::new(Self {
       node: set,
-      is_dynamic_key: true,
-      key: KeyCow::Owned(Arc::from(primary_key_bytes.as_slice())),
-      keylink: Some(self.clone()),
-    })
+      key: dynamic_key.clone(),
+      link: Some(self.clone()),
+      should_flatten: false,
+    });
+
+    // And the table key.
+    Ok(Arc::new(Self {
+      node: set,
+      key: KeyCow::Borrowed(&set.key),
+      link: Some(intermediate),
+      should_flatten: true,
+    }))
   }
 }
