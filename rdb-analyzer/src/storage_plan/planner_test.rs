@@ -73,6 +73,43 @@ fn test_planner_simple() {
 }
 
 #[test]
+fn planner_example_1() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+  type Item<T> {
+    @primary
+    id: string,
+    value: T,
+  }
+  type RecursiveItem<T> {
+    @primary
+    id: string,
+    value: T?,
+    recursive: RecursiveItem<T>?,
+  }
+  type Duration<T> {
+    start: T,
+    end: T,
+  }
+  export set<Item<Duration<int64>>> items;
+  export set<RecursiveItem<Duration<int64>>> recursive_items;
+  "#,
+  )
+  .unwrap();
+  let output = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &output).unwrap();
+  println!(
+    "{}",
+    serde_yaml::to_string(&StoragePlan::<String>::from(&plan)).unwrap()
+  );
+}
+
+#[test]
 fn test_yaml_serialization() {
   let _ = pretty_env_logger::try_init();
   let alloc = Bump::new();
