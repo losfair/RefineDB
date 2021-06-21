@@ -55,6 +55,9 @@ pub enum SchemaCompileError {
 
   #[error("type `{0}` has multiple primary keys")]
   MultiplePrimaryKeys(String),
+
+  #[error("type name must start with an upper-case letter: `{0}`")]
+  TypeNameMustStartWithUpperCaseLetter(String),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -292,6 +295,11 @@ impl<'a> TypeResolutionContext<'a> {
         ast::SchemaItem::Type(x) => {
           if types.contains_key(x.name.0) {
             return Err(SchemaCompileError::DuplicateType(x.name.0.to_string()).into());
+          }
+          if !x.name.0.starts_with(|x| x >= 'A' && x <= 'Z') {
+            return Err(
+              SchemaCompileError::TypeNameMustStartWithUpperCaseLetter(x.name.0.to_string()).into(),
+            );
           }
           types.insert(x.name.0, x);
         }

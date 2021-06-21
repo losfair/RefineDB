@@ -30,6 +30,25 @@ fn test_compile_simple() {
 }
 
 #[test]
+fn upper_case_start_letter_in_type_names() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+    type item<T> {
+    }
+    export item<int64> x;
+  "#,
+  )
+  .unwrap();
+  assert!(compile(&ast)
+    .unwrap_err()
+    .to_string()
+    .starts_with("type name must start with an upper-case letter"));
+}
+
+#[test]
 fn index_constraints_case_1a() {
   let _ = pretty_env_logger::try_init();
   let alloc = Bump::new();
