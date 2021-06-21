@@ -83,4 +83,14 @@ impl PrimitiveValue {
       }
     }
   }
+
+  #[cfg(test)]
+  pub fn example_value_for_type(ty: PrimitiveType) -> Self {
+    match ty {
+      PrimitiveType::Bytes => Self::Bytes(vec![0xbe, 0xef]),
+      PrimitiveType::String => Self::String("hello".into()),
+      PrimitiveType::Int64 => Self::Int64(42),
+      PrimitiveType::Double => Self::Double(3.14),
+    }
+  }
 }
