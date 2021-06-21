@@ -11,7 +11,7 @@ extern {
 }
 
 pub QlRoot: QlRoot<'input> = {
-  <graphs:QlGraph*> => QlRoot {
+  Comment* <graphs:QlGraph*> => QlRoot {
     graphs: Bvec::from_iter_in(graphs.into_iter(), &state.alloc),
   }
 }
