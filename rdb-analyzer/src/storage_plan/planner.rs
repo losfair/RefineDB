@@ -25,9 +25,9 @@ pub enum PlannerError {
 struct PlanState<'a> {
   old_schema: &'a CompiledSchema,
   used_storage_keys: HashSet<StorageKey>,
-  recursive_types: HashSet<usize>,
-  set_member_types: HashSet<usize>,
-  fields_in_stack: HashMap<usize, StorageKey>,
+  recursive_types: HashSet<Arc<str>>,
+  set_member_types: HashSet<Arc<str>>,
+  fields_in_stack: HashMap<Arc<str>, StorageKey>,
 }
 
 /// A point on the old tree.
@@ -202,8 +202,8 @@ pub fn generate_plan_for_schema(
   schema: &CompiledSchema,
 ) -> Result<StoragePlan> {
   // Collect recursive types
-  let mut recursive_types: HashSet<usize> = HashSet::new();
-  let mut set_member_types: HashSet<usize> = HashSet::new();
+  let mut recursive_types: HashSet<Arc<str>> = HashSet::new();
+  let mut set_member_types: HashSet<Arc<str>> = HashSet::new();
   for (_, export_field) in &schema.exports {
     collect_special_types(
       export_field,
@@ -286,7 +286,7 @@ fn generate_field(
         old_point.map(|x| x.reduce_optional()),
       )
     }
-    FieldType::Table(x) => {
+    FieldType::Table(table_name) => {
       // This type has children. Push down.
 
       // For packed types, don't go down further...
@@ -304,7 +304,7 @@ fn generate_field(
       }
 
       // First, check whether we are resolving something recursively...
-      if let Some(key) = plan_st.fields_in_stack.get(&field_type_key(field)) {
+      if let Some(key) = plan_st.fields_in_stack.get(table_name) {
         return Ok(StorageNode {
           key: *key,
           flattened: false,
@@ -317,20 +317,21 @@ fn generate_field(
 
       let ty = schema
         .types
-        .get(x)
-        .ok_or_else(|| PlannerError::MissingType(x.clone()))?;
+        .get(table_name)
+        .ok_or_else(|| PlannerError::MissingType(table_name.clone()))?;
 
       // Push the current state.
-      let key = field_type_key(field);
       let flattened;
       let storage_key = old_point
         .map(|x| x.node.key)
         .unwrap_or_else(|| rand_storage_key(plan_st));
 
       // Recursive types cannot be flattened
-      if plan_st.recursive_types.contains(&key) {
+      if plan_st.recursive_types.contains(table_name) {
         flattened = false;
-        plan_st.fields_in_stack.insert(key, storage_key);
+        plan_st
+          .fields_in_stack
+          .insert(table_name.clone(), storage_key);
       } else {
         flattened = true;
       }
@@ -370,11 +371,12 @@ fn generate_field(
         }
         has_primary_key |= annotations.as_slice().is_primary();
       }
-      if plan_st.recursive_types.contains(&key) {
-        plan_st.fields_in_stack.remove(&key);
+
+      if !flattened {
+        plan_st.fields_in_stack.remove(table_name);
       }
 
-      if plan_st.set_member_types.contains(&key) && !has_primary_key {
+      if plan_st.set_member_types.contains(table_name) && !has_primary_key {
         return Err(PlannerError::SetMemberTypeWithoutPrimaryKey(ty.name.clone()).into());
       }
 
@@ -425,10 +427,6 @@ fn generate_field(
   }
 }
 
-fn field_type_key(x: &FieldType) -> usize {
-  x as *const _ as usize
-}
-
 fn rand_storage_key(st: &mut PlanState) -> StorageKey {
   loop {
     let now = SystemTime::now()
@@ -464,9 +462,9 @@ fn collect_storage_keys(node: &StorageNode, sink: &mut HashSet<StorageKey>) {
 fn collect_special_types(
   ty: &FieldType,
   schema: &CompiledSchema,
-  state: &mut HashSet<usize>,
-  recursive_types_sink: &mut HashSet<usize>,
-  set_member_types_sink: &mut HashSet<usize>,
+  state: &mut HashSet<Arc<str>>,
+  recursive_types_sink: &mut HashSet<Arc<str>>,
+  set_member_types_sink: &mut HashSet<Arc<str>>,
 ) -> Result<()> {
   match ty {
     FieldType::Optional(x) => collect_special_types(
@@ -477,7 +475,9 @@ fn collect_special_types(
       set_member_types_sink,
     ),
     FieldType::Set(x) => {
-      set_member_types_sink.insert(field_type_key(x));
+      if let FieldType::Table(x) = &**x {
+        set_member_types_sink.insert(x.clone());
+      }
       collect_special_types(
         x,
         schema,
@@ -487,19 +487,17 @@ fn collect_special_types(
       )
     }
     FieldType::Primitive(_) => Ok(()),
-    FieldType::Table(x) => {
-      let type_key = field_type_key(ty);
-
+    FieldType::Table(table_name) => {
       // if a cycle is detected...
-      if state.insert(type_key) == false {
-        recursive_types_sink.insert(type_key);
+      if state.insert(table_name.clone()) == false {
+        recursive_types_sink.insert(table_name.clone());
         return Ok(());
       }
 
       let specialized_ty = schema
         .types
-        .get(x)
-        .ok_or_else(|| PlannerError::MissingType(x.clone()))?;
+        .get(table_name)
+        .ok_or_else(|| PlannerError::MissingType(table_name.clone()))?;
 
       for (_, (field, annotations)) in &specialized_ty.fields {
         // Skip packed fields
@@ -516,7 +514,7 @@ fn collect_special_types(
         )?;
       }
 
-      state.remove(&type_key);
+      state.remove(table_name);
       Ok(())
     }
   }
