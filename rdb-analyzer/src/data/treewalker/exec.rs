@@ -49,7 +49,11 @@ impl<'a, 'b> Executor<'a, 'b> {
     Self { vm, kv }
   }
 
-  pub async fn run_graph(&self, graph_index: usize) -> Result<Option<Arc<VmValue<'a>>>> {
+  pub async fn run_graph(
+    &self,
+    graph_index: usize,
+    graph_params: &[Arc<VmValue<'a>>],
+  ) -> Result<Option<Arc<VmValue<'a>>>> {
     let g = &self.vm.script.graphs[graph_index];
     let fire_rules = generate_fire_rules(g);
     let mut deps_satisfied: Vec<Vec<Option<Arc<VmValue<'a>>>>> =
@@ -63,7 +67,7 @@ impl<'a, 'b> Executor<'a, 'b> {
       if in_edges.is_empty() {
         let txn = &*txn;
         futures.push(Box::pin(async move {
-          (i as u32, self.run_node(n, vec![], txn).await)
+          (i as u32, self.run_node(n, vec![], txn, graph_params).await)
         }));
       }
     }
@@ -112,7 +116,9 @@ impl<'a, 'b> Executor<'a, 'b> {
             futures.push(Box::pin(async move {
               (
                 target_node as u32,
-                self.run_node(&g.nodes[target_node].0, params, txn).await,
+                self
+                  .run_node(&g.nodes[target_node].0, params, txn, graph_params)
+                  .await,
               )
             }))
           }
@@ -127,6 +133,7 @@ impl<'a, 'b> Executor<'a, 'b> {
     n: &TwGraphNode,
     params: Vec<Arc<VmValue<'a>>>,
     txn: &dyn KvTransaction,
+    graph_params: &[Arc<VmValue<'a>>],
   ) -> Result<Option<Arc<VmValue<'a>>>> {
     Ok(match n {
       TwGraphNode::BuildSet => unimplemented!(),
@@ -261,7 +268,7 @@ impl<'a, 'b> Executor<'a, 'b> {
         let value = self.vm.consts[*const_index as usize].clone();
         Some(value)
       }
-      TwGraphNode::LoadParam(param_index) => Some(params[*param_index as usize].clone()),
+      TwGraphNode::LoadParam(param_index) => Some(graph_params[*param_index as usize].clone()),
       TwGraphNode::UnwrapOptional => match &*params[0] {
         VmValue::Null => return Err(ExecError::NullUnwrapped.into()),
         _ => Some(params[0].clone()),

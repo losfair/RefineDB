@@ -82,14 +82,17 @@ pub struct VmTableType<K> {
   pub name: K,
 }
 
-impl<'a, T: AsRef<str> + Clone + Ord + PartialOrd + Eq + PartialEq> From<&'a VmType<T>>
-  for VmType<&'a str>
+impl<
+    'a,
+    T: AsRef<str> + Clone + Ord + PartialOrd + Eq + PartialEq,
+    U: From<&'a str> + Clone + Ord + PartialOrd + Eq + PartialEq,
+  > From<&'a VmType<T>> for VmType<U>
 {
   fn from(that: &'a VmType<T>) -> Self {
     match that {
       VmType::Primitive(x) => VmType::Primitive(x.clone()),
       VmType::Table(x) => VmType::Table(VmTableType {
-        name: x.name.as_ref(),
+        name: U::from(x.name.as_ref()),
       }),
       VmType::Set(x) => VmType::Set(VmSetType {
         ty: Box::new(Self::from(&*x.ty)),
@@ -97,9 +100,25 @@ impl<'a, T: AsRef<str> + Clone + Ord + PartialOrd + Eq + PartialEq> From<&'a VmT
       VmType::Null => VmType::Null,
       VmType::Bool => VmType::Bool,
       VmType::List(x) => VmType::List(Box::new(Self::from(&**x))),
-      VmType::Map(x) => VmType::Map(x.iter().map(|(k, v)| (k.as_ref(), Self::from(v))).collect()),
+      VmType::Map(x) => VmType::Map(
+        x.iter()
+          .map(|(k, v)| (U::from(k.as_ref()), Self::from(v)))
+          .collect(),
+      ),
       VmType::OneOf(x) => VmType::OneOf(x.iter().map(|x| Self::from(x)).collect()),
     }
+  }
+}
+
+impl<'a, T: From<&'a str> + Clone + Ord + PartialOrd + Eq + PartialEq> From<&'a CompiledSchema>
+  for VmType<T>
+{
+  fn from(that: &'a CompiledSchema) -> Self {
+    let mut m = RedBlackTreeMapSync::new_sync();
+    for (field_name, field_ty) in &that.exports {
+      m.insert_mut(T::from(&**field_name), VmType::<T>::from(field_ty));
+    }
+    VmType::Map(m)
   }
 }
 

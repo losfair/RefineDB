@@ -6,3 +6,6 @@ pub mod vm_value;
 
 #[cfg(test)]
 mod typeck_test;
+
+#[cfg(test)]
+mod exec_test;
