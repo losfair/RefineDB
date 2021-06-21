@@ -132,8 +132,8 @@ impl<'a> PathWalker<'a> {
 
     if let Some(subspace_reference) = node.subspace_reference {
       // Walk up the list
-      let mut me = self;
-      while let Some(link) = &me.link {
+      let mut me = Some(self);
+      while let Some(link) = me {
         // Here we use `link.node.key` instead of `link.key` to avoid conflicting with set keys.
         if link.node.key == subspace_reference {
           // Use the referenced node, with our own key.
@@ -145,7 +145,7 @@ impl<'a> PathWalker<'a> {
             should_flatten: false,
           }));
         }
-        me = link;
+        me = link.link.as_ref();
       }
       return Err(PathWalkerError::ReferenceNodeNotFound.into());
     } else {
