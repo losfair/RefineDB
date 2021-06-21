@@ -47,8 +47,8 @@ pub enum SchemaCompileError {
   #[error("unknown annotation on field `{0}` of type `{1}`: `{2}`")]
   UnknownAnnotationOnField(String, String, String),
 
-  #[error("field `{0}` of type `{1}`: indexes are only allowed on primitive or packed fields")]
-  IndexOnNonPrimitiveOrPackedField(String, String),
+  #[error("field `{0}` of type `{1}`: indexes are only allowed on primitive fields")]
+  IndexOnNonPrimitiveField(String, String),
 
   #[error("field `{0}` of type `{1}` is a primary key and cannot be optional")]
   OptionalPrimaryKey(String, String),
@@ -247,7 +247,7 @@ impl FieldType {
 
   pub fn is_optional(&self) -> bool {
     match self {
-      Self::Optional(x) => true,
+      Self::Optional(_) => true,
       _ => false,
     }
   }
@@ -452,15 +452,13 @@ impl<'a> TypeResolutionContext<'a> {
         match field_ty.optional_unwrapped() {
           FieldType::Primitive(_) => {}
           _ => {
-            if !annotations.as_slice().is_packed() {
-              return Err(
-                SchemaCompileError::IndexOnNonPrimitiveOrPackedField(
-                  x.name.0.to_string(),
-                  ty.name.0.to_string(),
-                )
-                .into(),
-              );
-            }
+            return Err(
+              SchemaCompileError::IndexOnNonPrimitiveField(
+                x.name.0.to_string(),
+                ty.name.0.to_string(),
+              )
+              .into(),
+            );
           }
         }
       }
