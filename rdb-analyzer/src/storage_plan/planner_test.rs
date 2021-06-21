@@ -110,7 +110,7 @@ fn planner_example_1() {
 }
 
 #[test]
-fn mutual_recursion() {
+fn recursion_cycles() {
   let _ = pretty_env_logger::try_init();
   let alloc = Bump::new();
   let ast = parse(
@@ -122,7 +122,13 @@ fn mutual_recursion() {
     value: B<T>,
   }
   type B<T> {
-    value: A<T>?,
+    value1: A<T>?,
+    value2: C<T>?,
+  }
+  type C<T> {
+    value: T,
+    that1: A<T>,
+    that2: B<T>,
   }
   export set<A<int64>> items;
   "#,
