@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use thiserror::Error;
 
 use crate::{
-  data::value::PrimitiveValue,
+  data::{pathwalker::PathWalker, value::PrimitiveValue},
   schema::compile::{CompiledSchema, FieldType, PrimitiveType},
 };
 
@@ -25,19 +25,6 @@ pub enum VmValue<'a> {
 }
 
 #[derive(Debug)]
-pub struct VmResidentPath<'a> {
-  pub storage_key: VmResidentStorageKey<'a>,
-  pub prev: Option<Arc<VmResidentPath<'a>>>,
-}
-
-#[derive(Debug)]
-pub enum VmResidentStorageKey<'a> {
-  Fixed(&'a [u8]),
-  SetPrimaryKey,
-  SetIndex { field: &'a [u8] },
-}
-
-#[derive(Debug)]
 pub struct VmTableValue<'a> {
   pub ty: &'a str,
   pub kind: VmTableValueKind<'a>,
@@ -45,7 +32,7 @@ pub struct VmTableValue<'a> {
 
 #[derive(Debug)]
 pub enum VmTableValueKind<'a> {
-  Resident(Arc<VmResidentPath<'a>>),
+  Resident(Arc<PathWalker<'a>>),
   Fresh(BTreeMap<&'a str, Arc<VmValue<'a>>>),
 }
 
@@ -57,7 +44,7 @@ pub struct VmSetValue<'a> {
 
 #[derive(Debug)]
 pub enum VmSetValueKind<'a> {
-  Resident(Arc<VmResidentPath<'a>>),
+  Resident(Arc<PathWalker<'a>>),
   Fresh(Vec<Arc<VmValue<'a>>>),
 }
 
