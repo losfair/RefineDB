@@ -158,7 +158,8 @@ nodes:
     children: {}
 ```
 
-The storage plan specifies the paths to all the fields reachable from exports. For example:
+The storage plan specifies the paths to all the fields reachable from exports. Some example paths for the storage plan above (generated
+by the `data::pathwalker_test::basic` test):
 
 ```
 items -> [AXotdfGWgwakktB+]
