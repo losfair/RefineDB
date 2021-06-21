@@ -45,78 +45,146 @@ An example storage plan for the following schema:
 
 ```
 type Item<T> {
-  inner: T,
   @primary
   id: string,
+  value: T,
+}
+type RecursiveItem<T> {
+  @primary
+  id: string,
+  value: T?,
+  recursive: RecursiveItem<T>?,
 }
 type Duration<T> {
   start: T,
   end: T,
 }
 export set<Item<Duration<int64>>> items;
+export set<RecursiveItem<Duration<int64>>> recursive_items;
 ```
 
 is:
 
 ```yaml
-items:
-  key: AXopPNuD3RsfWb7N
-  flattened: false
-  subspace_reference: false
-  packed: false
-  set:
-    key: AXopPNuD0dYw32X/
-    flattened: true
+nodes:
+  items:
+    key: AXosgWZFums2K/zU
+    flattened: false
     subspace_reference: false
     packed: false
-    set: ~
-    children:
-      inner:
-        key: AXopPNuD9Uj5dqm6
-        flattened: true
-        subspace_reference: false
-        packed: false
-        set: ~
-        children:
-          end:
-            key: AXopPNuDeX+Xo1Ot
-            flattened: false
-            subspace_reference: false 
-            packed: false
-            set: ~
-            children: {}
-          start:
-            key: AXopPNuDkuy4VOO5
-            flattened: false
-            subspace_reference: false 
-            packed: false
-            set: ~
-            children: {}
-      id:
-        key: AXopPNuDDI5v9lzf
-        flattened: false
-        subspace_reference: false
-        packed: false
-        set: ~
-        children: {}
-  children: {}
+    set:
+      key: AXosgWZFL4sleLmR
+      flattened: true
+      subspace_reference: false
+      packed: false
+      set: ~
+      children:
+        id:
+          key: AXosgWZF0K28ukry
+          flattened: false
+          subspace_reference: false
+          packed: false
+          set: ~
+          children: {}
+        value:
+          key: AXosgWZF5u3TGalq
+          flattened: true
+          subspace_reference: false
+          packed: false
+          set: ~
+          children:
+            end:
+              key: AXosgWZFwjhc/Tpj
+              flattened: false
+              subspace_reference: false
+              packed: false
+              set: ~
+              children: {}
+            start:
+              key: AXosgWZF+1CAHgVF
+              flattened: false
+              subspace_reference: false
+              packed: false
+              set: ~
+              children: {}
+    children: {}
+  recursive_items:
+    key: AXosgWZFfTuTFdSE
+    flattened: false
+    subspace_reference: false
+    packed: false
+    set:
+      key: AXosgWZFUZV7X+pU
+      flattened: false
+      subspace_reference: false
+      packed: false
+      set: ~
+      children:
+        id:
+          key: AXosgWZFM4IM9jIh
+          flattened: false
+          subspace_reference: false
+          packed: false
+          set: ~
+          children: {}
+        recursive:
+          key: AXosgWZFUZV7X+pU
+          flattened: false
+          subspace_reference: true
+          packed: false
+          set: ~
+          children: {}
+        value:
+          key: AXosgWZFBVTr65Uo
+          flattened: true
+          subspace_reference: false
+          packed: false
+          set: ~
+          children:
+            end:
+              key: AXosgWZFGLHaEVTG
+              flattened: false
+              subspace_reference: false
+              packed: false
+              set: ~
+              children: {}
+            start:
+              key: AXosgWZFkVcxMnO+
+              flattened: false
+              subspace_reference: false
+              packed: false
+              set: ~
+              children: {}
+    children: {}
 ```
 
 The storage plan specifies the paths to all the fields reachable from exports. For example:
 
 ```
-items -> [AXopPNuD3RsfWb7N]
-items[id = "test"] -> [AXopPNuD3RsfWb7N] [<set_key>] [AXopPNuD0dYw32X/]
-items[id = "test"].inner -> [AXopPNuD3RsfWb7N] [<set_key>] [AXopPNuD9Uj5dqm6]
-items[id = "test"].inner.start -> [AXopPNuD3RsfWb7N] [<set_key>] [AXopPNuDkuy4VOO5]
-items[id = "test"].inner.end -> [AXopPNuD3RsfWb7N] [<set_key>] [AXopPNuDeX+Xo1Ot]
-items[id = "test"].id -> [AXopPNuD3RsfWb7N] [<set_key>] [AXopPNuDDI5v9lzf]
+items -> [AXosgWZFums2K/zU]
+items[id == "test"] -> [AXosgWZFums2K/zU] [<set_key>] [AXosgWZFL4sleLmR]
+items[id == "test"].id -> [AXosgWZFums2K/zU] [<set_key>] [AXosgWZF0K28ukry]
+items[id == "test"].value -> [AXosgWZFums2K/zU] [<set_key>] [AXosgWZF5u3TGalq]
+items[id == "test"].value.start -> [AXosgWZFums2K/zU] [<set_key>] [AXosgWZF+1CAHgVF]
+items[id == "test"].value.end -> [AXosgWZFums2K/zU] [<set_key>] [AXosgWZFwjhc/Tpj]
+
+recursive_items -> [AXosgWZFfTuTFdSE]
+items[id == "test"] -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU]
+items[id == "test"].id -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFM4IM9jIh]
+items[id == "test"].value -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFBVTr65Uo]
+items[id == "test"].value.start -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFkVcxMnO+]
+items[id == "test"].value.end -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFGLHaEVTG]
+items[id == "test"].recursive -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFUZV7X+pU]
+items[id == "test"].recursive.id -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFUZV7X+pU] [AXosgWZFM4IM9jIh]
+items[id == "test"].recursive.value -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFUZV7X+pU] [AXosgWZFBVTr65Uo]
+items[id == "test"].recursive.value.start -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFUZV7X+pU] [AXosgWZFkVcxMnO+]
+items[id == "test"].recursive.value.end -> [AXosgWZFfTuTFdSE] [<set_key>] [AXosgWZFUZV7X+pU] [AXosgWZFUZV7X+pU] [AXosgWZFGLHaEVTG]
 ```
 
 The *set key* is derived from the value of the primary key of the member table type.
 
-Note that fields are *flattened* when doing so does not lead to ambiguity: `.inner.start` and
-`.inner.end` have the same key length as `.inner` and `.id`. Currently two kinds of types are
+Note that fields are *flattened* when doing so does not lead to ambiguity: `.value.start` and
+`.value.end` have the same key length as `.value` and `.id`. Currently two kinds of types are
 not flattened, for obvious reasons:
 
 - Sets.
