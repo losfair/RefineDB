@@ -296,7 +296,7 @@ fn generate_field(
             .map(|x| x.node.key)
             .unwrap_or_else(|| rand_storage_key(plan_st)),
           flattened: false,
-          subspace_reference: false,
+          subspace_reference: None,
           packed: true,
           set: None,
           children: BTreeMap::new(),
@@ -304,11 +304,13 @@ fn generate_field(
       }
 
       // First, check whether we are resolving something recursively...
-      if let Some(key) = plan_st.fields_in_stack.get(table_name) {
+      if let Some(&key) = plan_st.fields_in_stack.get(table_name) {
         return Ok(StorageNode {
-          key: *key,
+          key: old_point
+            .map(|x| x.node.key)
+            .unwrap_or_else(|| rand_storage_key(plan_st)),
           flattened: false,
-          subspace_reference: true,
+          subspace_reference: Some(key),
           packed: false,
           set: None,
           children: BTreeMap::new(),
@@ -321,19 +323,18 @@ fn generate_field(
         .ok_or_else(|| PlannerError::MissingType(table_name.clone()))?;
 
       // Push the current state.
-      let flattened;
+      let is_recursive_type;
       let storage_key = old_point
         .map(|x| x.node.key)
         .unwrap_or_else(|| rand_storage_key(plan_st));
 
-      // Recursive types cannot be flattened
       if plan_st.recursive_types.contains(table_name) {
-        flattened = false;
+        is_recursive_type = true;
         plan_st
           .fields_in_stack
           .insert(table_name.clone(), storage_key);
       } else {
-        flattened = true;
+        is_recursive_type = false;
       }
 
       let mut children: BTreeMap<Arc<str>, StorageNode> = BTreeMap::new();
@@ -372,7 +373,7 @@ fn generate_field(
         has_primary_key |= annotations.as_slice().is_primary();
       }
 
-      if !flattened {
+      if is_recursive_type {
         plan_st.fields_in_stack.remove(table_name);
       }
 
@@ -382,8 +383,8 @@ fn generate_field(
 
       Ok(StorageNode {
         key: storage_key,
-        flattened,
-        subspace_reference: false,
+        flattened: true,
+        subspace_reference: None,
         packed: false,
         set: None,
         children,
@@ -396,7 +397,7 @@ fn generate_field(
           .map(|x| x.node.key)
           .unwrap_or_else(|| rand_storage_key(plan_st)),
         flattened: false,
-        subspace_reference: false,
+        subspace_reference: None,
         packed: false,
         set: None,
         children: BTreeMap::new(),
@@ -418,7 +419,7 @@ fn generate_field(
           .map(|x| x.node.key)
           .unwrap_or_else(|| rand_storage_key(plan_st)),
         flattened: false,
-        subspace_reference: false,
+        subspace_reference: None,
         packed: false,
         set: Some(Box::new(inner)),
         children: BTreeMap::new(),

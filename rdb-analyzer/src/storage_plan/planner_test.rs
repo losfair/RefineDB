@@ -110,6 +110,35 @@ fn planner_example_1() {
 }
 
 #[test]
+fn mutual_recursion() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+  type A<T> {
+    @primary
+    id: string,
+    value: B<T>,
+  }
+  type B<T> {
+    value: A<T>?,
+  }
+  export set<A<int64>> items;
+  "#,
+  )
+  .unwrap();
+  let output = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &output).unwrap();
+  println!(
+    "{}",
+    serde_yaml::to_string(&StoragePlan::<String>::from(&plan)).unwrap()
+  );
+}
+
+#[test]
 fn test_yaml_serialization() {
   let _ = pretty_env_logger::try_init();
   let alloc = Bump::new();

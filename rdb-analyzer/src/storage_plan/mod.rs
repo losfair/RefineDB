@@ -19,7 +19,7 @@ pub struct StoragePlan<SK = StorageKey> {
 pub struct StorageNode<SK = StorageKey> {
   pub key: SK,
   pub flattened: bool,
-  pub subspace_reference: bool,
+  pub subspace_reference: Option<SK>,
   pub packed: bool,
   pub set: Option<Box<StorageNode<SK>>>,
   pub children: BTreeMap<Arc<str>, StorageNode<SK>>,
@@ -49,10 +49,10 @@ impl StorageNode {
       f,
       " {}{}{}{}",
       hex::encode(&self.key.as_ref()),
-      if self.subspace_reference {
-        " subspace_reference"
+      if let Some(x) = self.subspace_reference {
+        format!(" subspace_reference({})", base64::encode(&x))
       } else {
-        ""
+        "".into()
       },
       if self.packed { " packed" } else { "" },
       if self.flattened { " flattened" } else { "" },
