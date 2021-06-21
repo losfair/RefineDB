@@ -21,9 +21,9 @@ fn print_path_examples(
   path: &String,
   recursion_set: &mut HashSet<usize>,
 ) {
+  println!("{} -> {}", path, walker.generate_key_pretty());
   match field {
     FieldType::Table(x) => {
-      println!("{} -> {}", path, walker.generate_key_pretty());
       let specialized_ty = schema.types.get(x).unwrap();
       for (name, (field, _)) in &specialized_ty.fields {
         if recursion_set.contains(&(field as *const _ as usize)) {
@@ -37,9 +37,7 @@ fn print_path_examples(
         recursion_set.remove(&(field as *const _ as usize));
       }
     }
-    FieldType::Primitive(_) => {
-      println!("{} -> {}", path, walker.generate_key_pretty());
-    }
+    FieldType::Primitive(_) => {}
     FieldType::Set(ty) => {
       let specialized_ty = match &**ty {
         FieldType::Table(x) => schema.types.get(x).unwrap(),
@@ -60,7 +58,6 @@ fn print_path_examples(
         path, primary_key_name, primary_key_example
       );
       let node = node.set.as_ref().unwrap();
-      println!("{} -> {}", path, walker.generate_key_pretty());
       print_path_examples(schema, &**ty, &**node, walker, &path, recursion_set);
     }
     FieldType::Optional(x) => {
