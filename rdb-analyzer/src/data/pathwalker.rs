@@ -22,7 +22,7 @@ pub enum PathWalkerError {
   NotSet,
 }
 
-#[derive(Clone)]
+#[derive(Debug)]
 pub struct PathWalker<'a> {
   /// The "actual" storage node, with subspace references resolved.
   node: &'a StorageNode,
@@ -43,7 +43,7 @@ pub struct PathWalker<'a> {
   should_flatten: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum KeyCow<'a> {
   Borrowed(&'a [u8]),
   Owned(Arc<[u8]>),
