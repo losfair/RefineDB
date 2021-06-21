@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 
 use crate::{schema::compile::CompiledSchema, storage_plan::StoragePlan};
@@ -11,7 +13,7 @@ pub struct TwVm<'a> {
   pub schema: &'a CompiledSchema,
   pub storage_plan: &'a StoragePlan,
   pub script: &'a TwScript,
-  pub consts: Vec<VmValue<'a>>,
+  pub consts: Vec<Arc<VmValue<'a>>>,
   pub types: Vec<VmType<&'a str>>,
 }
 
@@ -24,7 +26,7 @@ impl<'a> TwVm<'a> {
     let consts = script
       .consts
       .iter()
-      .map(|x| VmValue::from_const(schema, x))
+      .map(|x| VmValue::from_const(schema, x).map(Arc::new))
       .collect::<Result<Vec<_>>>()?;
     let types = script
       .types

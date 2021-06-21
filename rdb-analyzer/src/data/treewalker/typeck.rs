@@ -363,7 +363,7 @@ pub fn typeck_graph<'a>(vm: &TwVm<'a>, g: &TwGraph) -> Result<Vec<Option<VmType<
           .consts
           .get(*const_index as usize)
           .ok_or_else(|| TypeckError::ConstIndexOob)?;
-        Some(VmType::from(const_value))
+        Some(VmType::from(&**const_value))
       }
       TwGraphNode::LoadParam(param_index) => {
         if *param_index as usize >= params.len() {

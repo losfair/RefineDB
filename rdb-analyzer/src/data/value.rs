@@ -93,4 +93,13 @@ impl PrimitiveValue {
       PrimitiveType::Double => Self::Double(3.14),
     }
   }
+
+  pub fn default_value_for_type(ty: PrimitiveType) -> Self {
+    match ty {
+      PrimitiveType::Bytes => Self::Bytes(vec![]),
+      PrimitiveType::String => Self::String("".into()),
+      PrimitiveType::Int64 => Self::Int64(0),
+      PrimitiveType::Double => Self::Double(0.0),
+    }
+  }
 }
