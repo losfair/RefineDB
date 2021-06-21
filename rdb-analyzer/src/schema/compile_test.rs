@@ -30,7 +30,7 @@ fn test_compile_simple() {
 }
 
 #[test]
-fn index_constraints_case_1() {
+fn index_constraints_case_1a() {
   let _ = pretty_env_logger::try_init();
   let alloc = Bump::new();
   let ast = parse(
@@ -38,9 +38,27 @@ fn index_constraints_case_1() {
     r#"
     type Item<T> {
       @unique key1: T,
-      @packed @unique key2: Wrapped<T>,
-      @unique key3: T?,
-      @packed @unique key4: Wrapped<T>?,
+      @unique key2: T?,
+    }
+    export Item<int64> item;
+  "#,
+  )
+  .unwrap();
+  let output = compile(&ast).unwrap();
+  println!("{}", output);
+}
+
+/// Don't allow indexes on packed fields, yet
+#[test]
+fn index_constraints_case_1b() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+    type Item<T> {
+      @unique key1: T,
+      @unique @packed key2: Wrapped<T>,
     }
     type Wrapped<T> {
       inner: T,
@@ -49,8 +67,10 @@ fn index_constraints_case_1() {
   "#,
   )
   .unwrap();
-  let output = compile(&ast).unwrap();
-  println!("{}", output);
+  assert!(compile(&ast)
+    .unwrap_err()
+    .to_string()
+    .ends_with("indexes are only allowed on primitive fields"));
 }
 
 #[test]
