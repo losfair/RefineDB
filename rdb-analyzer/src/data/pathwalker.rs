@@ -22,6 +22,7 @@ pub enum PathWalkerError {
   NotSet,
 }
 
+#[derive(Clone)]
 pub struct PathWalker<'a> {
   /// The "actual" storage node, with subspace references resolved.
   node: &'a StorageNode,
@@ -75,29 +76,46 @@ impl<'a> PathWalker<'a> {
 }
 
 impl<'a> PathWalker<'a> {
-  pub fn generate_key(&self) -> Vec<u8> {
+  fn generate_key_raw(&self) -> Vec<&[u8]> {
     let mut components: Vec<&[u8]> = vec![];
-    let mut len = 0usize;
 
     // The leaf node should always have its key component appended
     components.push(&self.key);
-    len += self.key.len();
 
     let mut link = self.link.as_ref();
 
     while let Some(x) = link {
       if !x.should_flatten {
         components.push(&x.key);
-        len += x.key.len();
       }
       link = x.link.as_ref();
     }
+    components.reverse();
+    components
+  }
+
+  pub fn node(&self) -> &'a StorageNode {
+    self.node
+  }
+
+  pub fn generate_key(&self) -> Vec<u8> {
+    let components = self.generate_key_raw();
+    let len = components.iter().fold(0, |a, b| a + b.len());
     let mut key = Vec::with_capacity(len);
     for c in components.iter().rev() {
       key.extend_from_slice(*c);
     }
     assert_eq!(key.len(), len);
     key
+  }
+
+  pub fn generate_key_pretty(&self) -> String {
+    return self
+      .generate_key_raw()
+      .iter()
+      .map(|x| format!("[{}]", base64::encode(x)))
+      .collect::<Vec<_>>()
+      .join(" ");
   }
 
   pub fn enter_field(self: &Arc<Self>, field_name: &str) -> Result<Arc<Self>> {
