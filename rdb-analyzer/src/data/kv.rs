@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 #[async_trait]
-pub trait KeyValueStore {
+pub trait KeyValueStore: Send + Sync {
   async fn begin_transaction(&self) -> Result<Box<dyn KvTransaction>>;
 }
 
@@ -18,7 +18,7 @@ pub trait KvTransaction: Send + Sync {
 
 #[async_trait]
 pub trait KvKeyIterator: Send + Sync {
-  async fn next(&self) -> Result<Option<Vec<u8>>>;
+  async fn next(&mut self) -> Result<Option<Vec<u8>>>;
 }
 
 #[derive(Error, Debug)]
