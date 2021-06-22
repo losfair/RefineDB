@@ -1,6 +1,6 @@
 # RefineDB
 
-A strongly-typed record layer for any transactional key-value database.
+A strongly-typed schema layer for any transactional key-value database.
 
 Currently supported backends: [FoundationDB](https://github.com/apple/foundationdb/), [TiKV](https://github.com/tikv/tikv). 
 
@@ -32,7 +32,7 @@ The primitive types are:
 - `bytes`: Byte array.
 - `set<T>`: A set with element type `T`.
 
-Note that *recursive types* are allowed and you can actually construct something like a binary tree:
+*Recursive types* are allowed and you can actually construct something like a binary tree:
 
 ```
 type BinaryTree<T> {
@@ -43,30 +43,14 @@ type BinaryTree<T> {
 export BinaryTree<int64> data;
 ```
 
-But currently recursive types are represented using key subspaces and the performance might be suboptimal.
+Note that recursive types are represented using key subspaces, and the performance might be suboptimal if your query path includes
+a lot of recursive types (RefineDB only flattens the query path for non-recursive types).
 
 Sum types are nice to have too, but I haven't implemented it yet.
 
-## The query language
+## Queries: the TreeWalker DFG VM
 
-RefineDB has a custom, simple query language. For example, for the following schema:
-
-```
-type Item {
-  @unique
-  a: int64,
-  b: string,
-}
-export set<Item> items;
-```
-
-To get the value of `b` in the member of set `items` where `a = 42`, the query is:
-
-```
-.items[a = 42].b
-```
-
-Note that strings in the query should be escaped the same way as in JSON.
+Queries on RefineDB are encoded in a custom bytecode format called the *TreeWalker DFG*.
 
 ## Storage plan and schema migration
 
@@ -76,3 +60,11 @@ schemas are just "views" of the underlying data structure and schema changes are
 During a migration, added fields are automatically assigned new storage keys, and removed fields will not be auto-deleted from
 the storage (garbage collection is not yet implemented). This allows multiple schema versions to co-exist and the client can
 choose which schema version to use.
+
+## Design docs
+
+[Storage](design/storage.md)
+
+[TreeWalker](design/treewalker.md)
+
+[RefineQL](design/refineql.md)

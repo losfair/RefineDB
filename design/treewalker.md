@@ -1,3 +1,5 @@
-# RefineDB TreeWalker VM
+# TreeWalker
 
-The TreeWalker VM is a massively concurrent data flow graph virtual machine for querying RefineDB.
+Underlying [RefineQL](/design/refineql.md), the TreeWalker VM is a massively concurrent data flow virtual machine for querying RefineDB.
+
+Implementation is at `rdb-analyzer/src/data/treewalker`.
