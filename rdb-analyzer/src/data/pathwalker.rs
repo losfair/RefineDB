@@ -102,7 +102,7 @@ impl<'a> PathWalker<'a> {
     let components = self.generate_key_raw();
     let len = components.iter().fold(0, |a, b| a + b.len());
     let mut key = Vec::with_capacity(len);
-    for c in components.iter().rev() {
+    for c in components.iter() {
       key.extend_from_slice(*c);
     }
     assert_eq!(key.len(), len);
@@ -166,7 +166,19 @@ impl<'a> PathWalker<'a> {
       .ok_or_else(|| PathWalkerError::NotSet)?;
 
     let mut key = self.generate_key();
-    key.push(0x02u8);
+    key.push(0x01u8);
+    Ok(key)
+  }
+
+  pub fn set_data_prefix(&self) -> Result<Vec<u8>> {
+    self
+      .node
+      .set
+      .as_ref()
+      .ok_or_else(|| PathWalkerError::NotSet)?;
+
+    let mut key = self.generate_key();
+    key.push(0x00u8);
     Ok(key)
   }
 
