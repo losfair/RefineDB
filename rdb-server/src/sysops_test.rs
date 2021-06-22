@@ -36,3 +36,13 @@ fn check_sysop_add_namespace() {
 
   tyck_sysop(&schema, &sysop_add_namespace(&schema));
 }
+
+#[test]
+fn check_sysop_delete_namespace() {
+  use crate::sysops::sysop_delete_namespace;
+
+  let _ = pretty_env_logger::try_init();
+  let schema = get_schema();
+
+  tyck_sysop(&schema, &sysop_delete_namespace(&schema));
+}

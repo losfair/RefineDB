@@ -44,3 +44,31 @@ pub fn sysop_add_namespace(schema: &CompiledSchema) -> TwScript {
     ],
   }
 }
+
+pub fn sysop_delete_namespace(schema: &CompiledSchema) -> TwScript {
+  TwScript {
+    graphs: vec![TwGraph {
+      nodes: vec![
+        (TwGraphNode::LoadParam(0), vec![]),      // 0
+        (TwGraphNode::LoadParam(1), vec![]),      // 1 namespace_id
+        (TwGraphNode::GetField(0), vec![0]),      // 2 <root>.system
+        (TwGraphNode::GetField(1), vec![2]),      // 3 <root>.system.namespaces
+        (TwGraphNode::DeleteFromSet, vec![1, 3]), // 4
+      ],
+      output: None,
+      effects: vec![],
+      output_type: None,
+      param_types: vec![0, 1],
+    }],
+    entry: 0,
+    consts: vec![VmConst::Set(VmConstSetValue {
+      member_ty: "Deployment<>".into(),
+      members: vec![],
+    })],
+    idents: vec!["system".into(), "namespaces".into()],
+    types: vec![
+      VmType::<String>::from(schema),
+      VmType::Primitive(PrimitiveType::String),
+    ],
+  }
+}
