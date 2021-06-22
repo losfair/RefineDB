@@ -219,6 +219,7 @@ impl<'a> VmType<&'a str> {
 pub enum VmConst {
   Primitive(PrimitiveValue),
   Table(VmConstTableValue),
+  Set(VmConstSetValue),
 
   Bool(bool),
 
@@ -247,6 +248,8 @@ pub enum VmValueError {
   IncompatibleFieldAndValueType(String, String),
   #[error("missing field `{0}` of type `{1}`")]
   MissingField(Arc<str>, Arc<str>),
+  #[error("primary key not found in a set member type")]
+  MissingPrimaryKey,
 }
 
 impl<'a> VmValue<'a> {
@@ -288,6 +291,49 @@ impl<'a> VmValue<'a> {
         Ok(Self::Table(VmTableValue {
           ty: &*ty.name,
           kind: VmTableValueKind::Fresh(fields),
+        }))
+      }
+      VmConst::Set(x) => {
+        let member_ty = schema
+          .types
+          .get(x.member_ty.as_str())
+          .ok_or_else(|| VmValueError::TypeNotFound(x.member_ty.clone()))?;
+        let member_ty = VmType::Table(VmTableType {
+          name: &*member_ty.name,
+        });
+        let (primary_key, _) = VmType::Set(VmSetType {
+          ty: Box::new(member_ty.clone()),
+        })
+        .primary_key(schema)
+        .ok_or_else(|| VmValueError::MissingPrimaryKey)?;
+        let mut members = BTreeMap::new();
+        for member in &x.members {
+          let member = Self::from_const(schema, member)?;
+          let member_actual_ty = VmType::from(&member);
+          if !member_ty.is_covariant_from(&member_actual_ty) {
+            return Err(
+              VmValueError::IncompatibleFieldAndValueType(
+                format!("{:?}", member_ty),
+                format!("{:?}", member_actual_ty),
+              )
+              .into(),
+            );
+          }
+
+          // XXX: We checked covariance above but is it enough?
+          let primary_key_value = match &member.unwrap_table().kind {
+            VmTableValueKind::Fresh(x) => x
+              .get(primary_key)
+              .unwrap()
+              .unwrap_primitive()
+              .serialize_for_key_component(),
+            _ => unreachable!(),
+          };
+          members.insert(primary_key_value.to_vec(), Arc::new(member));
+        }
+        Ok(Self::Set(VmSetValue {
+          member_ty,
+          kind: VmSetValueKind::Fresh(members),
         }))
       }
       VmConst::Null => Ok(Self::Null),
