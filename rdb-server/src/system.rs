@@ -1,7 +1,7 @@
 use bumpalo::Bump;
 use console::Style;
 use rdb_analyzer::{
-  data::kv::KeyValueStore,
+  data::{fixup::migrate_schema, kv::KeyValueStore},
   schema::{
     compile::{compile, CompiledSchema},
     grammar::parse,
@@ -19,7 +19,11 @@ pub struct SystemSchema {
 const SCHEMA: &str = include_str!("./system_schema.rschema");
 
 impl SystemSchema {
-  pub async fn new(migration_hash: Option<String>, meta_store: &dyn KeyValueStore) -> Self {
+  pub async fn new(
+    migration_hash: Option<String>,
+    store: &dyn KeyValueStore,
+    meta_store: &dyn KeyValueStore,
+  ) -> Self {
     let schema = compile(&parse(&Bump::new(), SCHEMA).unwrap()).unwrap();
     let txn = meta_store.begin_transaction().await.unwrap();
     let old_schema_text = txn
@@ -58,6 +62,7 @@ impl SystemSchema {
           std::process::abort();
         }
         log::warn!("Applying schema migration.");
+        migrate_schema(&schema, &new_plan, store).await.unwrap();
         txn.put(b"schema", SCHEMA.as_bytes()).await.unwrap();
         txn
           .put(b"plan", &new_plan.serialize_compressed().unwrap())
@@ -72,6 +77,7 @@ impl SystemSchema {
       let new_plan =
         generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
       log::warn!("Creating system schema.");
+      migrate_schema(&schema, &new_plan, store).await.unwrap();
       txn.put(b"schema", SCHEMA.as_bytes()).await.unwrap();
       txn
         .put(b"plan", &new_plan.serialize_compressed().unwrap())
@@ -97,8 +103,8 @@ fn print_diff(plan1: &StoragePlan, plan2: &StoragePlan) {
     }
   }
 
-  let plan1 = serde_yaml::to_string(plan1).unwrap();
-  let plan2 = serde_yaml::to_string(plan2).unwrap();
+  let plan1 = serde_yaml::to_string(&StoragePlan::<String>::from(plan1)).unwrap();
+  let plan2 = serde_yaml::to_string(&StoragePlan::<String>::from(plan2)).unwrap();
   let diff = TextDiff::from_lines(&plan1, &plan2);
   for (idx, group) in diff.grouped_ops(3).iter().enumerate() {
     if idx > 0 {
