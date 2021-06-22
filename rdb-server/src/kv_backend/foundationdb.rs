@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, ops::Range, sync::Arc};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -15,6 +15,7 @@ pub struct FdbTxn {
   inner: Arc<Transaction>,
   prefix: Arc<[u8]>,
   write_buffer: Mutex<BTreeMap<Vec<u8>, Option<Vec<u8>>>>,
+  range_deletion_buffer: Mutex<Vec<Range<Vec<u8>>>>,
 }
 
 impl FdbKvStore {
@@ -34,6 +35,7 @@ impl KeyValueStore for FdbKvStore {
       inner: Arc::new(txn),
       prefix: self.prefix.clone(),
       write_buffer: Mutex::new(BTreeMap::new()),
+      range_deletion_buffer: Mutex::new(Vec::new()),
     }))
   }
 }
@@ -104,6 +106,9 @@ impl KvTransaction for FdbTxn {
         self.inner.clear(&k);
       }
     }
+    for x in self.range_deletion_buffer.into_inner() {
+      self.inner.clear_range(&x.start, &x.end);
+    }
     Arc::try_unwrap(self.inner)
       .map_err(|_| {
         log::error!("some iterators are not dropped at commit time");
@@ -120,6 +125,15 @@ impl KvTransaction for FdbTxn {
         }
       })
       .map(|_| ())
+  }
+
+  async fn delete_range(&self, start: &[u8], end: &[u8]) -> Result<()> {
+    self
+      .range_deletion_buffer
+      .lock()
+      .await
+      .push(start.to_vec()..end.to_vec());
+    Ok(())
   }
 }
 
