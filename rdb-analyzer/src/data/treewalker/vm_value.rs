@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
   data::{pathwalker::PathWalker, value::PrimitiveValue},
-  schema::compile::{CompiledSchema, FieldType, PrimitiveType},
+  schema::compile::{CompiledSchema, FieldAnnotationList, FieldType, PrimitiveType},
 };
 
 #[derive(Debug)]
@@ -45,7 +45,7 @@ pub struct VmSetValue<'a> {
 #[derive(Debug)]
 pub enum VmSetValueKind<'a> {
   Resident(Arc<PathWalker<'a>>),
-  Fresh(Vec<Arc<VmValue<'a>>>),
+  Fresh(BTreeMap<Vec<u8>, Arc<VmValue<'a>>>),
 }
 
 #[derive(Debug)]
@@ -197,13 +197,28 @@ impl<'a> VmType<&'a str> {
       false
     }
   }
+
+  pub fn primary_key(&self, schema: &'a CompiledSchema) -> Option<(&'a str, &'a FieldType)> {
+    match self {
+      VmType::Set(x) => match &*x.ty {
+        VmType::Table(x) => {
+          let specialized_ty = schema.types.get(x.name)?;
+          specialized_ty
+            .fields
+            .iter()
+            .find_map(|(name, (ty, ann))| ann.as_slice().is_primary().then(|| (&**name, ty)))
+        }
+        _ => None,
+      },
+      _ => None,
+    }
+  }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum VmConst {
   Primitive(PrimitiveValue),
   Table(VmConstTableValue),
-  Set(VmConstSetValue),
 
   Bool(bool),
 
@@ -276,35 +291,28 @@ impl<'a> VmValue<'a> {
         }))
       }
       VmConst::Null => Ok(Self::Null),
-      VmConst::Set(x) => {
-        let member_ty = schema
-          .types
-          .get(x.member_ty.as_str())
-          .ok_or_else(|| VmValueError::TypeNotFound(x.member_ty.clone()))?;
-        let member_ty = VmType::Table(VmTableType {
-          name: &*member_ty.name,
-        });
-        let mut members = Vec::with_capacity(x.members.len());
-        for member in &x.members {
-          let member = Self::from_const(schema, member)?;
-          let member_actual_ty = VmType::from(&member);
-          if !member_ty.is_covariant_from(&member_actual_ty) {
-            return Err(
-              VmValueError::IncompatibleFieldAndValueType(
-                format!("{:?}", member_ty),
-                format!("{:?}", member_actual_ty),
-              )
-              .into(),
-            );
-          }
-          members.push(Arc::new(member));
-        }
-        Ok(Self::Set(VmSetValue {
-          member_ty,
-          kind: VmSetValueKind::Fresh(members),
-        }))
-      }
       VmConst::Bool(x) => Ok(Self::Bool(*x)),
+    }
+  }
+
+  pub fn unwrap_table<'b>(&'b self) -> &'b VmTableValue<'a> {
+    match self {
+      VmValue::Table(x) => x,
+      _ => panic!("unwrap_table: got non-table type {:?}", self),
+    }
+  }
+
+  pub fn unwrap_set<'b>(&'b self) -> &'b VmSetValue<'a> {
+    match self {
+      VmValue::Set(x) => x,
+      _ => panic!("unwrap_set: got non-set type {:?}", self),
+    }
+  }
+
+  pub fn unwrap_primitive<'b>(&'b self) -> &'b PrimitiveValue {
+    match self {
+      VmValue::Primitive(x) => x,
+      _ => panic!("unwrap_primitive: got non-primitive type {:?}", self),
     }
   }
 }
