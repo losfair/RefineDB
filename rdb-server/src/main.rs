@@ -15,7 +15,11 @@ use crate::{
 mod kv_backend;
 mod opt;
 mod state;
+mod sysops;
 mod system;
+
+#[cfg(test)]
+mod sysops_test;
 
 fn main() {
   pretty_env_logger::init_timed();

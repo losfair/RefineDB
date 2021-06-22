@@ -5,7 +5,7 @@ type System {
 type Namespace {
   @primary
   id: string,
-  current_deployment: Deployment,
+  current_deployment: Deployment?,
   all_deployments: set<Deployment>,
 }
 

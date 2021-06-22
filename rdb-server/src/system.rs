@@ -16,7 +16,7 @@ pub struct SystemSchema {
   pub plan: StoragePlan,
 }
 
-const SCHEMA: &str = include_str!("./system_schema.rschema");
+pub const SCHEMA: &str = include_str!("./system_schema.rschema");
 
 impl SystemSchema {
   pub async fn new(
