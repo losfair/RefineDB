@@ -291,7 +291,7 @@ fn typeck_set_point_get() {
         (TwGraphNode::LoadParam(0), vec![]),         // 0
         (TwGraphNode::LoadConst(0), vec![]),         // 1
         (TwGraphNode::GetField(0), vec![0]),         // 2
-        (TwGraphNode::GetSetElement(1), vec![1, 2]), // 3
+        (TwGraphNode::GetSetElement, vec![1, 2]),    // 3
         (TwGraphNode::GetField(2), vec![3]),         // 4
         (TwGraphNode::GetField(3), vec![4]),         // 5
         (TwGraphNode::CreateMap, vec![]),            // 6

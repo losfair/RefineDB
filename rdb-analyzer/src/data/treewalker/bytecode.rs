@@ -54,7 +54,7 @@ pub enum TwGraphNode {
   /// Map
   CreateMap,
 
-  /// (Map | Table<T> -> T
+  /// (Map | Table<T>) -> T
   ///
   /// Const param: ident
   GetField(u32),
@@ -64,7 +64,7 @@ pub enum TwGraphNode {
   /// Point-get on a set.
   ///
   /// Const param: ident
-  GetSetElement(u32),
+  GetSetElement,
 
   /// U (subgraph parameter) -> Set<T> -> T
   ///
@@ -89,6 +89,14 @@ pub enum TwGraphNode {
   ///
   /// This is an effect node.
   InsertIntoSet,
+
+  /// T::PrimaryKeyValue -> Set<T> -> ()
+  ///
+  /// Point-delete on a set.
+  /// This is an effect node.
+  ///
+  /// Const param: ident
+  DeleteFromSet,
 
   /// Map -> Map
   ///

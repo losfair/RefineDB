@@ -9,7 +9,7 @@ use crate::{
     bytecode::TwGraphNode,
     vm_value::{VmSetType, VmTableType},
   },
-  schema::compile::{FieldAnnotationList, FieldType},
+  schema::compile::FieldType,
 };
 
 use super::{bytecode::TwGraph, vm::TwVm, vm_value::VmType};
@@ -167,6 +167,27 @@ pub fn typeck_graph<'a>(vm: &TwVm<'a>, g: &TwGraph) -> Result<Vec<Option<VmType<
         }))
       }
       TwGraphNode::CreateMap => Some(VmType::Map(RedBlackTreeMapSync::new_sync())),
+      TwGraphNode::DeleteFromSet => {
+        let [primary_key_value_ty, set_ty] = validate_in_edges::<2>(node, in_edges, &types)?;
+        let set_member_ty = extract_set_element_type(set_ty)?;
+        let (key, _) = set_ty.primary_key(vm.schema).unwrap();
+        match set_member_ty {
+          VmType::Table(x) => {
+            let table_ty = vm
+              .schema
+              .types
+              .get(x.name)
+              .ok_or_else(|| TypeckError::TableTypeNotFound(x.name.to_string()))?;
+            let (field_ty, _) = table_ty.fields.get(key).ok_or_else(|| {
+              TypeckError::FieldNotPresentInTable(key.to_string(), table_ty.name.clone())
+            })?;
+            let field_ty = VmType::from(field_ty);
+            ensure_covariant(&field_ty, primary_key_value_ty)?;
+            None
+          }
+          _ => return Err(TypeckError::NotTable(format!("{:?}", set_member_ty)).into()),
+        }
+      }
       TwGraphNode::DeleteFromMap(key_index) => {
         let [map_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
         let key = vm
@@ -239,14 +260,10 @@ pub fn typeck_graph<'a>(vm: &TwVm<'a>, g: &TwGraph) -> Result<Vec<Option<VmType<
           _ => return Err(TypeckError::NotMapOrTable(format!("{:?}", map_or_table_ty)).into()),
         }
       }
-      TwGraphNode::GetSetElement(key_index) => {
+      TwGraphNode::GetSetElement => {
         let [primary_key_value_ty, set_ty] = validate_in_edges::<2>(node, in_edges, &types)?;
         let set_member_ty = extract_set_element_type(set_ty)?;
-        let key = vm
-          .script
-          .idents
-          .get(*key_index as usize)
-          .ok_or_else(|| TypeckError::IdentIndexOob)?;
+        let (key, _) = set_ty.primary_key(vm.schema).unwrap();
         match set_member_ty {
           VmType::Table(x) => {
             let table_ty = vm
@@ -254,12 +271,9 @@ pub fn typeck_graph<'a>(vm: &TwVm<'a>, g: &TwGraph) -> Result<Vec<Option<VmType<
               .types
               .get(x.name)
               .ok_or_else(|| TypeckError::TableTypeNotFound(x.name.to_string()))?;
-            let (field_ty, annotations) = table_ty.fields.get(key.as_str()).ok_or_else(|| {
-              TypeckError::FieldNotPresentInTable(key.clone(), table_ty.name.clone())
+            let (field_ty, _) = table_ty.fields.get(key).ok_or_else(|| {
+              TypeckError::FieldNotPresentInTable(key.to_string(), table_ty.name.clone())
             })?;
-            if !annotations.as_slice().is_primary() {
-              return Err(TypeckError::NotPrimaryKey(key.clone(), table_ty.name.clone()).into());
-            }
             let field_ty = VmType::from(field_ty);
             ensure_covariant(&field_ty, primary_key_value_ty)?;
             Some(set_member_ty.clone())

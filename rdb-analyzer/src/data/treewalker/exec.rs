@@ -202,7 +202,7 @@ impl<'a, 'b> Executor<'a, 'b> {
           _ => unreachable!(),
         }
       }
-      TwGraphNode::GetSetElement(_) => {
+      TwGraphNode::GetSetElement => {
         let primary_key_value = match &*params[0] {
           VmValue::Primitive(x) => x,
           _ => unreachable!(),
@@ -287,6 +287,35 @@ impl<'a, 'b> Executor<'a, 'b> {
         VmValue::Null => return Err(ExecError::NullUnwrapped.into()),
         _ => Some(params[0].clone()),
       },
+      TwGraphNode::DeleteFromSet => {
+        let primary_key_value = match &*params[0] {
+          VmValue::Primitive(x) => x,
+          _ => unreachable!(),
+        };
+        let set = match &*params[1] {
+          VmValue::Set(x) => x,
+          _ => unreachable!(),
+        };
+        match &set.kind {
+          VmSetValueKind::Resident(walker) => {
+            let primary_key_value_raw = primary_key_value.serialize_for_key_component();
+            let mut fast_scan_key = walker.set_fast_scan_prefix().unwrap();
+            fast_scan_key.extend_from_slice(&primary_key_value_raw);
+
+            let mut data_start_key = walker.set_data_prefix().unwrap();
+            data_start_key.extend_from_slice(&primary_key_value_raw);
+            data_start_key.push(0x00);
+
+            let mut data_end_key = data_start_key.clone();
+            *data_end_key.last_mut().unwrap() = 0x01;
+
+            txn.delete(&fast_scan_key).await?;
+            txn.delete_range(&data_start_key, &data_end_key).await?;
+            None
+          }
+          VmSetValueKind::Fresh(_) => return Err(ExecError::FreshTableOrSetNotSupported.into()),
+        }
+      }
       _ => return Err(ExecError::NotImplemented(format!("{:?}", n)).into()),
     })
   }

@@ -138,6 +138,37 @@ impl KvTransaction for MockTransaction {
     log::trace!("[txn {}] commit OK", self.id);
     Ok(())
   }
+
+  async fn delete_range(&self, start: &[u8], end: &[u8]) -> Result<()> {
+    log::trace!(
+      "[txn {}] delete_range {} {}",
+      self.id,
+      base64::encode(start),
+      base64::encode(end)
+    );
+    let mut buffer = self.buffer.lock().await;
+    let mut modified = self.modified.lock().await;
+
+    let mut to_delete = vec![];
+    for (k, _) in buffer.range(start.to_vec()..end.to_vec()) {
+      to_delete.push(k.clone());
+    }
+
+    log::trace!(
+      "[txn {}] deleted {} keys in range",
+      self.id,
+      to_delete.len()
+    );
+
+    for key in to_delete {
+      let version = buffer.get(&key).map(|x| x.1).unwrap_or_default();
+      buffer.insert_mut(key.clone(), (None, version + 1));
+      if !modified.contains_key(&key) {
+        modified.insert(key, version);
+      }
+    }
+    Ok(())
+  }
 }
 
 #[async_trait]
