@@ -164,9 +164,13 @@ impl<'a> PathWalker<'a> {
       .set
       .as_ref()
       .ok_or_else(|| PathWalkerError::NotSet)?;
-    let primary_key_bytes = primary_key.serialize_for_key_component();
 
-    let dynamic_key = KeyCow::Owned(Arc::from(primary_key_bytes.as_slice()));
+    // 0x00 - data
+    // 0x01 - index
+    let mut dynamic_key_bytes = vec![0x00u8];
+    dynamic_key_bytes.extend_from_slice(&primary_key.serialize_for_key_component());
+
+    let dynamic_key = KeyCow::Owned(Arc::from(dynamic_key_bytes.as_slice()));
 
     // The set key.
     let intermediate = Arc::new(Self {

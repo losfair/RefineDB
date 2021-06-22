@@ -109,7 +109,7 @@ fn basic() {
       .unwrap()
       .generate_key()
       .len(),
-    30
+    31
   );
   assert_eq!(
     PathWalker::from_export(&plan, "items")
@@ -120,7 +120,7 @@ fn basic() {
       .unwrap()
       .generate_key()
       .len(),
-    30
+    31
   );
   assert_eq!(
     PathWalker::from_export(&plan, "recursive_items")
@@ -131,7 +131,7 @@ fn basic() {
       .unwrap()
       .generate_key()
       .len(),
-    30
+    31
   );
   assert_eq!(
     PathWalker::from_export(&plan, "recursive_items")
@@ -142,7 +142,7 @@ fn basic() {
       .unwrap()
       .generate_key()
       .len(),
-    30
+    31
   );
   assert_eq!(
     PathWalker::from_export(&plan, "recursive_items")
@@ -155,29 +155,12 @@ fn basic() {
       .unwrap()
       .generate_key()
       .len(),
-    42
+    43
   );
   assert_eq!(
     PathWalker::from_export(&plan, "recursive_items")
       .unwrap()
       .enter_set(&PrimitiveValue::String("test".into()))
-      .unwrap()
-      .enter_field("recursive")
-      .unwrap()
-      .enter_field("value")
-      .unwrap()
-      .enter_field("start")
-      .unwrap()
-      .generate_key()
-      .len(),
-    42
-  );
-  assert_eq!(
-    PathWalker::from_export(&plan, "recursive_items")
-      .unwrap()
-      .enter_set(&PrimitiveValue::String("test".into()))
-      .unwrap()
-      .enter_field("recursive")
       .unwrap()
       .enter_field("recursive")
       .unwrap()
@@ -187,7 +170,24 @@ fn basic() {
       .unwrap()
       .generate_key()
       .len(),
-    54
+    43
+  );
+  assert_eq!(
+    PathWalker::from_export(&plan, "recursive_items")
+      .unwrap()
+      .enter_set(&PrimitiveValue::String("test".into()))
+      .unwrap()
+      .enter_field("recursive")
+      .unwrap()
+      .enter_field("recursive")
+      .unwrap()
+      .enter_field("value")
+      .unwrap()
+      .enter_field("start")
+      .unwrap()
+      .generate_key()
+      .len(),
+    55
   );
   for (export_name, export_ty) in &schema.exports {
     print_path_examples(
