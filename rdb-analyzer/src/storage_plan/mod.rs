@@ -32,6 +32,9 @@ impl StoragePlan {
     snap::write::FrameEncoder::new(&mut buf).write_all(&serialized)?;
     Ok(buf)
   }
+  pub fn deserialize_compressed(data: &[u8]) -> Result<Self> {
+    Ok(rmp_serde::from_read(snap::read::FrameDecoder::new(data))?)
+  }
 }
 
 impl Display for StoragePlan {

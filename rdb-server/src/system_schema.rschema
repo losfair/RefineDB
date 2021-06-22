@@ -1,0 +1,19 @@
+type System {
+  namespaces: set<Namespace>,
+}
+
+type Namespace {
+  @primary
+  id: string,
+  current_deployment: Deployment,
+  all_deployments: set<Deployment>,
+}
+
+type Deployment {
+  @primary
+  id: string,
+  schema: string,
+  plan: string,
+}
+
+export System system;
