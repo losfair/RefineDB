@@ -55,13 +55,11 @@ impl PrimitiveValue {
               })
               .flatten(),
           )
-          .chain([0x00u8, 0x00u8].iter().copied()),
+          .chain([0x00u8].iter().copied()),
       ),
-      PrimitiveValue::String(x) => SmallVec::from_iter(
-        std::iter::once(0x02u8)
-          .chain(x.as_bytes().iter().copied())
-          .chain(std::iter::once(0x00u8)),
-      ),
+      PrimitiveValue::String(x) => {
+        SmallVec::from_iter(std::iter::once(0x02u8).chain(x.as_bytes().iter().copied()))
+      }
       PrimitiveValue::Int64(x) => {
         // Flip the top bit for order preservation.
         let x = (*x as u64) ^ TOP_BIT;

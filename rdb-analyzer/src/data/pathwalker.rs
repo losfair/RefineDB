@@ -158,7 +158,19 @@ impl<'a> PathWalker<'a> {
     }
   }
 
-  pub fn enter_set(self: &Arc<Self>, primary_key: &PrimitiveValue) -> Result<Arc<Self>> {
+  pub fn set_fast_scan_prefix(&self) -> Result<Vec<u8>> {
+    self
+      .node
+      .set
+      .as_ref()
+      .ok_or_else(|| PathWalkerError::NotSet)?;
+
+    let mut key = self.generate_key();
+    key.push(0x02u8);
+    Ok(key)
+  }
+
+  pub fn enter_set_raw(self: &Arc<Self>, primary_key: &[u8]) -> Result<Arc<Self>> {
     let set = &**self
       .node
       .set
@@ -166,9 +178,11 @@ impl<'a> PathWalker<'a> {
       .ok_or_else(|| PathWalkerError::NotSet)?;
 
     // 0x00 - data
-    // 0x01 - index
+    // 0x01 - key only
+    // 0x02 - index
     let mut dynamic_key_bytes = vec![0x00u8];
-    dynamic_key_bytes.extend_from_slice(&primary_key.serialize_for_key_component());
+    dynamic_key_bytes.extend_from_slice(primary_key);
+    dynamic_key_bytes.push(0x00u8);
 
     let dynamic_key = KeyCow::Owned(Arc::from(dynamic_key_bytes.as_slice()));
 
@@ -187,5 +201,9 @@ impl<'a> PathWalker<'a> {
       link: Some(intermediate),
       should_flatten: true,
     }))
+  }
+
+  pub fn enter_set(self: &Arc<Self>, primary_key: &PrimitiveValue) -> Result<Arc<Self>> {
+    self.enter_set_raw(&primary_key.serialize_for_key_component())
   }
 }
