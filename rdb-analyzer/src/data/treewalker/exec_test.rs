@@ -189,3 +189,169 @@ async fn basic_exec() {
     _ => unreachable!(),
   };
 }
+
+#[tokio::test]
+async fn set_queries() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(
+    &alloc,
+    r#"
+  type Item {
+    @primary
+    id: string,
+    name: string,
+  }
+  export set<Item> some_item;
+  "#,
+  )
+  .unwrap();
+  let schema = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
+  println!(
+    "{}",
+    serde_yaml::to_string(&StoragePlan::<String>::from(&plan)).unwrap()
+  );
+  let script = TwScript {
+    graphs: vec![TwGraph {
+      nodes: vec![
+        (TwGraphNode::LoadParam(0), vec![]),         // 0
+        (TwGraphNode::LoadConst(0), vec![]),         // 1
+        (TwGraphNode::LoadConst(1), vec![]),         // 2
+        (TwGraphNode::CreateMap, vec![]),            // 3
+        (TwGraphNode::InsertIntoMap(1), vec![1, 3]), // 4
+        (TwGraphNode::InsertIntoMap(2), vec![2, 4]), // 5
+        (TwGraphNode::BuildTable(3), vec![5]),       // 6
+        (TwGraphNode::GetField(0), vec![0]),         // 7
+        (TwGraphNode::InsertIntoSet, vec![6, 7]),    // 8
+      ],
+      output: None,
+      effects: vec![],
+      output_type: None,
+      param_types: vec![0],
+    }],
+    entry: 0,
+    consts: vec![
+      VmConst::Primitive(PrimitiveValue::String("test_id".into())),
+      VmConst::Primitive(PrimitiveValue::String("test_name".into())),
+    ],
+    idents: vec![
+      "some_item".into(),
+      "id".into(),
+      "name".into(),
+      "Item<>".into(),
+    ],
+    types: vec![VmType::<String>::from(&schema)],
+  };
+  let vm = TwVm::new(&schema, &plan, &script).unwrap();
+  typeck_graph(&vm, &script.graphs[0]).unwrap();
+
+  let kv = MockKv::new();
+  migrate_schema(&schema, &plan, &kv).await.unwrap();
+  let executor = Executor::new_assume_typechecked(&vm, &kv);
+  executor
+    .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
+    .await
+    .unwrap();
+
+  let script = TwScript {
+    graphs: vec![TwGraph {
+      nodes: vec![
+        (TwGraphNode::LoadParam(0), vec![]),      // 0
+        (TwGraphNode::LoadConst(0), vec![]),      // 1
+        (TwGraphNode::GetField(0), vec![0]),      // 2
+        (TwGraphNode::GetSetElement, vec![1, 2]), // 3
+        (TwGraphNode::GetField(1), vec![3]),      // 4
+      ],
+      output: Some(4),
+      effects: vec![],
+      output_type: Some(1),
+      param_types: vec![0],
+    }],
+    entry: 0,
+    consts: vec![VmConst::Primitive(PrimitiveValue::String("test_id".into()))],
+    idents: vec!["some_item".into(), "name".into()],
+    types: vec![
+      VmType::<String>::from(&schema),
+      VmType::Primitive(PrimitiveType::String),
+    ],
+  };
+  let vm = TwVm::new(&schema, &plan, &script).unwrap();
+  typeck_graph(&vm, &script.graphs[0]).unwrap();
+  let executor = Executor::new_assume_typechecked(&vm, &kv);
+  let output = executor
+    .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
+    .await
+    .unwrap();
+  println!("{:?}", output);
+  match &*output.unwrap() {
+    VmValue::Primitive(PrimitiveValue::String(x)) if x == "test_name" => {}
+    _ => unreachable!(),
+  };
+
+  let script = TwScript {
+    graphs: vec![TwGraph {
+      nodes: vec![
+        (TwGraphNode::LoadParam(0), vec![]),      // 0
+        (TwGraphNode::LoadConst(0), vec![]),      // 1
+        (TwGraphNode::GetField(0), vec![0]),      // 2
+        (TwGraphNode::DeleteFromSet, vec![1, 2]), // 3
+      ],
+      output: None,
+      effects: vec![],
+      output_type: None,
+      param_types: vec![0],
+    }],
+    entry: 0,
+    consts: vec![VmConst::Primitive(PrimitiveValue::String("test_id".into()))],
+    idents: vec!["some_item".into(), "name".into()],
+    types: vec![
+      VmType::<String>::from(&schema),
+      VmType::Primitive(PrimitiveType::String),
+    ],
+  };
+  let vm = TwVm::new(&schema, &plan, &script).unwrap();
+  typeck_graph(&vm, &script.graphs[0]).unwrap();
+  let executor = Executor::new_assume_typechecked(&vm, &kv);
+  executor
+    .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
+    .await
+    .unwrap();
+
+  let script = TwScript {
+    graphs: vec![TwGraph {
+      nodes: vec![
+        (TwGraphNode::LoadParam(0), vec![]),      // 0
+        (TwGraphNode::LoadConst(0), vec![]),      // 1
+        (TwGraphNode::GetField(0), vec![0]),      // 2
+        (TwGraphNode::GetSetElement, vec![1, 2]), // 3
+        (TwGraphNode::GetField(1), vec![3]),      // 4
+      ],
+      output: Some(4),
+      effects: vec![],
+      output_type: Some(1),
+      param_types: vec![0],
+    }],
+    entry: 0,
+    consts: vec![VmConst::Primitive(PrimitiveValue::String("test_id".into()))],
+    idents: vec!["some_item".into(), "name".into()],
+    types: vec![
+      VmType::<String>::from(&schema),
+      VmType::Primitive(PrimitiveType::String),
+    ],
+  };
+  let vm = TwVm::new(&schema, &plan, &script).unwrap();
+  typeck_graph(&vm, &script.graphs[0]).unwrap();
+  let executor = Executor::new_assume_typechecked(&vm, &kv);
+  let output = executor
+    .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
+    .await
+    .unwrap();
+  println!("{:?}", output);
+  match &*output.unwrap() {
+    VmValue::Null => {}
+    _ => unreachable!(),
+  };
+}
