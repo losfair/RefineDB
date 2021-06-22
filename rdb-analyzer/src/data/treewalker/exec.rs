@@ -1,11 +1,18 @@
-use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
+use std::{
+  collections::{BTreeMap, HashMap},
+  future::Future,
+  pin::Pin,
+  sync::Arc,
+};
 
 use anyhow::Result;
+use async_recursion::async_recursion;
 use rpds::RedBlackTreeMapSync;
 
 use crate::{
   data::{
     kv::{KeyValueStore, KvTransaction},
+    pathwalker::PathWalker,
     treewalker::vm_value::{
       VmMapValue, VmSetValue, VmSetValueKind, VmTableValue, VmTableValueKind, VmType, VmValue,
     },
@@ -42,6 +49,9 @@ pub enum ExecError {
 
   #[error("null value unwrappped")]
   NullUnwrapped,
+
+  #[error("operation is not supported on fresh tables or sets")]
+  FreshTableOrSetNotSupported,
 }
 
 impl<'a, 'b> Executor<'a, 'b> {
@@ -125,6 +135,9 @@ impl<'a, 'b> Executor<'a, 'b> {
         }
       }
     }
+
+    drop(futures);
+    txn.commit().await?;
     Ok(ret)
   }
 
@@ -143,9 +156,20 @@ impl<'a, 'b> Executor<'a, 'b> {
           _ => unreachable!(),
         };
         let ty = self.vm.script.idents[*table_ty as usize].as_str();
+        let mut table: BTreeMap<&'a str, Arc<VmValue<'a>>> = BTreeMap::new();
+        let specialized_ty = self.vm.schema.types.get(ty).unwrap();
+        for (field, _) in &specialized_ty.fields {
+          table.insert(
+            &**field,
+            map
+              .get(&**field)
+              .cloned()
+              .unwrap_or_else(|| Arc::new(VmValue::Null)),
+          );
+        }
         Some(Arc::new(VmValue::Table(VmTableValue {
           ty,
-          kind: VmTableValueKind::Fresh(map.iter().map(|(k, v)| (*k, v.clone())).collect()),
+          kind: VmTableValueKind::Fresh(table),
         })))
       }
       TwGraphNode::CreateMap => Some(Arc::new(VmValue::Map(VmMapValue {
@@ -174,47 +198,7 @@ impl<'a, 'b> Executor<'a, 'b> {
               .cloned()
               .unwrap_or_else(|| Arc::new(VmValue::Null)),
           ),
-          VmValue::Table(table) => {
-            let specialized_ty = self.vm.schema.types.get(table.ty).unwrap();
-            let (field, _) = specialized_ty.fields.get(key.as_str()).unwrap();
-            match &table.kind {
-              VmTableValueKind::Resident(walker) => {
-                let walker = walker.enter_field(key.as_str()).unwrap();
-
-                match field.optional_unwrapped() {
-                  FieldType::Primitive(_) => {
-                    // This is a primitive type - we cannot defer any more.
-                    // Let's load from the database.
-                    let key = walker.generate_key();
-                    let raw_data: Option<PrimitiveValue> = txn
-                      .get(&key)
-                      .await?
-                      .map(|x| rmp_serde::from_slice(&x))
-                      .transpose()?;
-                    Some(Arc::new(
-                      raw_data
-                        .map(VmValue::Primitive)
-                        .unwrap_or_else(|| VmValue::Null),
-                    ))
-                  }
-                  FieldType::Set(member_ty) => Some(Arc::new(VmValue::Set(VmSetValue {
-                    member_ty: VmType::from(&**member_ty),
-                    kind: VmSetValueKind::Resident(walker),
-                  }))),
-                  FieldType::Table(x) => Some(Arc::new(VmValue::Table(VmTableValue {
-                    ty: &**x,
-                    kind: VmTableValueKind::Resident(walker),
-                  }))),
-                  _ => unreachable!(),
-                }
-              }
-              VmTableValueKind::Fresh(_) => {
-                return Err(
-                  ExecError::NotImplemented("cannot get field on a fresh table".into()).into(),
-                )
-              }
-            }
-          }
+          VmValue::Table(table) => Some(self.read_table_element(txn, table, key).await?),
           _ => unreachable!(),
         }
       }
@@ -239,11 +223,7 @@ impl<'a, 'b> Executor<'a, 'b> {
               kind: VmTableValueKind::Resident(walker),
             })))
           }
-          VmSetValueKind::Fresh(_) => {
-            return Err(
-              ExecError::NotImplemented("cannot get element on a fresh set".into()).into(),
-            )
-          }
+          VmSetValueKind::Fresh(_) => return Err(ExecError::FreshTableOrSetNotSupported.into()),
         }
       }
       TwGraphNode::InsertIntoMap(key_index) => {
@@ -258,10 +238,44 @@ impl<'a, 'b> Executor<'a, 'b> {
       }
       TwGraphNode::InsertIntoSet => {
         // Effect node
+        let value = params[0].clone();
+        let (primary_key, _) = VmType::<&'a str>::from(&*params[1])
+          .primary_key(self.vm.schema)
+          .expect("inconsistency: primary key not found for set member");
+        let primary_key_value = self
+          .read_table_element(txn, value.unwrap_table(), primary_key)
+          .await?;
+        let set = params[1].unwrap_set();
+        let primary_key_value = primary_key_value
+          .unwrap_primitive()
+          .serialize_for_key_component();
+
+        match &set.kind {
+          VmSetValueKind::Resident(walker) => {
+            let walker = walker.enter_set_raw(&primary_key_value).unwrap();
+            self.walk_and_insert(txn, walker, value).await?;
+          }
+          VmSetValueKind::Fresh(_) => {
+            return Err(ExecError::FreshTableOrSetNotSupported.into());
+          }
+        }
+
         None
       }
-      TwGraphNode::InsertIntoTable(_) => {
+      TwGraphNode::InsertIntoTable(key_index) => {
         // Effect node
+        let key = self.vm.script.idents.get(*key_index as usize).unwrap();
+        let value = params[0].clone();
+        let table = params[1].unwrap_table();
+        match &table.kind {
+          VmTableValueKind::Resident(walker) => {
+            let walker = walker.enter_field(key.as_str()).unwrap();
+            self.walk_and_insert(txn, walker, value).await?;
+          }
+          VmTableValueKind::Fresh(_) => {
+            return Err(ExecError::FreshTableOrSetNotSupported.into());
+          }
+        }
         None
       }
       TwGraphNode::LoadConst(const_index) => {
@@ -275,6 +289,116 @@ impl<'a, 'b> Executor<'a, 'b> {
       },
       _ => return Err(ExecError::NotImplemented(format!("{:?}", n)).into()),
     })
+  }
+
+  async fn read_table_element(
+    &self,
+    txn: &dyn KvTransaction,
+    table: &VmTableValue<'a>,
+    key: &str,
+  ) -> Result<Arc<VmValue<'a>>> {
+    Ok(match &table.kind {
+      VmTableValueKind::Fresh(x) => x
+        .get(key)
+        .cloned()
+        .unwrap_or_else(|| Arc::new(VmValue::Null)),
+      VmTableValueKind::Resident(walker) => {
+        let specialized_ty = self.vm.schema.types.get(table.ty).unwrap();
+        let (field, _) = specialized_ty.fields.get(key).unwrap();
+        let walker = walker
+          .enter_field(key)
+          .expect("inconsistency: field not found in table");
+
+        match field.optional_unwrapped() {
+          FieldType::Primitive(_) => {
+            // This is a primitive type - we cannot defer any more.
+            // Let's load from the database.
+            let key = walker.generate_key();
+            let raw_data: Option<PrimitiveValue> = txn
+              .get(&key)
+              .await?
+              .map(|x| rmp_serde::from_slice(&x))
+              .transpose()?;
+            Arc::new(
+              raw_data
+                .map(VmValue::Primitive)
+                .unwrap_or_else(|| VmValue::Null),
+            )
+          }
+          FieldType::Set(member_ty) => Arc::new(VmValue::Set(VmSetValue {
+            member_ty: VmType::from(&**member_ty),
+            kind: VmSetValueKind::Resident(walker),
+          })),
+          FieldType::Table(x) => Arc::new(VmValue::Table(VmTableValue {
+            ty: &**x,
+            kind: VmTableValueKind::Resident(walker),
+          })),
+          _ => unreachable!(),
+        }
+      }
+    })
+  }
+
+  #[async_recursion]
+  async fn walk_and_insert(
+    &self,
+    txn: &dyn KvTransaction,
+    walker: Arc<PathWalker<'a>>,
+    value: Arc<VmValue<'a>>,
+  ) -> Result<()> {
+    match &*value {
+      VmValue::Null => {
+        txn.delete(&walker.generate_key()).await?;
+      }
+      VmValue::Primitive(x) => {
+        let value = rmp_serde::to_vec(x).unwrap();
+        txn.put(&walker.generate_key(), &value).await?;
+      }
+      VmValue::Set(x) => {
+        txn.put(&walker.generate_key(), &[]).await?;
+        match &x.kind {
+          VmSetValueKind::Fresh(members) => {
+            // Need to clone this. Otherwise `async_recursion` errors
+            let members = members.clone();
+            for (primary_key_value, member) in members {
+              let mut fast_scan_key = walker.set_fast_scan_prefix().unwrap();
+              fast_scan_key.extend_from_slice(&primary_key_value);
+              txn.put(&fast_scan_key, &[]).await?;
+
+              let walker = walker.enter_set_raw(&primary_key_value).unwrap();
+              self.walk_and_insert(txn, walker, member).await?;
+            }
+          }
+          VmSetValueKind::Resident(_) => {
+            return Err(ExecError::NotImplemented("set copy is not implemented".into()).into())
+          }
+        }
+      }
+      VmValue::Table(x) => {
+        txn.put(&walker.generate_key(), &[]).await?;
+        match &x.kind {
+          VmTableValueKind::Fresh(fields) => {
+            // Need to clone this. Otherwise `async_recursion` errors
+            let fields = fields.clone();
+            for (k, v) in fields {
+              let walker = walker.enter_field(k).unwrap();
+              let v = v.clone();
+              self.walk_and_insert(txn, walker, v).await?;
+            }
+          }
+          VmTableValueKind::Resident(_) => {
+            return Err(ExecError::NotImplemented("table copy is not implemented".into()).into())
+          }
+        }
+      }
+      VmValue::Bool(_) | VmValue::Map(_) => {
+        panic!(
+          "inconsistency: walk_and_insert encountered non-storable type: {:?}",
+          value
+        );
+      }
+    }
+    Ok(())
   }
 }
 
