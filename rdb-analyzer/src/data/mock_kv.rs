@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use rpds::RedBlackTreeMapSync;
 use tokio::sync::Mutex;
 
-use super::kv::{KeyValueStore, KvError, KvTransaction};
+use super::kv::{KeyValueStore, KvError, KvKeyIterator, KvTransaction};
 use anyhow::Result;
 
 /// A mocked KV store that simulates MVCC with snapshot isolation.
@@ -21,6 +21,7 @@ pub struct MockKv {
 pub struct MockTransaction {
   id: u64,
   store: MockStore,
+  read_buffer: RedBlackTreeMapSync<Vec<u8>, (Option<Vec<u8>>, u64)>,
   buffer: Mutex<RedBlackTreeMapSync<Vec<u8>, (Option<Vec<u8>>, u64)>>,
   modified: Mutex<HashMap<Vec<u8>, u64>>,
 }
@@ -29,6 +30,12 @@ pub struct MockTransaction {
 struct MockStore {
   data: Arc<Mutex<RedBlackTreeMapSync<Vec<u8>, (Option<Vec<u8>>, u64)>>>,
   txn_count: Arc<AtomicU64>,
+}
+
+struct MockIterator {
+  map: RedBlackTreeMapSync<Vec<u8>, (Option<Vec<u8>>, u64)>,
+  current: Vec<u8>,
+  end: Vec<u8>,
 }
 
 impl MockKv {
@@ -51,10 +58,12 @@ impl MockKv {
 #[async_trait]
 impl KeyValueStore for MockKv {
   async fn begin_transaction(&self) -> Result<Box<dyn KvTransaction>> {
+    let buffer = self.store.data.lock().await.clone();
     Ok(Box::new(MockTransaction {
       id: self.store.txn_count.fetch_add(1, Ordering::SeqCst) + 1,
       store: self.store.clone(),
-      buffer: Mutex::new(self.store.data.lock().await.clone()),
+      read_buffer: buffer.clone(),
+      buffer: Mutex::new(buffer),
       modified: Mutex::new(HashMap::new()),
     }))
   }
@@ -66,9 +75,7 @@ impl KvTransaction for MockTransaction {
     log::trace!("[txn {}] get {}", self.id, base64::encode(key));
     Ok(
       self
-        .buffer
-        .lock()
-        .await
+        .read_buffer
         .get(key)
         .and_then(|x| x.0.as_ref())
         .cloned(),
@@ -104,12 +111,12 @@ impl KvTransaction for MockTransaction {
     Ok(())
   }
 
-  async fn scan_keys(
-    &self,
-    _start: &[u8],
-    _end: &[u8],
-  ) -> Result<Box<dyn super::kv::KvKeyIterator>> {
-    todo!()
+  async fn scan_keys(&self, start: &[u8], end: &[u8]) -> Result<Box<dyn KvKeyIterator>> {
+    Ok(Box::new(MockIterator {
+      map: self.buffer.lock().await.clone(),
+      current: start.to_vec(),
+      end: end.to_vec(),
+    }))
   }
 
   async fn commit(self: Box<Self>) -> Result<(), KvError> {
@@ -130,5 +137,24 @@ impl KvTransaction for MockTransaction {
     }
     log::trace!("[txn {}] commit OK", self.id);
     Ok(())
+  }
+}
+
+#[async_trait]
+impl KvKeyIterator for MockIterator {
+  async fn next(&mut self) -> Result<Option<Vec<u8>>> {
+    let mut range = self.map.range(self.current.clone()..self.end.clone());
+    loop {
+      if let Some((k, v)) = range.next() {
+        // Move to next
+        self.current = k.iter().copied().chain(std::iter::once(0x00u8)).collect();
+        match &v.0 {
+          Some(x) => break Ok(Some(x.clone())),
+          None => {}
+        }
+      } else {
+        break Ok(None);
+      }
+    }
   }
 }
