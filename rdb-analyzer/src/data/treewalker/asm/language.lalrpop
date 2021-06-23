@@ -33,6 +33,7 @@ Graph: Graph<'input> = {
 }
 
 Type: Type<'input> = {
+  Token<"schema"> => Type::Schema,
   Token<"int64"> => Type::Primitive(PrimitiveType::Int64),
   Token<"string"> => Type::Primitive(PrimitiveType::String),
   Token<"bytes"> => Type::Primitive(PrimitiveType::Bytes),
@@ -82,7 +83,7 @@ Expr: Expr<'input> = {
 ExprKind: ExprKind<'input> = {
   Token<"param"> Token<"("> <x:Identifier> Token<")"> => ExprKind::LoadParam(x),
   Token<"const"> Token<"("> <x:Literal> Token<")"> => ExprKind::LoadConst(x),
-  Token<"build_table"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> => ExprKind::BuildTable(x, y),
+  Token<"build_table"> Token<"("> <x:Type> Token<")"> <y:Identifier> => ExprKind::BuildTable(x, y),
   Token<"create_map"> => ExprKind::CreateMap,
   Token<"get_field"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> => ExprKind::GetField(x, y),
   Token<"point_get"> <x:Identifier> <y:Identifier> => ExprKind::GetSetElement(x, y),

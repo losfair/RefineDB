@@ -10,7 +10,7 @@ use crate::{
     pathwalker::PathWalker,
     treewalker::{
       bytecode::{TwGraph, TwGraphNode, TwScript},
-      exec::Executor,
+      exec::{generate_root_map, Executor},
       typeck::GlobalTyckContext,
       vm::TwVm,
       vm_value::{VmConst, VmType},
@@ -27,34 +27,6 @@ use crate::{
 use super::vm_value::{
   VmMapValue, VmSetValue, VmSetValueKind, VmTableValue, VmTableValueKind, VmValue,
 };
-
-fn root_map<'a>(schema: &'a CompiledSchema, plan: &'a StoragePlan) -> VmValue<'a> {
-  let mut m = RedBlackTreeMapSync::new_sync();
-  for (field_name, field_ty) in &schema.exports {
-    match field_ty {
-      FieldType::Table(x) => {
-        m.insert_mut(
-          &**field_name,
-          Arc::new(VmValue::Table(VmTableValue {
-            ty: &**x,
-            kind: VmTableValueKind::Resident(PathWalker::from_export(plan, &**field_name).unwrap()),
-          })),
-        );
-      }
-      FieldType::Set(x) => {
-        m.insert_mut(
-          &**field_name,
-          Arc::new(VmValue::Set(VmSetValue {
-            member_ty: VmType::from(&**x),
-            kind: VmSetValueKind::Resident(PathWalker::from_export(plan, &**field_name).unwrap()),
-          })),
-        );
-      }
-      _ => unimplemented!(),
-    }
-  }
-  VmValue::Map(VmMapValue { elements: m })
-}
 
 #[tokio::test]
 async fn basic_exec() {
@@ -138,7 +110,7 @@ async fn basic_exec() {
   migrate_schema(&schema, &plan, &kv).await.unwrap();
   let executor = Executor::new_assume_typechecked(&vm, &kv);
   let output = executor
-    .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
+    .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
     .unwrap();
   println!("{:?}", output);
@@ -179,7 +151,7 @@ async fn basic_exec() {
   GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
   let executor = Executor::new_assume_typechecked(&vm, &kv);
   let output = executor
-    .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
+    .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
     .unwrap();
   println!("{:?}", output);
@@ -252,7 +224,7 @@ async fn set_queries() {
   migrate_schema(&schema, &plan, &kv).await.unwrap();
   let executor = Executor::new_assume_typechecked(&vm, &kv);
   executor
-    .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
+    .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
     .unwrap();
 
@@ -280,7 +252,7 @@ async fn set_queries() {
   GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
   let executor = Executor::new_assume_typechecked(&vm, &kv);
   let output = executor
-    .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
+    .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
     .unwrap();
   println!("{:?}", output);
@@ -315,7 +287,7 @@ async fn set_queries() {
   GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
   let executor = Executor::new_assume_typechecked(&vm, &kv);
   executor
-    .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
+    .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
     .unwrap();
 
@@ -343,7 +315,7 @@ async fn set_queries() {
   GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
   let executor = Executor::new_assume_typechecked(&vm, &kv);
   let output = executor
-    .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
+    .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
     .unwrap();
   println!("{:?}", output);

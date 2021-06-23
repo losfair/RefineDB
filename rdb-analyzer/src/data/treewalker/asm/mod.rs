@@ -4,6 +4,9 @@ pub mod ast;
 pub mod codegen;
 mod state;
 
+#[cfg(test)]
+mod asm_test;
+
 lalrpop_mod!(pub language, "/data/treewalker/asm/language.rs");
 
 use thiserror::Error;

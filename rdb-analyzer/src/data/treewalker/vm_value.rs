@@ -370,6 +370,13 @@ impl<'a> VmValue<'a> {
     }
   }
 
+  pub fn unwrap_map<'b>(&'b self) -> &'b VmMapValue<'a> {
+    match self {
+      VmValue::Map(x) => x,
+      _ => panic!("unwrap_map: got non-map type {:?}", self),
+    }
+  }
+
   pub fn unwrap_set<'b>(&'b self) -> &'b VmSetValue<'a> {
     match self {
       VmValue::Set(x) => x,

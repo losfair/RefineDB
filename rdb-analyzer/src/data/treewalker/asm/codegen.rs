@@ -135,7 +135,9 @@ impl<'a, 'b> GraphContext<'a, 'b> {
             self.push_node((TwGraphNode::And, vec![l, r], precondition), *name);
           }
           K::BuildTable(ty, map) => {
-            let ty = self.builder.alloc_ident(*ty);
+            let ty = self
+              .builder
+              .alloc_ident_external(&format_type_for_table(ty)?);
             let map = self.lookup_node(*map)?;
             self.push_node(
               (TwGraphNode::BuildTable(ty), vec![map], precondition),
@@ -328,11 +330,21 @@ impl<'a> Builder<'a> {
     }
   }
 
+  fn alloc_ident_external(&mut self, id: &str) -> u32 {
+    if let Some(x) = self.ident_pool.get(id) {
+      *x
+    } else {
+      let index = self.ident_pool.len() as u32;
+      self.ident_pool.insert(self.bump.alloc_str(id), index);
+      index
+    }
+  }
+
   fn alloc_const(&mut self, x: VmConst) -> u32 {
     if let Some(x) = self.const_pool.get(&x) {
       *x
     } else {
-      let index = self.ident_pool.len() as u32;
+      let index = self.const_pool.len() as u32;
       self.const_pool.insert(x, index);
       index
     }
@@ -387,6 +399,7 @@ fn generate_vmtype(ty: &ast::Type) -> Result<VmType<String>> {
         .map(|(k, v)| generate_vmtype(v).map(|x| (k.to_string(), x)))
         .collect::<Result<_>>()?,
     ),
+    ast::Type::Schema => VmType::Schema,
   })
 }
 

@@ -47,12 +47,13 @@ pub enum Type<'a> {
   Primitive(PrimitiveType),
   Set(&'a Type<'a>),
   Map(Vec<'a, (&'a str, Type<'a>)>),
+  Schema,
 }
 
 pub enum ExprKind<'a> {
   LoadParam(&'a str),
   LoadConst(Literal<'a>),
-  BuildTable(&'a str, &'a str),
+  BuildTable(Type<'a>, &'a str),
   CreateMap,
   GetField(&'a str, &'a str),
   GetSetElement(&'a str, &'a str),

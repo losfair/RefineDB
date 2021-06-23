@@ -18,7 +18,8 @@ use crate::{
     },
     value::PrimitiveValue,
   },
-  schema::compile::FieldType,
+  schema::compile::{CompiledSchema, FieldType},
+  storage_plan::StoragePlan,
 };
 use thiserror::Error;
 
@@ -58,6 +59,9 @@ pub enum ExecError {
 
   #[error("operation is not supported on fresh tables or sets")]
   FreshTableOrSetNotSupported,
+
+  #[error("export type not supported")]
+  ExportTypeNotSupported,
 }
 
 impl<'a, 'b> Executor<'a, 'b> {
@@ -496,4 +500,35 @@ fn generate_fire_rules(g: &TwGraph) -> HashMap<u32, Vec<FireRuleItem>> {
     }
   }
   m
+}
+
+pub fn generate_root_map<'a>(
+  schema: &'a CompiledSchema,
+  plan: &'a StoragePlan,
+) -> Result<VmValue<'a>> {
+  let mut m = RedBlackTreeMapSync::new_sync();
+  for (field_name, field_ty) in &schema.exports {
+    match field_ty {
+      FieldType::Table(x) => {
+        m.insert_mut(
+          &**field_name,
+          Arc::new(VmValue::Table(VmTableValue {
+            ty: &**x,
+            kind: VmTableValueKind::Resident(PathWalker::from_export(plan, &**field_name).unwrap()),
+          })),
+        );
+      }
+      FieldType::Set(x) => {
+        m.insert_mut(
+          &**field_name,
+          Arc::new(VmValue::Set(VmSetValue {
+            member_ty: VmType::from(&**x),
+            kind: VmSetValueKind::Resident(PathWalker::from_export(plan, &**field_name).unwrap()),
+          })),
+        );
+      }
+      _ => return Err(ExecError::ExportTypeNotSupported.into()),
+    }
+  }
+  Ok(VmValue::Map(VmMapValue { elements: m }))
 }
