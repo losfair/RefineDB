@@ -18,7 +18,7 @@ pub enum PackedValue {
   S(Vec<PackedValue>),
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, PartialEq, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum PrimitiveValue {
   String(String),

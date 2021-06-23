@@ -16,8 +16,8 @@ pub struct TwScript {
 pub struct TwGraph {
   /// Topologically sorted nodes.
   ///
-  /// (node, in_edges)
-  pub nodes: Vec<(TwGraphNode, Vec<u32>)>,
+  /// (node, in_edges, precondition)
+  pub nodes: Vec<(TwGraphNode, Vec<u32>, Option<u32>)>,
 
   /// The output value of this graph.
   pub output: Option<u32>,
@@ -116,9 +116,20 @@ pub enum TwGraphNode {
 
   /// Optional<T> -> T
   UnwrapOptional,
+
+  /// Fire if either of its parameters are satisfied.
+  ///
+  /// T -> T -> T
+  Select,
 }
 
 impl TwGraphNode {
+  pub fn is_select(&self) -> bool {
+    match self {
+      Self::Select => true,
+      _ => false,
+    }
+  }
   pub fn subgraph_references(&self) -> SmallVec<[u32; 1]> {
     match self {
       Self::FilterSet(x) => smallvec![*x],

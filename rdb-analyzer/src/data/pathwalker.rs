@@ -75,6 +75,12 @@ impl<'a> PathWalker<'a> {
   }
 }
 
+impl<'a> PartialEq for PathWalker<'a> {
+  fn eq(&self, other: &Self) -> bool {
+    self.generate_key_raw() == other.generate_key_raw()
+  }
+}
+
 impl<'a> PathWalker<'a> {
   fn generate_key_raw(&self) -> Vec<&[u8]> {
     let mut components: Vec<&[u8]> = vec![];

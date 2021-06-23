@@ -9,7 +9,7 @@ use crate::{
   schema::compile::{CompiledSchema, FieldAnnotationList, FieldType, PrimitiveType},
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum VmValue<'a> {
   Primitive(PrimitiveValue),
   Table(VmTableValue<'a>),
@@ -24,31 +24,31 @@ pub enum VmValue<'a> {
   Null,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct VmTableValue<'a> {
   pub ty: &'a str,
   pub kind: VmTableValueKind<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum VmTableValueKind<'a> {
   Resident(Arc<PathWalker<'a>>),
   Fresh(BTreeMap<&'a str, Arc<VmValue<'a>>>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct VmSetValue<'a> {
   pub member_ty: VmType<&'a str>,
   pub kind: VmSetValueKind<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum VmSetValueKind<'a> {
   Resident(Arc<PathWalker<'a>>),
   Fresh(BTreeMap<Vec<u8>, Arc<VmValue<'a>>>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct VmMapValue<'a> {
   pub elements: RedBlackTreeMapSync<&'a str, Arc<VmValue<'a>>>,
 }
@@ -381,6 +381,13 @@ impl<'a> VmValue<'a> {
     match self {
       VmValue::Primitive(x) => x,
       _ => panic!("unwrap_primitive: got non-primitive type {:?}", self),
+    }
+  }
+
+  pub fn unwrap_bool<'b>(&'b self) -> bool {
+    match self {
+      VmValue::Bool(x) => *x,
+      _ => panic!("unwrap_bool: got non-bool type {:?}", self),
     }
   }
 }

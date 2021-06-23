@@ -22,6 +22,8 @@ use super::{bytecode::TwGraph, vm::TwVm, vm_value::VmType};
 pub enum TypeckError {
   #[error("invalid in edge")]
   InvalidInEdge,
+  #[error("invalid precondition")]
+  InvalidPrecondition,
   #[error("const index out of bounds")]
   ConstIndexOob,
   #[error("ident index out of bounds")]
@@ -82,6 +84,8 @@ pub enum TypeckError {
   MultipleParamTypeCandidates(u32, u32, String),
   #[error("param count mismatch in {0}: expected {1}, got {2}")]
   ParamCountMismatch(&'static str, u32, u32),
+  #[error("select type mismatch: `{0}` != `{1}`")]
+  SelectTypeMismatch(String, String),
 }
 
 pub struct GlobalTyckContext<'a, 'b> {
@@ -109,7 +113,7 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
 
     // Build the call graph.
     for (i, g) in vm.script.graphs.iter().enumerate() {
-      for (n, _) in &g.nodes {
+      for (n, _, _) in &g.nodes {
         for r in n.subgraph_references() {
           vm.script
             .graphs
@@ -248,12 +252,23 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
     }
 
     let mut types: Vec<Option<VmType<&'a str>>> = Vec::with_capacity(g.nodes.len());
-    for (i, (node, in_edges)) in g.nodes.iter().enumerate() {
+    for (i, (node, in_edges, precondition)) in g.nodes.iter().enumerate() {
       // Check in_edges invariant
       for j in in_edges {
         let j = *j as usize;
         if j >= i {
           return Err(TypeckError::InvalidInEdge.into());
+        }
+      }
+
+      // Check precondition
+      if let Some(j) = precondition {
+        if *j as usize >= i {
+          return Err(TypeckError::InvalidPrecondition.into());
+        }
+
+        if types[*j as usize] != Some(VmType::Bool) {
+          return Err(TypeckError::InvalidPrecondition.into());
         }
       }
 
@@ -520,6 +535,15 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
         TwGraphNode::UnwrapOptional => {
           let [input] = validate_in_edges::<1>(node, in_edges, &types)?;
           Some(unwrap_optional(input.clone())?)
+        }
+        TwGraphNode::Select => {
+          let [left, right] = validate_in_edges::<2>(node, in_edges, &types)?;
+          if left != right {
+            return Err(
+              TypeckError::SelectTypeMismatch(format!("{:?}", left), format!("{:?}", right)).into(),
+            );
+          }
+          Some(left.clone())
         }
       };
       types.push(ty);

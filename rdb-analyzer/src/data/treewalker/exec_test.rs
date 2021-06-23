@@ -83,16 +83,16 @@ async fn basic_exec() {
   let script = TwScript {
     graphs: vec![TwGraph {
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]),           // 0
-        (TwGraphNode::GetField(0), vec![0]),           // 1
-        (TwGraphNode::GetField(1), vec![1]),           // 2
-        (TwGraphNode::GetField(2), vec![1]),           // 3
-        (TwGraphNode::GetField(3), vec![3]),           // 4
-        (TwGraphNode::CreateMap, vec![]),              // 5
-        (TwGraphNode::InsertIntoMap(4), vec![2, 5]),   // 6
-        (TwGraphNode::InsertIntoMap(5), vec![4, 6]),   // 7
-        (TwGraphNode::LoadConst(0), vec![]),           // 8
-        (TwGraphNode::InsertIntoTable(1), vec![8, 1]), // 0
+        (TwGraphNode::LoadParam(0), vec![], None),           // 0
+        (TwGraphNode::GetField(0), vec![0], None),           // 1
+        (TwGraphNode::GetField(1), vec![1], None),           // 2
+        (TwGraphNode::GetField(2), vec![1], None),           // 3
+        (TwGraphNode::GetField(3), vec![3], None),           // 4
+        (TwGraphNode::CreateMap, vec![], None),              // 5
+        (TwGraphNode::InsertIntoMap(4), vec![2, 5], None),   // 6
+        (TwGraphNode::InsertIntoMap(5), vec![4, 6], None),   // 7
+        (TwGraphNode::LoadConst(0), vec![], None),           // 8
+        (TwGraphNode::InsertIntoTable(1), vec![8, 1], None), // 0
       ],
       output: Some(7),
       effects: vec![],
@@ -159,9 +159,9 @@ async fn basic_exec() {
   let script = TwScript {
     graphs: vec![TwGraph {
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]), // 0
-        (TwGraphNode::GetField(0), vec![0]), // 1
-        (TwGraphNode::GetField(1), vec![1]), // 2
+        (TwGraphNode::LoadParam(0), vec![], None), // 0
+        (TwGraphNode::GetField(0), vec![0], None), // 1
+        (TwGraphNode::GetField(1), vec![1], None), // 2
       ],
       output: Some(2),
       effects: vec![],
@@ -214,15 +214,15 @@ async fn set_queries() {
   let script = TwScript {
     graphs: vec![TwGraph {
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]),         // 0
-        (TwGraphNode::LoadConst(0), vec![]),         // 1
-        (TwGraphNode::LoadConst(1), vec![]),         // 2
-        (TwGraphNode::CreateMap, vec![]),            // 3
-        (TwGraphNode::InsertIntoMap(1), vec![1, 3]), // 4
-        (TwGraphNode::InsertIntoMap(2), vec![2, 4]), // 5
-        (TwGraphNode::BuildTable(3), vec![5]),       // 6
-        (TwGraphNode::GetField(0), vec![0]),         // 7
-        (TwGraphNode::InsertIntoSet, vec![6, 7]),    // 8
+        (TwGraphNode::LoadParam(0), vec![], None),         // 0
+        (TwGraphNode::LoadConst(0), vec![], None),         // 1
+        (TwGraphNode::LoadConst(1), vec![], None),         // 2
+        (TwGraphNode::CreateMap, vec![], None),            // 3
+        (TwGraphNode::InsertIntoMap(1), vec![1, 3], None), // 4
+        (TwGraphNode::InsertIntoMap(2), vec![2, 4], None), // 5
+        (TwGraphNode::BuildTable(3), vec![5], None),       // 6
+        (TwGraphNode::GetField(0), vec![0], None),         // 7
+        (TwGraphNode::InsertIntoSet, vec![6, 7], None),    // 8
       ],
       output: None,
       effects: vec![],
@@ -256,11 +256,11 @@ async fn set_queries() {
   let script = TwScript {
     graphs: vec![TwGraph {
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]),      // 0
-        (TwGraphNode::LoadConst(0), vec![]),      // 1
-        (TwGraphNode::GetField(0), vec![0]),      // 2
-        (TwGraphNode::GetSetElement, vec![1, 2]), // 3
-        (TwGraphNode::GetField(1), vec![3]),      // 4
+        (TwGraphNode::LoadParam(0), vec![], None),      // 0
+        (TwGraphNode::LoadConst(0), vec![], None),      // 1
+        (TwGraphNode::GetField(0), vec![0], None),      // 2
+        (TwGraphNode::GetSetElement, vec![1, 2], None), // 3
+        (TwGraphNode::GetField(1), vec![3], None),      // 4
       ],
       output: Some(4),
       effects: vec![],
@@ -288,10 +288,10 @@ async fn set_queries() {
   let script = TwScript {
     graphs: vec![TwGraph {
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]),      // 0
-        (TwGraphNode::LoadConst(0), vec![]),      // 1
-        (TwGraphNode::GetField(0), vec![0]),      // 2
-        (TwGraphNode::DeleteFromSet, vec![1, 2]), // 3
+        (TwGraphNode::LoadParam(0), vec![], None),      // 0
+        (TwGraphNode::LoadConst(0), vec![], None),      // 1
+        (TwGraphNode::GetField(0), vec![0], None),      // 2
+        (TwGraphNode::DeleteFromSet, vec![1, 2], None), // 3
       ],
       output: None,
       effects: vec![],
@@ -317,11 +317,11 @@ async fn set_queries() {
   let script = TwScript {
     graphs: vec![TwGraph {
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]),      // 0
-        (TwGraphNode::LoadConst(0), vec![]),      // 1
-        (TwGraphNode::GetField(0), vec![0]),      // 2
-        (TwGraphNode::GetSetElement, vec![1, 2]), // 3
-        (TwGraphNode::GetField(1), vec![3]),      // 4
+        (TwGraphNode::LoadParam(0), vec![], None),      // 0
+        (TwGraphNode::LoadConst(0), vec![], None),      // 1
+        (TwGraphNode::GetField(0), vec![0], None),      // 2
+        (TwGraphNode::GetSetElement, vec![1, 2], None), // 3
+        (TwGraphNode::GetField(1), vec![3], None),      // 4
       ],
       output: Some(4),
       effects: vec![],
