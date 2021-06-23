@@ -18,13 +18,13 @@ pub enum PackedValue {
   S(Vec<PackedValue>),
 }
 
-#[derive(Clone, Serialize, PartialEq, Deserialize, Debug)]
+#[derive(Clone, Serialize, Eq, PartialEq, Hash, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum PrimitiveValue {
   String(String),
   Bytes(Vec<u8>),
   Int64(i64),
-  Double(f64),
+  Double(u64),
 }
 
 const TOP_BIT: u64 = 1u64 << 63;
@@ -70,7 +70,7 @@ impl PrimitiveValue {
         buf
       }
       PrimitiveValue::Double(x) => {
-        let x = x.to_bits();
+        let x = *x;
 
         let x = if x & TOP_BIT != 0 { !x } else { x ^ TOP_BIT };
 
@@ -88,7 +88,7 @@ impl PrimitiveValue {
       PrimitiveType::Bytes => Self::Bytes(vec![0xbe, 0xef]),
       PrimitiveType::String => Self::String("hello".into()),
       PrimitiveType::Int64 => Self::Int64(42),
-      PrimitiveType::Double => Self::Double(3.14),
+      PrimitiveType::Double => Self::Double(3.14f64.to_bits()),
     }
   }
 
@@ -97,7 +97,7 @@ impl PrimitiveValue {
       PrimitiveType::Bytes => Self::Bytes(vec![]),
       PrimitiveType::String => Self::String("".into()),
       PrimitiveType::Int64 => Self::Int64(0),
-      PrimitiveType::Double => Self::Double(0.0),
+      PrimitiveType::Double => Self::Double(0),
     }
   }
 }

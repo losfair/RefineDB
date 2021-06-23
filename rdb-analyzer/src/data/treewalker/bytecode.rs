@@ -3,7 +3,7 @@ use smallvec::{smallvec, SmallVec};
 
 use super::vm_value::{VmConst, VmType};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct TwScript {
   pub graphs: Vec<TwGraph>,
   pub entry: u32,
@@ -14,6 +14,9 @@ pub struct TwScript {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TwGraph {
+  /// Name.
+  pub name: String,
+
   /// Topologically sorted nodes.
   ///
   /// (node, in_edges, precondition)
@@ -63,8 +66,6 @@ pub enum TwGraphNode {
   /// T::PrimaryKeyValue -> Set<T> -> T
   ///
   /// Point-get on a set.
-  ///
-  /// Const param: ident
   GetSetElement,
 
   /// U (subgraph parameter) -> Set<T> -> T

@@ -3,6 +3,7 @@ use super::TwAsmError;
 use super::state::State;
 use lalrpop_util::ParseError;
 use bumpalo::collections::vec::Vec as Bvec;
+use crate::schema::compile::PrimitiveType;
 
 grammar(state: &mut State<'input>);
 
@@ -32,7 +33,15 @@ Graph: Graph<'input> = {
 }
 
 Type: Type<'input> = {
-  <name:Identifier> <params:(Token<"<"> <ZeroOrMore<Type, Token<",">>> Token<">">)?> => Type {
+  Token<"int64"> => Type::Primitive(PrimitiveType::Int64),
+  Token<"string"> => Type::Primitive(PrimitiveType::String),
+  Token<"bytes"> => Type::Primitive(PrimitiveType::Bytes),
+  Token<"set"> Token<"<"> <ty:Type> Token<">"> => Type::Set(state.alloc.alloc(ty)),
+  Token<"map"> Token<"{"> <members:ZeroOrMore<(Identifier Token<":"> Type), Token<",">>> Token<"}"> => Type::Map(Bvec::from_iter_in(
+    members.into_iter().map(|x| (x.0, x.2)),
+    &state.alloc
+  )),
+  <name:Identifier> <params:(Token<"<"> <ZeroOrMore<Type, Token<",">>> Token<">">)?> => Type::Table {
     name,
     params: Bvec::from_iter_in(params.unwrap_or_default().into_iter(), &state.alloc),
   }
@@ -76,7 +85,7 @@ ExprKind: ExprKind<'input> = {
   Token<"build_table"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> => ExprKind::BuildTable(x, y),
   Token<"create_map"> => ExprKind::CreateMap,
   Token<"get_field"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> => ExprKind::GetField(x, y),
-  Token<"point_get"> <x:Identifier> => ExprKind::GetSetElement(x),
+  Token<"point_get"> <x:Identifier> <y:Identifier> => ExprKind::GetSetElement(x, y),
   Token<"insert_into_map"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> <z:Identifier> => ExprKind::InsertIntoMap(x, y, z),
   Token<"insert_into_table"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> <z:Identifier> => ExprKind::InsertIntoTable(x, y, z),
   Token<"insert_into_set"> <y:Identifier> <z:Identifier> => ExprKind::InsertIntoSet(y, z),

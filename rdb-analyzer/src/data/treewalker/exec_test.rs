@@ -82,6 +82,7 @@ async fn basic_exec() {
   let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
   let script = TwScript {
     graphs: vec![TwGraph {
+      name: "".into(),
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None),           // 0
         (TwGraphNode::GetField(0), vec![0], None),           // 1
@@ -158,6 +159,7 @@ async fn basic_exec() {
 
   let script = TwScript {
     graphs: vec![TwGraph {
+      name: "".into(),
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None), // 0
         (TwGraphNode::GetField(0), vec![0], None), // 1
@@ -213,6 +215,7 @@ async fn set_queries() {
   );
   let script = TwScript {
     graphs: vec![TwGraph {
+      name: "".into(),
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None),         // 0
         (TwGraphNode::LoadConst(0), vec![], None),         // 1
@@ -255,6 +258,7 @@ async fn set_queries() {
 
   let script = TwScript {
     graphs: vec![TwGraph {
+      name: "".into(),
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None),      // 0
         (TwGraphNode::LoadConst(0), vec![], None),      // 1
@@ -287,6 +291,7 @@ async fn set_queries() {
 
   let script = TwScript {
     graphs: vec![TwGraph {
+      name: "".into(),
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None),      // 0
         (TwGraphNode::LoadConst(0), vec![], None),      // 1
@@ -316,6 +321,7 @@ async fn set_queries() {
 
   let script = TwScript {
     graphs: vec![TwGraph {
+      name: "".into(),
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None),      // 0
         (TwGraphNode::LoadConst(0), vec![], None),      // 1

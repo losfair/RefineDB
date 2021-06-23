@@ -96,6 +96,7 @@ fn basic_typeck() {
   let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
   let script = TwScript {
     graphs: vec![TwGraph {
+      name: "".into(),
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None),    // 0
         (TwGraphNode::GetField(0), vec![0], None),    // 1
@@ -137,6 +138,7 @@ fn filter_set() {
   let script = TwScript {
     graphs: vec![
       TwGraph {
+        name: "".into(),
         nodes: vec![
           (TwGraphNode::LoadParam(0), vec![], None),     // 0
           (TwGraphNode::GetField(0), vec![0], None),     // 1
@@ -149,6 +151,7 @@ fn filter_set() {
         param_types: vec![0],
       },
       TwGraph {
+        name: "".into(),
         nodes: vec![
           (TwGraphNode::LoadConst(0), vec![], None), // 0
         ],
@@ -193,6 +196,7 @@ fn basic_typeck_fail_unknown_name() {
   let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
   let script = TwScript {
     graphs: vec![TwGraph {
+      name: "".into(),
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None),    // 0
         (TwGraphNode::GetField(0), vec![0], None),    // 1
@@ -240,6 +244,7 @@ fn basic_typeck_fail_missing_unwrap() {
   let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
   let script = TwScript {
     graphs: vec![TwGraph {
+      name: "".into(),
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None),    // 0
         (TwGraphNode::GetField(0), vec![0], None),    // 1
@@ -284,6 +289,7 @@ fn basic_typeck_output_type_mismatch() {
   let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
   let script = TwScript {
     graphs: vec![TwGraph {
+      name: "".into(),
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None),    // 0
         (TwGraphNode::GetField(0), vec![0], None),    // 1
@@ -342,6 +348,7 @@ fn typeck_set_point_get() {
   );
   let script = TwScript {
     graphs: vec![TwGraph {
+      name: "".into(),
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None),         // 0
         (TwGraphNode::LoadConst(0), vec![], None),         // 1

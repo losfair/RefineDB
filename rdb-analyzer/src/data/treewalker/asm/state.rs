@@ -4,7 +4,7 @@ use bumpalo::Bump;
 
 pub struct State<'a> {
   pub alloc: &'a Bump,
-  string_table: HashSet<&'a str>,
+  pub string_table: HashSet<&'a str>,
 }
 
 impl<'a> State<'a> {

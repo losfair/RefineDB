@@ -1,5 +1,7 @@
 use bumpalo::collections::vec::Vec;
 
+use crate::schema::compile::PrimitiveType;
+
 pub struct Root<'a> {
   pub graphs: Vec<'a, Graph<'a>>,
 }
@@ -37,9 +39,14 @@ pub struct Expr<'a> {
   pub kind: ExprKind<'a>,
 }
 
-pub struct Type<'a> {
-  pub name: &'a str,
-  pub params: Vec<'a, Type<'a>>,
+pub enum Type<'a> {
+  Table {
+    name: &'a str,
+    params: Vec<'a, Type<'a>>,
+  },
+  Primitive(PrimitiveType),
+  Set(&'a Type<'a>),
+  Map(Vec<'a, (&'a str, Type<'a>)>),
 }
 
 pub enum ExprKind<'a> {
@@ -48,7 +55,7 @@ pub enum ExprKind<'a> {
   BuildTable(&'a str, &'a str),
   CreateMap,
   GetField(&'a str, &'a str),
-  GetSetElement(&'a str),
+  GetSetElement(&'a str, &'a str),
   InsertIntoMap(&'a str, &'a str, &'a str),
   InsertIntoTable(&'a str, &'a str, &'a str),
   InsertIntoSet(&'a str, &'a str),
@@ -66,6 +73,7 @@ pub enum ExprKind<'a> {
 
 pub enum Literal<'a> {
   Null,
+  Bool(bool),
   Integer(i64),
   HexBytes(&'a [u8]),
   String(&'a str),

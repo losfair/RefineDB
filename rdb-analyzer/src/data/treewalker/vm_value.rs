@@ -237,7 +237,7 @@ impl<'a> VmType<&'a str> {
   }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum VmConst {
   Primitive(PrimitiveValue),
   Table(VmConstTableValue),
@@ -248,13 +248,13 @@ pub enum VmConst {
   Null,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct VmConstTableValue {
   pub ty: String,
   pub fields: BTreeMap<String, VmConst>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct VmConstSetValue {
   pub member_ty: String,
   pub members: Vec<VmConst>,
