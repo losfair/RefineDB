@@ -60,7 +60,7 @@ pub enum SchemaCompileError {
   TypeNameMustStartWithUpperCaseLetter(String),
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
 pub enum PrimitiveType {
   Int64,
   Double,
