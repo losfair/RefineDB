@@ -42,6 +42,8 @@ pub enum TypeckError {
   ExpectingSet(String),
   #[error("type `{0}` is not covariant from `{1}`")]
   NonCovariantTypes(String, String),
+  #[error("type `{0}` is not equal to `{1}`")]
+  NonEqualTypes(String, String),
   #[error("type `{0}` is not a map")]
   NotMap(String),
   #[error("type `{0}` is not a table")]
@@ -532,6 +534,16 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
           ensure_covariant(left, right)?;
           Some(VmType::Bool)
         }
+        TwGraphNode::Ne => {
+          let [left, right] = validate_in_edges::<2>(node, in_edges, &types)?;
+          ensure_covariant(left, right)?;
+          Some(VmType::Bool)
+        }
+        TwGraphNode::Not => {
+          let [x] = validate_in_edges::<1>(node, in_edges, &types)?;
+          ensure_type_eq(x, &VmType::Bool)?;
+          Some(VmType::Bool)
+        }
         TwGraphNode::UnwrapOptional => {
           let [input] = validate_in_edges::<1>(node, in_edges, &types)?;
           Some(unwrap_optional(input.clone())?)
@@ -642,6 +654,14 @@ fn ensure_covariant<'a>(dst: &VmType<&'a str>, src: &VmType<&'a str>) -> Result<
     Ok(())
   } else {
     Err(TypeckError::NonCovariantTypes(format!("{:?}", dst), format!("{:?}", src)).into())
+  }
+}
+
+fn ensure_type_eq<'a>(dst: &VmType<&'a str>, src: &VmType<&'a str>) -> Result<()> {
+  if dst == src {
+    Ok(())
+  } else {
+    Err(TypeckError::NonEqualTypes(format!("{:?}", dst), format!("{:?}", src)).into())
   }
 }
 
