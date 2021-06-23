@@ -539,6 +539,12 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
           ensure_covariant(left, right)?;
           Some(VmType::Bool)
         }
+        TwGraphNode::And | TwGraphNode::Or => {
+          let [left, right] = validate_in_edges::<2>(node, in_edges, &types)?;
+          ensure_type_eq(left, &VmType::Bool)?;
+          ensure_type_eq(right, &VmType::Bool)?;
+          Some(VmType::Bool)
+        }
         TwGraphNode::Not => {
           let [x] = validate_in_edges::<1>(node, in_edges, &types)?;
           ensure_type_eq(x, &VmType::Bool)?;

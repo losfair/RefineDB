@@ -357,6 +357,12 @@ impl<'a, 'b> Executor<'a, 'b> {
       }
       TwGraphNode::Eq => Some(Arc::new(VmValue::Bool(params[0] == params[1]))),
       TwGraphNode::Ne => Some(Arc::new(VmValue::Bool(params[0] != params[1]))),
+      TwGraphNode::And => Some(Arc::new(VmValue::Bool(
+        params[0].unwrap_bool() & params[1].unwrap_bool(),
+      ))),
+      TwGraphNode::Or => Some(Arc::new(VmValue::Bool(
+        params[0].unwrap_bool() | params[1].unwrap_bool(),
+      ))),
       TwGraphNode::Not => Some(Arc::new(VmValue::Bool(!params[0].unwrap_bool()))),
       _ => return Err(ExecError::NotImplemented(format!("{:?}", n)).into()),
     })
