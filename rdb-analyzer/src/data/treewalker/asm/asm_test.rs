@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use bumpalo::Bump;
 
@@ -31,16 +31,26 @@ async fn simple_test<F: FnMut(Option<Arc<VmValue>>)>(schema: &str, scripts: &[&s
   migrate_schema(&schema, &plan, &kv).await.unwrap();
 
   for &code in scripts {
+    let start = Instant::now();
     let script = compile_twscript(code).unwrap();
+    let compile_end = Instant::now();
+    println!("compile took {:?}", compile_end.duration_since(start));
+
     println!("{:?}", script);
     let vm = TwVm::new(&schema, &plan, &script).unwrap();
+
+    let start = Instant::now();
     GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
+    let tyck_end = Instant::now();
+    println!("tyck took {:?}", tyck_end.duration_since(start));
 
     let executor = Executor::new_assume_typechecked(&vm, &kv);
     let output = executor
       .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
       .await
       .unwrap();
+    let exec_end = Instant::now();
+    println!("exec took {:?}", exec_end.duration_since(tyck_end));
     println!("{:?}", output);
     check(output);
   }
