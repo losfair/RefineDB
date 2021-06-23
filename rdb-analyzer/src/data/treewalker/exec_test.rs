@@ -11,7 +11,7 @@ use crate::{
     treewalker::{
       bytecode::{TwGraph, TwGraphNode, TwScript},
       exec::Executor,
-      typeck::typeck_graph,
+      typeck::GlobalTyckContext,
       vm::TwVm,
       vm_value::{VmConst, VmType},
     },
@@ -112,7 +112,7 @@ async fn basic_exec() {
       "field_2".into(),
     ],
     types: vec![
-      VmType::<String>::from(&schema),
+      VmType::Schema,
       VmType::Map(
         vec![
           (
@@ -131,7 +131,7 @@ async fn basic_exec() {
     ],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  typeck_graph(&vm, &script.graphs[0]).unwrap();
+  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 
   let kv = MockKv::new();
   migrate_schema(&schema, &plan, &kv).await.unwrap();
@@ -171,13 +171,10 @@ async fn basic_exec() {
     entry: 0,
     consts: vec![],
     idents: vec!["some_item".into(), "name".into()],
-    types: vec![
-      VmType::<String>::from(&schema),
-      VmType::Primitive(PrimitiveType::String),
-    ],
+    types: vec![VmType::Schema, VmType::Primitive(PrimitiveType::String)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  typeck_graph(&vm, &script.graphs[0]).unwrap();
+  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
   let executor = Executor::new_assume_typechecked(&vm, &kv);
   let output = executor
     .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
@@ -243,10 +240,10 @@ async fn set_queries() {
       "name".into(),
       "Item<>".into(),
     ],
-    types: vec![VmType::<String>::from(&schema)],
+    types: vec![VmType::Schema],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  typeck_graph(&vm, &script.graphs[0]).unwrap();
+  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 
   let kv = MockKv::new();
   migrate_schema(&schema, &plan, &kv).await.unwrap();
@@ -273,13 +270,10 @@ async fn set_queries() {
     entry: 0,
     consts: vec![VmConst::Primitive(PrimitiveValue::String("test_id".into()))],
     idents: vec!["some_item".into(), "name".into()],
-    types: vec![
-      VmType::<String>::from(&schema),
-      VmType::Primitive(PrimitiveType::String),
-    ],
+    types: vec![VmType::Schema, VmType::Primitive(PrimitiveType::String)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  typeck_graph(&vm, &script.graphs[0]).unwrap();
+  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
   let executor = Executor::new_assume_typechecked(&vm, &kv);
   let output = executor
     .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
@@ -313,7 +307,7 @@ async fn set_queries() {
     ],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  typeck_graph(&vm, &script.graphs[0]).unwrap();
+  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
   let executor = Executor::new_assume_typechecked(&vm, &kv);
   executor
     .run_graph(0, &[Arc::new(root_map(&schema, &plan))])
@@ -337,13 +331,10 @@ async fn set_queries() {
     entry: 0,
     consts: vec![VmConst::Primitive(PrimitiveValue::String("test_id".into()))],
     idents: vec!["some_item".into(), "name".into()],
-    types: vec![
-      VmType::<String>::from(&schema),
-      VmType::Primitive(PrimitiveType::String),
-    ],
+    types: vec![VmType::Schema, VmType::Primitive(PrimitiveType::String)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  typeck_graph(&vm, &script.graphs[0]).unwrap();
+  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
   let executor = Executor::new_assume_typechecked(&vm, &kv);
   let output = executor
     .run_graph(0, &[Arc::new(root_map(&schema, &plan))])

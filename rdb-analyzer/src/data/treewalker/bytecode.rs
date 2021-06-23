@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use smallvec::{smallvec, SmallVec};
 
 use super::vm_value::{VmConst, VmType};
 
@@ -115,4 +116,13 @@ pub enum TwGraphNode {
 
   /// Optional<T> -> T
   UnwrapOptional,
+}
+
+impl TwGraphNode {
+  pub fn subgraph_references(&self) -> SmallVec<[u32; 1]> {
+    match self {
+      Self::FilterSet(x) => smallvec![*x],
+      _ => smallvec![],
+    }
+  }
 }

@@ -53,7 +53,7 @@ pub struct VmMapValue<'a> {
   pub elements: RedBlackTreeMapSync<&'a str, Arc<VmValue<'a>>>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
 pub enum VmType<K: Clone + Ord + PartialOrd + Eq + PartialEq> {
   Primitive(PrimitiveType),
   Table(VmTableType<K>),
@@ -70,14 +70,20 @@ pub enum VmType<K: Clone + Ord + PartialOrd + Eq + PartialEq> {
   Map(RedBlackTreeMapSync<K, VmType<K>>),
 
   OneOf(Vec<VmType<K>>),
+
+  /// An unknown type. Placeholder for unfinished type inference.
+  Unknown,
+
+  /// The schema type. Placeholder.
+  Schema,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
 pub struct VmSetType<K: Clone + Ord + PartialOrd + Eq + PartialEq> {
   pub ty: Box<VmType<K>>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
 pub struct VmTableType<K> {
   pub name: K,
 }
@@ -106,6 +112,8 @@ impl<
           .collect(),
       ),
       VmType::OneOf(x) => VmType::OneOf(x.iter().map(|x| Self::from(x)).collect()),
+      VmType::Unknown => VmType::Unknown,
+      VmType::Schema => VmType::Schema,
     }
   }
 }
@@ -171,8 +179,22 @@ impl<'a> VmType<&'a str> {
     if self == that {
       true
     } else if let VmType::OneOf(x) = self {
+      // First case: (Oneof<T, U>, T | U)
       for elem in x {
         if elem.is_covariant_from(that) {
+          return true;
+        }
+      }
+
+      // Second case: (OneOf<T, U>, OneOf<U, T>)
+      // THIS IS A HACK!
+      if let VmType::OneOf(y) = that {
+        let mut x = x.iter().collect::<Vec<_>>();
+        x.sort();
+
+        let mut y = y.iter().collect::<Vec<_>>();
+        y.sort();
+        if x == y {
           return true;
         }
       }

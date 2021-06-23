@@ -5,14 +5,14 @@ use crate::{
   data::{
     treewalker::{
       bytecode::{TwGraph, TwGraphNode},
-      typeck::typeck_graph,
+      typeck::GlobalTyckContext,
       vm::TwVm,
       vm_value::{VmConst, VmType},
     },
     value::PrimitiveValue,
   },
   schema::{
-    compile::{compile, CompiledSchema, PrimitiveType},
+    compile::{compile, PrimitiveType},
     grammar::parse,
   },
   storage_plan::planner::generate_plan_for_schema,
@@ -85,14 +85,6 @@ fn root_map<'a>(schema: &'a CompiledSchema, plan: &'a StoragePlan) -> VmValue<'a
 }
 */
 
-fn root_type<'a>(schema: &'a CompiledSchema) -> VmType<String> {
-  let mut m = RedBlackTreeMapSync::new_sync();
-  for (field_name, field_ty) in &schema.exports {
-    m.insert_mut(field_name.to_string(), VmType::<String>::from(field_ty));
-  }
-  VmType::Map(m)
-}
-
 #[test]
 fn basic_typeck() {
   let _ = pretty_env_logger::try_init();
@@ -127,10 +119,67 @@ fn basic_typeck() {
       "left".into(),
       "value".into(),
     ],
-    types: vec![root_type(&schema), VmType::Primitive(PrimitiveType::Int64)],
+    types: vec![VmType::Schema, VmType::Primitive(PrimitiveType::Int64)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  typeck_graph(&vm, &script.graphs[0]).unwrap();
+  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
+}
+
+#[test]
+fn filter_set() {
+  let _ = pretty_env_logger::try_init();
+  let alloc = Bump::new();
+  let ast = parse(&alloc, SIMPLE_SCHEMA).unwrap();
+  let schema = compile(&ast).unwrap();
+  drop(ast);
+  drop(alloc);
+  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
+  let script = TwScript {
+    graphs: vec![
+      TwGraph {
+        nodes: vec![
+          (TwGraphNode::LoadParam(0), vec![]),     // 0
+          (TwGraphNode::GetField(0), vec![0]),     // 1
+          (TwGraphNode::LoadConst(1), vec![]),     // 2
+          (TwGraphNode::FilterSet(1), vec![2, 1]), // 3
+        ],
+        output: Some(3),
+        effects: vec![],
+        output_type: Some(1),
+        param_types: vec![0],
+      },
+      TwGraph {
+        nodes: vec![
+          (TwGraphNode::LoadConst(0), vec![]), // 0
+        ],
+        output: Some(0),
+        effects: vec![],
+        output_type: Some(2),
+        param_types: vec![3, 3],
+      },
+    ],
+    entry: 0,
+    consts: vec![VmConst::Bool(true), VmConst::Null],
+    idents: vec![
+      "items".into(),
+      "middle".into(),
+      "left".into(),
+      "value".into(),
+    ],
+    types: vec![
+      VmType::Schema,
+      VmType::OneOf(vec![
+        VmType::Null,
+        VmType::Table(VmTableType {
+          name: "Item<Duration<int64>>".into(),
+        }),
+      ]),
+      VmType::Bool,
+      VmType::Unknown,
+    ],
+  };
+  let vm = TwVm::new(&schema, &plan, &script).unwrap();
+  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 }
 
 #[test]
@@ -167,11 +216,13 @@ fn basic_typeck_fail_unknown_name() {
       "left_".into(),
       "value".into(),
     ],
-    types: vec![root_type(&schema), VmType::Primitive(PrimitiveType::Int64)],
+    types: vec![VmType::Schema, VmType::Primitive(PrimitiveType::Int64)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   assert!(
-    typeck_graph(&vm, &script.graphs[0])
+    GlobalTyckContext::new(&vm)
+      .unwrap()
+      .typeck()
       .unwrap_err()
       .to_string()
       == "field `left_` is not present in table `TrinaryTree<int64>`"
@@ -211,10 +262,12 @@ fn basic_typeck_fail_missing_unwrap() {
       "left".into(),
       "value".into(),
     ],
-    types: vec![root_type(&schema), VmType::Primitive(PrimitiveType::Int64)],
+    types: vec![VmType::Schema, VmType::Primitive(PrimitiveType::Int64)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  assert!(typeck_graph(&vm, &script.graphs[0])
+  assert!(GlobalTyckContext::new(&vm)
+    .unwrap()
+    .typeck()
     .unwrap_err()
     .to_string()
     .contains("type `Primitive(Int64)` is not covariant from"));
@@ -254,11 +307,13 @@ fn basic_typeck_output_type_mismatch() {
       "left".into(),
       "value".into(),
     ],
-    types: vec![root_type(&schema), VmType::Primitive(PrimitiveType::String)],
+    types: vec![VmType::Schema, VmType::Primitive(PrimitiveType::String)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   assert!(
-    typeck_graph(&vm, &script.graphs[0])
+    GlobalTyckContext::new(&vm)
+      .unwrap()
+      .typeck()
       .unwrap_err()
       .to_string()
       == "type `Primitive(String)` is not covariant from `Primitive(Int64)`"
@@ -312,8 +367,8 @@ fn typeck_set_point_get() {
       "start".into(),
       "the_item".into(),
     ],
-    types: vec![root_type(&schema), VmType::Map(expected_result_type)],
+    types: vec![VmType::Schema, VmType::Map(expected_result_type)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  typeck_graph(&vm, &script.graphs[0]).unwrap();
+  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 }

@@ -1235,6 +1235,7 @@ dependencies = [
  "lalrpop",
  "lalrpop-util",
  "log",
+ "petgraph",
  "phf",
  "pretty_env_logger",
  "rand 0.8.4",
