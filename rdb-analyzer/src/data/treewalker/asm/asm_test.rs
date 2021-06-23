@@ -54,6 +54,7 @@ async fn basic_exec() {
     name: string,
     value: int64,
     kind: string,
+    set_member_name: string,
   } {
     root = param(root);
     some_item = get_field(some_item) root;
@@ -73,11 +74,17 @@ async fn basic_exec() {
     value = select v1 v2;
     kind = select k1 k2;
 
+    s = get_field(many_items) root;
+    expected_id = const("xxx");
+    elem = point_get expected_id s;
+    elem_name = get_field(name) elem;
+
     m = create_map;
     m = insert_into_map(id) id m;
     m = insert_into_map(name) name m;
     m = insert_into_map(value) value m;
     m = insert_into_map(kind) kind m;
+    m = insert_into_map(set_member_name) elem_name m;
     return m;
   }
   "#;
@@ -86,6 +93,7 @@ async fn basic_exec() {
   simple_test(
     r#"
   type Item {
+    @primary
     id: string,
     name: string,
     duration: Duration<int64>,
@@ -95,6 +103,7 @@ async fn basic_exec() {
     end: T,
   }
   export Item some_item;
+  export set<Item> many_items;
   "#,
     &[
       r#"
@@ -122,6 +131,23 @@ async fn basic_exec() {
     some_item = get_field(some_item) root;
     name = const("test");
     insert_into_table(name) name some_item;
+
+    start = const(1);
+    end = const(2);
+    m = create_map;
+    m = insert_into_map(start) start m;
+    m = insert_into_map(end) end m;
+    dur = build_table(Duration<int64>) m;
+    elem = create_map;
+    v = const("xxx");
+    elem = insert_into_map(id) v elem;
+    v = const("name_for_xxx");
+    elem = insert_into_map(name) v elem;
+    elem = insert_into_map(duration) dur elem;
+    elem = build_table(Item<>) elem;
+
+    s = get_field(many_items) root;
+    insert_into_set elem s;
   }
   "#,
       READER,
@@ -148,6 +174,7 @@ async fn basic_exec() {
             x.elements.get("kind").unwrap().unwrap_primitive(),
             &PrimitiveValue::String("end".into())
           );
+          assert_eq!(**x.elements.get("set_member_name").unwrap(), VmValue::Null,);
         }
         2 => {}
         3 => {
@@ -168,6 +195,13 @@ async fn basic_exec() {
           assert_eq!(
             x.elements.get("kind").unwrap().unwrap_primitive(),
             &PrimitiveValue::String("start".into())
+          );
+          assert_eq!(
+            x.elements
+              .get("set_member_name")
+              .unwrap()
+              .unwrap_primitive(),
+            &PrimitiveValue::String("name_for_xxx".into())
           );
         }
         _ => unreachable!(),
