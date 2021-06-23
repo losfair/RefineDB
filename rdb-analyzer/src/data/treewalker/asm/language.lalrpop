@@ -1,0 +1,156 @@
+use super::ast::*;
+use super::TwAsmError;
+use super::state::State;
+use lalrpop_util::ParseError;
+use bumpalo::collections::vec::Vec as Bvec;
+
+grammar(state: &mut State<'input>);
+
+extern {
+  type Error = TwAsmError;
+}
+
+pub Root: Root<'input> = {
+  Comment* <graphs:Graph*> => Root {
+    graphs: Bvec::from_iter_in(graphs.into_iter(), &state.alloc),
+  }
+}
+
+Graph: Graph<'input> = {
+  Token<"graph"> <name:Identifier>
+    Token<"("> <params:ZeroOrMore<(Identifier (":" <Type>)?), ",">> Token<")">
+    <return_type:(Token<":"> <Type>)?>
+    Token<"{"> <stmts:(@L Stmt)*> Token<"}"> => Graph {
+      name,
+      params: Bvec::from_iter_in(params.into_iter().map(|x| (x.0, x.1)), &state.alloc),
+      return_type,
+      stmts: Bvec::from_iter_in(stmts.into_iter().map(|x| Stmt {
+        location: x.0,
+        kind: x.1,
+      }), &state.alloc)
+    }
+}
+
+Type: Type<'input> = {
+  <name:Identifier> <params:(Token<"<"> <ZeroOrMore<Type, Token<",">>> Token<">">)?> => Type {
+    name,
+    params: Bvec::from_iter_in(params.unwrap_or_default().into_iter(), &state.alloc),
+  }
+}
+
+Stmt: StmtKind<'input> = {
+  <name:Identifier> Token<"="> <value:Expr> Token<";"> => StmtKind::Node {
+    name: Some(name),
+    value,
+  },
+  Token<"return"> <name:Identifier> Token<";"> => StmtKind::Return {
+    name,
+  },
+  <value:Expr> Token<";"> => StmtKind::Node {
+    name: None,
+    value,
+  },
+  Token<"if"> <precondition:Identifier>
+    Token<"{"> <if_body:StmtList> Token<"}">
+    <else_body:(Token<"else"> Token<"{"> <StmtList> Token<"}">)?> => StmtKind::If {
+    precondition,
+    if_body,
+    else_body,
+  }
+}
+
+StmtList: Bvec<'input, Stmt<'input>> = {
+  <stmts:(@L Stmt)*> => Bvec::from_iter_in(stmts.into_iter().map(|x| Stmt {
+    location: x.0,
+    kind: x.1,
+  }), &state.alloc),
+}
+
+Expr: Expr<'input> = {
+  <location_start:@L> <kind:ExprKind> <location_end:@R> => Expr { location_start, location_end, kind },
+}
+
+ExprKind: ExprKind<'input> = {
+  Token<"param"> Token<"("> <x:Identifier> Token<")"> => ExprKind::LoadParam(x),
+  Token<"const"> Token<"("> <x:Literal> Token<")"> => ExprKind::LoadConst(x),
+  Token<"build_table"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> => ExprKind::BuildTable(x, y),
+  Token<"create_map"> => ExprKind::CreateMap,
+  Token<"get_field"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> => ExprKind::GetField(x, y),
+  Token<"point_get"> <x:Identifier> => ExprKind::GetSetElement(x),
+  Token<"insert_into_map"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> <z:Identifier> => ExprKind::InsertIntoMap(x, y, z),
+  Token<"insert_into_table"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> <z:Identifier> => ExprKind::InsertIntoTable(x, y, z),
+  Token<"insert_into_set"> <y:Identifier> <z:Identifier> => ExprKind::InsertIntoSet(y, z),
+  Token<"delete_from_set"> <y:Identifier> <z:Identifier> => ExprKind::DeleteFromSet(y, z),
+  Token<"delete_from_map"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> => ExprKind::DeleteFromMap(x, y),
+  Token<"delete_from_table"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> => ExprKind::DeleteFromTable(x, y),
+  Token<"eq"> <x:Identifier> <y:Identifier> => ExprKind::Eq(x, y),
+  Token<"ne"> <x:Identifier> <y:Identifier> => ExprKind::Ne(x, y),
+  Token<"and"> <x:Identifier> <y:Identifier> => ExprKind::And(x, y),
+  Token<"or"> <x:Identifier> <y:Identifier> => ExprKind::Or(x, y),
+  Token<"not"> <x:Identifier> => ExprKind::Not(x),
+  Token<"unwrap_optional"> <x:Identifier> => ExprKind::UnwrapOptional(x),
+  Token<"select"> <x:Identifier> <y:Identifier> => ExprKind::Select(x, y),
+}
+
+Identifier: &'input str = {
+  <s:Token<r"[a-zA-Z_][0-9a-zA-Z_]*">> => state.resolve_str(s),
+}
+
+Literal: Literal<'input> = {
+  <s:Token<r"[0-9]+">> =>? s.parse().map(Literal::Integer).map_err(|_| ParseError::User {
+    error: TwAsmError::InvalidLiteral,
+  }),
+  <s:Token<r"0x[0-9a-fA-F]+">> =>? i64::from_str_radix(s.strip_prefix("0x").unwrap(), 16).map(Literal::Integer).map_err(|_| ParseError::User {
+    error: TwAsmError::InvalidLiteral,
+  }),
+  <s:Token<r"0o[0-9a-fA-F]+">> =>? i64::from_str_radix(s.strip_prefix("0o").unwrap(), 8).map(Literal::Integer).map_err(|_| ParseError::User {
+    error: TwAsmError::InvalidLiteral,
+  }),
+  <s:Token<r"0b[0-9a-fA-F]+">> =>? i64::from_str_radix(s.strip_prefix("0b").unwrap(), 2).map(Literal::Integer).map_err(|_| ParseError::User {
+    error: TwAsmError::InvalidLiteral,
+  }),
+  <s:StringLit> => Literal::String(state.resolve_str(&s)),
+  <s:HexBytesLit> => Literal::HexBytes(s),
+  Token<"null"> => Literal::Null,
+}
+
+StringLit: String = {
+  <s:Token<r#""(\\.|[^"])*""#>> =>? serde_json::from_str::<String>(s)
+    .map_err(|_| ParseError::User {
+      error: TwAsmError::InvalidLiteral,
+    }),
+}
+
+HexBytesLit: &'input [u8] = {
+  <s:Token<r#"h"([0-9a-fA-F][0-9a-fA-F])*""#>> =>? serde_json::from_str::<String>(s.strip_prefix("h\"").unwrap().strip_suffix("\"").unwrap())
+    .map_err(|_| ParseError::User {
+      error: TwAsmError::InvalidLiteral,
+    })
+    .and_then(|x| hex::decode(&x)
+      .map_err(|_| ParseError::User {
+        error: TwAsmError::InvalidLiteral,
+      })
+      .map(|x| state.alloc.alloc_slice_copy(&x) as &[u8])
+    ),
+}
+
+ZeroOrMore<T, Delim>: Vec<T> = {
+  <x:OneOrMore<T, Delim>?> => x.unwrap_or_default()
+}
+
+OneOrMore<T, Delim>: Vec<T> = {
+  <i1: T> <i2:(Delim T)*> Delim? => {
+    let mut items = vec![i1];
+    items.extend(i2.into_iter().map(|e| e.1));
+    items
+  }
+}
+
+Token<I>: I = {
+  <s:I> => s,
+}
+
+Comment: () = {
+  r"//[^\n\r]*[\n\r]*" => { },
+  r"/\*([^\*]*\*+[^\*/])*([^\*]*\*+|[^\*])*\*/" => { },
+}

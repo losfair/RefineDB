@@ -1,3 +1,4 @@
+pub mod asm;
 pub mod bytecode;
 pub mod exec;
 pub mod typeck;
