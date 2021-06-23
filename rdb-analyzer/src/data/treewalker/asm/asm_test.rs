@@ -54,7 +54,8 @@ async fn basic_exec() {
     name: string,
     value: int64,
     kind: string,
-    set_member_name: string,
+    set_member_name_1: string,
+    set_member_name_2: string,
   } {
     root = param(root);
     some_item = get_field(some_item) root;
@@ -77,14 +78,22 @@ async fn basic_exec() {
     s = get_field(many_items) root;
     expected_id = const("xxx");
     elem = point_get expected_id s;
-    elem_name = get_field(name) elem;
+    elem_name_1 = get_field(name) elem;
+    expected_id = const("yyy");
+    elem = point_get expected_id s;
+    elem_name_2 = get_field(name) elem;
+    expected_id = const("zzz");
+    elem = point_get expected_id s;
+    elem_name_3 = get_field(name) elem;
 
     m = create_map;
     m = insert_into_map(id) id m;
     m = insert_into_map(name) name m;
     m = insert_into_map(value) value m;
     m = insert_into_map(kind) kind m;
-    m = insert_into_map(set_member_name) elem_name m;
+    m = insert_into_map(set_member_name_1) elem_name_1 m;
+    m = insert_into_map(set_member_name_2) elem_name_2 m;
+    m = insert_into_map(set_member_name_3) elem_name_3 m;
     return m;
   }
   "#;
@@ -138,6 +147,7 @@ async fn basic_exec() {
     m = insert_into_map(start) start m;
     m = insert_into_map(end) end m;
     dur = build_table(Duration<int64>) m;
+
     elem = create_map;
     v = const("xxx");
     elem = insert_into_map(id) v elem;
@@ -145,7 +155,16 @@ async fn basic_exec() {
     elem = insert_into_map(name) v elem;
     elem = insert_into_map(duration) dur elem;
     elem = build_table(Item<>) elem;
+    s = get_field(many_items) root;
+    insert_into_set elem s;
 
+    elem = create_map;
+    v = const("yyy");
+    elem = insert_into_map(id) v elem;
+    v = const("name_for_yyy");
+    elem = insert_into_map(name) v elem;
+    elem = insert_into_map(duration) dur elem;
+    elem = build_table(Item<>) elem;
     s = get_field(many_items) root;
     insert_into_set elem s;
   }
@@ -174,7 +193,18 @@ async fn basic_exec() {
             x.elements.get("kind").unwrap().unwrap_primitive(),
             &PrimitiveValue::String("end".into())
           );
-          assert_eq!(**x.elements.get("set_member_name").unwrap(), VmValue::Null,);
+          assert_eq!(
+            **x.elements.get("set_member_name_1").unwrap(),
+            VmValue::Null,
+          );
+          assert_eq!(
+            **x.elements.get("set_member_name_2").unwrap(),
+            VmValue::Null,
+          );
+          assert_eq!(
+            **x.elements.get("set_member_name_3").unwrap(),
+            VmValue::Null,
+          );
         }
         2 => {}
         3 => {
@@ -198,10 +228,21 @@ async fn basic_exec() {
           );
           assert_eq!(
             x.elements
-              .get("set_member_name")
+              .get("set_member_name_1")
               .unwrap()
               .unwrap_primitive(),
             &PrimitiveValue::String("name_for_xxx".into())
+          );
+          assert_eq!(
+            x.elements
+              .get("set_member_name_2")
+              .unwrap()
+              .unwrap_primitive(),
+            &PrimitiveValue::String("name_for_yyy".into())
+          );
+          assert_eq!(
+            **x.elements.get("set_member_name_3").unwrap(),
+            VmValue::Null,
           );
         }
         _ => unreachable!(),
