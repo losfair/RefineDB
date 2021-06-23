@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
 use bumpalo::Bump;
-use rpds::RedBlackTreeMapSync;
 
 use crate::{
   data::{
     fixup::migrate_schema,
     mock_kv::MockKv,
-    pathwalker::PathWalker,
     treewalker::{
       bytecode::{TwGraph, TwGraphNode, TwScript},
       exec::{generate_root_map, Executor},
@@ -18,15 +16,13 @@ use crate::{
     value::PrimitiveValue,
   },
   schema::{
-    compile::{compile, CompiledSchema, FieldType, PrimitiveType},
+    compile::{compile, PrimitiveType},
     grammar::parse,
   },
   storage_plan::{planner::generate_plan_for_schema, StoragePlan},
 };
 
-use super::vm_value::{
-  VmMapValue, VmSetValue, VmSetValueKind, VmTableValue, VmTableValueKind, VmValue,
-};
+use super::vm_value::VmValue;
 
 #[tokio::test]
 async fn basic_exec() {
