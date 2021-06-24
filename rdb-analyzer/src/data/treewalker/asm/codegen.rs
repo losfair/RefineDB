@@ -30,7 +30,6 @@ pub fn compile_twscript(input: &str) -> Result<TwScript> {
       name: g.name.to_string(),
       nodes: vec![],
       output: None,
-      effects: vec![],
       param_types: g
         .params
         .iter()

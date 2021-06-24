@@ -25,9 +25,6 @@ pub struct TwGraph {
   /// The output value of this graph.
   pub output: Option<u32>,
 
-  /// The effects of this graph.
-  pub effects: Vec<u32>,
-
   /// Param types.
   pub param_types: Vec<u32>,
 

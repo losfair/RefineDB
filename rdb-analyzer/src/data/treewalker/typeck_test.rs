@@ -108,7 +108,6 @@ fn basic_typeck() {
         (TwGraphNode::UnwrapOptional, vec![6], None), // 7
       ],
       output: Some(7),
-      effects: vec![],
       output_type: Some(1),
       param_types: vec![0],
     }],
@@ -146,7 +145,6 @@ fn filter_set() {
           (TwGraphNode::FilterSet(1), vec![2, 1], None), // 3
         ],
         output: Some(3),
-        effects: vec![],
         output_type: Some(1),
         param_types: vec![0],
       },
@@ -156,7 +154,6 @@ fn filter_set() {
           (TwGraphNode::LoadConst(0), vec![], None), // 0
         ],
         output: Some(0),
-        effects: vec![],
         output_type: Some(2),
         param_types: vec![3, 3],
       },
@@ -208,7 +205,6 @@ fn basic_typeck_fail_unknown_name() {
         (TwGraphNode::UnwrapOptional, vec![6], None), // 7
       ],
       output: Some(7),
-      effects: vec![],
       output_type: Some(1),
       param_types: vec![0],
     }],
@@ -255,7 +251,6 @@ fn basic_typeck_fail_missing_unwrap() {
         (TwGraphNode::GetField(3), vec![5], None),    // 6
       ],
       output: Some(6),
-      effects: vec![],
       output_type: Some(1),
       param_types: vec![0],
     }],
@@ -301,7 +296,6 @@ fn basic_typeck_output_type_mismatch() {
         (TwGraphNode::UnwrapOptional, vec![6], None), // 7
       ],
       output: Some(7),
-      effects: vec![],
       output_type: Some(1),
       param_types: vec![0],
     }],
@@ -361,7 +355,6 @@ fn typeck_set_point_get() {
         (TwGraphNode::InsertIntoMap(3), vec![5, 7], None), // 8
       ],
       output: Some(8),
-      effects: vec![],
       output_type: Some(1),
       param_types: vec![0],
     }],

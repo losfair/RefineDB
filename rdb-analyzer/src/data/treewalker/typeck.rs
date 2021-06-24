@@ -183,12 +183,6 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
       }
     }
 
-    for eff in &g.effects {
-      if *eff as usize >= g.nodes.len() {
-        return Err(TypeckError::GraphEffectIndexOob.into());
-      }
-    }
-
     let output_type = g
       .output_type
       .map(|x| {

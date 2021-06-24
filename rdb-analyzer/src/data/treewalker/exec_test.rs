@@ -64,7 +64,6 @@ async fn basic_exec() {
         (TwGraphNode::InsertIntoTable(1), vec![8, 1], None), // 0
       ],
       output: Some(7),
-      effects: vec![],
       output_type: Some(1),
       param_types: vec![0],
     }],
@@ -134,7 +133,6 @@ async fn basic_exec() {
         (TwGraphNode::GetField(1), vec![1], None), // 2
       ],
       output: Some(2),
-      effects: vec![],
       output_type: Some(1),
       param_types: vec![0],
     }],
@@ -196,7 +194,6 @@ async fn set_queries() {
         (TwGraphNode::InsertIntoSet, vec![6, 7], None),    // 8
       ],
       output: None,
-      effects: vec![],
       output_type: None,
       param_types: vec![0],
     }],
@@ -235,7 +232,6 @@ async fn set_queries() {
         (TwGraphNode::GetField(1), vec![3], None),      // 4
       ],
       output: Some(4),
-      effects: vec![],
       output_type: Some(1),
       param_types: vec![0],
     }],
@@ -267,7 +263,6 @@ async fn set_queries() {
         (TwGraphNode::DeleteFromSet, vec![1, 2], None), // 3
       ],
       output: None,
-      effects: vec![],
       output_type: None,
       param_types: vec![0],
     }],
@@ -298,7 +293,6 @@ async fn set_queries() {
         (TwGraphNode::GetField(1), vec![3], None),      // 4
       ],
       output: Some(4),
-      effects: vec![],
       output_type: Some(1),
       param_types: vec![0],
     }],
