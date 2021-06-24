@@ -22,6 +22,10 @@ pub fn compile_twscript(input: &str) -> Result<TwScript> {
     vmtype_pool: HashMap::new(),
     const_pool: HashMap::new(),
   };
+  if let Some(x) = first_duplicate(root.graphs.iter().map(|x| x.name)) {
+    return Err(TwAsmError::DuplicateGraph(x.into()).into());
+  }
+
   for g in &root.graphs {
     if let Some(x) = first_duplicate(g.params.iter().map(|x| x.0)) {
       return Err(TwAsmError::DuplicateParam(x.into()).into());

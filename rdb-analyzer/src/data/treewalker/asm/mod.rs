@@ -33,4 +33,7 @@ pub enum TwAsmError {
 
   #[error("duplicate param: {0}")]
   DuplicateParam(String),
+
+  #[error("duplicate graph: {0}")]
+  DuplicateGraph(String),
 }
