@@ -232,18 +232,18 @@ impl<'a, 'b> GraphContext<'a, 'b> {
           name,
         )
       }
-      K::InsertIntoSet(v, set) => {
-        let v = self.generate_expr(g, None, *v)?;
+      K::InsertIntoSet(set, v) => {
         let set = self.generate_expr(g, None, *set)?;
+        let v = self.generate_expr(g, None, *v)?;
         self.push_node(
           (TwGraphNode::InsertIntoSet, vec![v, set], precondition),
           name,
         )
       }
-      K::InsertIntoTable(field, v, table) => {
+      K::InsertIntoTable(field, table, v) => {
         let field = self.builder.alloc_ident(*field);
-        let v = self.generate_expr(g, None, *v)?;
         let table = self.generate_expr(g, None, *table)?;
+        let v = self.generate_expr(g, None, *v)?;
         self.push_node(
           (
             TwGraphNode::InsertIntoTable(field),

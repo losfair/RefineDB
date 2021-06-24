@@ -118,42 +118,37 @@ async fn basic_exec() {
       r#"
     graph main(root: schema) {
       some_item = get_field(some_item) root;
-      m = create_map;
-      m = m_insert(start) 1 m;
-      m = m_insert(end) 2 m;
-      dur = build_table(Duration<int64>) m;
-      t_insert(duration) dur some_item;
-
-      t_insert(id) "test_id" some_item;
-      t_insert(name) "test_name" some_item;
+      t_insert(duration) some_item $
+        build_table(Duration<int64>) $
+        m_insert(start) 1 $
+        m_insert(end) 2 $
+        create_map;
+      t_insert(id) some_item "test_id";
+      t_insert(name) some_item "test_name";
     }
     "#,
       READER,
       r#"
   graph main(root: schema) {
     some_item = get_field(some_item) root;
-    t_insert(name) "test" some_item;
+    t_insert(name) some_item "test";
 
     m = create_map;
     m = m_insert(start) 1 m;
     m = m_insert(end) 2 m;
     dur = build_table(Duration<int64>) m;
 
-    elem = create_map;
-    elem = m_insert(id) "xxx" elem;
-    elem = m_insert(name) "name_for_xxx" elem;
-    elem = m_insert(duration) dur elem;
-    elem = build_table(Item) elem;
     s = get_field(many_items) root;
-    s_insert elem s;
-
-    elem = create_map;
-    elem = m_insert(id) "yyy" elem;
-    elem = m_insert(name) "name_for_yyy" elem;
-    elem = m_insert(duration) dur elem;
-    elem = build_table(Item) elem;
-    s = get_field(many_items) root;
-    s_insert elem s;
+    s_insert s $ build_table(Item)
+      $ m_insert(id) "xxx"
+      $ m_insert(name) "name_for_xxx"
+      $ m_insert(duration) dur
+      $ create_map;
+    s_insert s $ build_table(Item)
+      $ m_insert(id) "yyy"
+      $ m_insert(name) "name_for_yyy"
+      $ m_insert(duration) dur
+      $ create_map;
   }
   "#,
       READER,
