@@ -67,25 +67,25 @@ async fn basic_exec() {
     set_member_name_1: string,
     set_member_name_2: string,
   } {
-    some_item = get_field(some_item) root;
-    id = get_field(id) some_item;
-    name = get_field(name) some_item;
+    some_item = root.some_item;
+    id = some_item.id;
+    name = some_item.name;
 
-    dur = get_field(duration) some_item;
+    dur = some_item.duration;
     if eq "test" name {
-      v1 = get_field(start) dur;
+      v1 = dur.start;
       k1 = "start";
     } else {
-      v2 = get_field(end) dur;
+      v2 = dur.end;
       k2 = "end";
     }
     value = select v1 v2;
     kind = select k1 k2;
 
-    s = get_field(many_items) root;
-    elem_name_1 = get_field(name) (point_get "xxx" s);
-    elem_name_2 = get_field(name) (point_get "yyy" s);
-    elem_name_3 = get_field(name) (point_get "zzz" s);
+    s = root.many_items;
+    elem_name_1 = (point_get "xxx" s).name;
+    elem_name_2 = (point_get "yyy" s).name;
+    elem_name_3 = (point_get "zzz" s).name;
 
     return m_insert(id) id
       $ m_insert(name) name
@@ -117,7 +117,7 @@ async fn basic_exec() {
     &[
       r#"
     graph main(root: schema) {
-      some_item = get_field(some_item) root;
+      some_item = root.some_item;
       t_insert(duration) some_item $
         build_table(Duration<int64>) $
         m_insert(start) 1 $
@@ -130,21 +130,19 @@ async fn basic_exec() {
       READER,
       r#"
   graph main(root: schema) {
-    some_item = get_field(some_item) root;
-    t_insert(name) some_item "test";
+    t_insert(name) root.some_item "test";
 
     m = create_map;
     m = m_insert(start) 1 m;
     m = m_insert(end) 2 m;
     dur = build_table(Duration<int64>) m;
 
-    s = get_field(many_items) root;
-    s_insert s $ build_table(Item)
+    s_insert root.many_items $ build_table(Item)
       $ m_insert(id) "xxx"
       $ m_insert(name) "name_for_xxx"
       $ m_insert(duration) dur
       $ create_map;
-    s_insert s $ build_table(Item)
+    s_insert root.many_items $ build_table(Item)
       $ m_insert(id) "yyy"
       $ m_insert(name) "name_for_yyy"
       $ m_insert(duration) dur

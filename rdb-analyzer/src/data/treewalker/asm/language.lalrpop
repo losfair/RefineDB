@@ -83,7 +83,6 @@ Expr: Expr<'input> = {
 
 ExprKind: ExprKind<'input> = {
   Token<"build_table"> Token<"("> <x:Type> Token<")"> <y:ExprL2Ref> => ExprKind::BuildTable(x, y),
-  Token<"get_field"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::GetField(x, y),
   Token<"point_get"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::GetSetElement(x, y),
   Token<"m_insert"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoMap(x, y, z),
   Token<"t_insert"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoTable(x, y, z),
@@ -106,11 +105,24 @@ ExprL2Ref: &'input Expr<'input> = {
 
 ExprL2: Expr<'input> = {
   <location_start:@L> <kind:ExprKindL2> <location_end:@R> => Expr { location_start, location_end, kind },
-  Token<"("> <e:Expr> Token<")"> => e,
   Token<"$"> <e:Expr> => e,
+  ExprL3,
 }
 
 ExprKindL2: ExprKind<'input> = {
+  <y:ExprL3Ref> Token<"."> <x:Identifier> => ExprKind::GetField(x, y),
+}
+
+ExprL3Ref: &'input Expr<'input> = {
+  <e:ExprL3> => state.alloc.alloc(e),
+}
+
+ExprL3: Expr<'input> = {
+  <location_start:@L> <kind:ExprKindL3> <location_end:@R> => Expr { location_start, location_end, kind },
+  Token<"("> <e:Expr> Token<")"> => e,
+}
+
+ExprKindL3: ExprKind<'input> = {
   <x:Literal> => ExprKind::LoadConst(x),
   Token<"create_map"> => ExprKind::CreateMap,
   <x:Identifier> => ExprKind::Node(x),
