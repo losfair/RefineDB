@@ -1,6 +1,8 @@
+use std::convert::TryFrom;
+
 use bumpalo::Bump;
 use rdb_analyzer::{
-  data::treewalker::{bytecode::TwScript, typeck::typeck_graph, vm::TwVm},
+  data::treewalker::{bytecode::TwScript, typeck::GlobalTyckContext, vm::TwVm},
   schema::{
     compile::{compile, CompiledSchema},
     grammar::parse,
@@ -8,14 +10,15 @@ use rdb_analyzer::{
   storage_plan::planner::generate_plan_for_schema,
 };
 
-use crate::system::SCHEMA;
+use crate::{
+  sysops::{SysopCollection, SYSOPS},
+  system::SCHEMA,
+};
 
 fn tyck_sysop(schema: &CompiledSchema, script: &TwScript) {
   let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
-  let vm = TwVm::new(&schema, &plan, script).unwrap();
-  for g in &script.graphs {
-    typeck_graph(&vm, g).unwrap();
-  }
+  let vm = TwVm::new(&schema, &plan, &script).unwrap();
+  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 }
 
 fn get_schema() -> CompiledSchema {
@@ -28,21 +31,10 @@ fn get_schema() -> CompiledSchema {
 }
 
 #[test]
-fn check_sysop_add_namespace() {
-  use crate::sysops::sysop_add_namespace;
-
+fn check_sysops() {
   let _ = pretty_env_logger::try_init();
   let schema = get_schema();
-
-  tyck_sysop(&schema, &sysop_add_namespace(&schema));
-}
-
-#[test]
-fn check_sysop_delete_namespace() {
-  use crate::sysops::sysop_delete_namespace;
-
-  let _ = pretty_env_logger::try_init();
-  let schema = get_schema();
-
-  tyck_sysop(&schema, &sysop_delete_namespace(&schema));
+  let sysops = SysopCollection::<TwScript>::try_from(&SYSOPS).unwrap();
+  tyck_sysop(&schema, &sysops.add_namespace);
+  tyck_sysop(&schema, &sysops.delete_namespace);
 }

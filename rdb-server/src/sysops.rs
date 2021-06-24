@@ -1,74 +1,45 @@
-use rdb_analyzer::{
-  data::treewalker::{
-    bytecode::{TwGraph, TwGraphNode, TwScript},
-    vm_value::{VmConst, VmConstSetValue, VmType},
-  },
-  schema::compile::{CompiledSchema, PrimitiveType},
+use std::convert::TryFrom;
+
+use anyhow::Result;
+use rdb_analyzer::data::treewalker::{asm::codegen::compile_twscript, bytecode::TwScript};
+
+pub struct SysopCollection<T> {
+  pub add_namespace: T,
+  pub delete_namespace: T,
+}
+
+impl TryFrom<&SysopCollection<&str>> for SysopCollection<TwScript> {
+  type Error = anyhow::Error;
+
+  fn try_from(that: &SysopCollection<&str>) -> Result<Self> {
+    Ok(Self {
+      add_namespace: compile_twscript(that.add_namespace)?,
+      delete_namespace: compile_twscript(that.delete_namespace)?,
+    })
+  }
+}
+
+#[allow(dead_code)]
+pub static SYSOPS: SysopCollection<&'static str> = SysopCollection {
+  add_namespace: r#"
+  graph main(root: schema, namespace_id: string) {
+    s_insert root.system.namespaces $
+      build_table(Namespace) $
+      m_insert(id) namespace_id $
+      m_insert(all_deployments) empty_set<Deployment> $
+      create_map;
+  }
+  "#,
+  delete_namespace: r#"
+  graph main(root: schema, namespace_id: string): bool {
+    ns = root.system.namespaces;
+    if is_present $ point_get ns namespace_id {
+      s_delete ns namespace_id;
+      r1 = true;
+    } else {
+      r2 = false;
+    }
+    return select r1 r2;
+  }
+  "#,
 };
-
-pub fn sysop_add_namespace(schema: &CompiledSchema) -> TwScript {
-  TwScript {
-    graphs: vec![TwGraph {
-      nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]),         // 0
-        (TwGraphNode::LoadParam(1), vec![]),         // 1 namespace_id
-        (TwGraphNode::GetField(0), vec![0]),         // 2 <root>.system
-        (TwGraphNode::GetField(1), vec![2]),         // 3 <root>.system.namespaces
-        (TwGraphNode::CreateMap, vec![]),            // 4
-        (TwGraphNode::InsertIntoMap(2), vec![1, 4]), // 5
-        (TwGraphNode::LoadConst(0), vec![]),         // 6
-        (TwGraphNode::InsertIntoMap(3), vec![6, 5]), // 7
-        (TwGraphNode::BuildTable(4), vec![7]),       // 8
-        (TwGraphNode::InsertIntoSet, vec![8, 3]),    // 9
-      ],
-      output: None,
-      effects: vec![],
-      output_type: None,
-      param_types: vec![0, 1],
-    }],
-    entry: 0,
-    consts: vec![VmConst::Set(VmConstSetValue {
-      member_ty: "Deployment<>".into(),
-      members: vec![],
-    })],
-    idents: vec![
-      "system".into(),
-      "namespaces".into(),
-      "id".into(),
-      "all_deployments".into(),
-      "Namespace<>".into(),
-    ],
-    types: vec![
-      VmType::<String>::from(schema),
-      VmType::Primitive(PrimitiveType::String),
-    ],
-  }
-}
-
-pub fn sysop_delete_namespace(schema: &CompiledSchema) -> TwScript {
-  TwScript {
-    graphs: vec![TwGraph {
-      nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![]),      // 0
-        (TwGraphNode::LoadParam(1), vec![]),      // 1 namespace_id
-        (TwGraphNode::GetField(0), vec![0]),      // 2 <root>.system
-        (TwGraphNode::GetField(1), vec![2]),      // 3 <root>.system.namespaces
-        (TwGraphNode::DeleteFromSet, vec![1, 3]), // 4
-      ],
-      output: None,
-      effects: vec![],
-      output_type: None,
-      param_types: vec![0, 1],
-    }],
-    entry: 0,
-    consts: vec![VmConst::Set(VmConstSetValue {
-      member_ty: "Deployment<>".into(),
-      members: vec![],
-    })],
-    idents: vec!["system".into(), "namespaces".into()],
-    types: vec![
-      VmType::<String>::from(schema),
-      VmType::Primitive(PrimitiveType::String),
-    ],
-  }
-}
