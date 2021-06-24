@@ -72,10 +72,8 @@ async fn basic_exec() {
     id = get_field(id) some_item;
     name = get_field(name) some_item;
 
-    expected_name = const("test");
-    name_matches = eq expected_name name;
     dur = get_field(duration) some_item;
-    if name_matches {
+    if eq const("test") name {
       v1 = get_field(start) dur;
       k1 = const("start");
     } else {
@@ -86,25 +84,18 @@ async fn basic_exec() {
     kind = select k1 k2;
 
     s = get_field(many_items) root;
-    expected_id = const("xxx");
-    elem = point_get expected_id s;
-    elem_name_1 = get_field(name) elem;
-    expected_id = const("yyy");
-    elem = point_get expected_id s;
-    elem_name_2 = get_field(name) elem;
-    expected_id = const("zzz");
-    elem = point_get expected_id s;
-    elem_name_3 = get_field(name) elem;
+    elem_name_1 = get_field(name) (point_get const("xxx") s);
+    elem_name_2 = get_field(name) (point_get const("yyy") s);
+    elem_name_3 = get_field(name)(point_get const("zzz") s);
 
-    m = create_map;
-    m = insert_into_map(id) id m;
-    m = insert_into_map(name) name m;
-    m = insert_into_map(value) value m;
-    m = insert_into_map(kind) kind m;
-    m = insert_into_map(set_member_name_1) elem_name_1 m;
-    m = insert_into_map(set_member_name_2) elem_name_2 m;
-    m = insert_into_map(set_member_name_3) elem_name_3 m;
-    return m;
+    return m_insert(id) id
+      $ m_insert(name) name
+      $ m_insert(value) value
+      $ m_insert(kind) kind
+      $ m_insert(set_member_name_1) elem_name_1
+      $ m_insert(set_member_name_2) elem_name_2
+      $ m_insert(set_member_name_3) elem_name_3
+      create_map;
   }
   "#;
   let _ = pretty_env_logger::try_init();
@@ -132,15 +123,15 @@ async fn basic_exec() {
       start = const(1);
       end = const(2);
       m = create_map;
-      m = insert_into_map(start) start m;
-      m = insert_into_map(end) end m;
+      m = m_insert(start) start m;
+      m = m_insert(end) end m;
       dur = build_table(Duration<int64>) m;
-      insert_into_table(duration) dur some_item;
+      t_insert(duration) dur some_item;
 
       id = const("test_id");
       name = const("test_name");
-      insert_into_table(id) id some_item;
-      insert_into_table(name) name some_item;
+      t_insert(id) id some_item;
+      t_insert(name) name some_item;
     }
     "#,
       READER,
@@ -149,34 +140,34 @@ async fn basic_exec() {
     root = param(root);
     some_item = get_field(some_item) root;
     name = const("test");
-    insert_into_table(name) name some_item;
+    t_insert(name) name some_item;
 
     start = const(1);
     end = const(2);
     m = create_map;
-    m = insert_into_map(start) start m;
-    m = insert_into_map(end) end m;
+    m = m_insert(start) start m;
+    m = m_insert(end) end m;
     dur = build_table(Duration<int64>) m;
 
     elem = create_map;
     v = const("xxx");
-    elem = insert_into_map(id) v elem;
+    elem = m_insert(id) v elem;
     v = const("name_for_xxx");
-    elem = insert_into_map(name) v elem;
-    elem = insert_into_map(duration) dur elem;
+    elem = m_insert(name) v elem;
+    elem = m_insert(duration) dur elem;
     elem = build_table(Item<>) elem;
     s = get_field(many_items) root;
-    insert_into_set elem s;
+    s_insert elem s;
 
     elem = create_map;
     v = const("yyy");
-    elem = insert_into_map(id) v elem;
+    elem = m_insert(id) v elem;
     v = const("name_for_yyy");
-    elem = insert_into_map(name) v elem;
-    elem = insert_into_map(duration) dur elem;
+    elem = m_insert(name) v elem;
+    elem = m_insert(duration) dur elem;
     elem = build_table(Item<>) elem;
     s = get_field(many_items) root;
-    insert_into_set elem s;
+    s_insert elem s;
   }
   "#,
       READER,

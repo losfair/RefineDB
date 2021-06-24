@@ -85,8 +85,8 @@ struct GraphContext<'a, 'b> {
 impl<'a, 'b> GraphContext<'a, 'b> {
   fn generate_stmt(&mut self, g: &ast::Graph<'a>, stmt: &ast::Stmt<'a>) -> Result<()> {
     match &stmt.kind {
-      ast::StmtKind::Return { name } => {
-        let node = self.lookup_node(*name)?;
+      ast::StmtKind::Return { value } => {
+        let node = self.generate_expr(g, None, value)?;
         if self.target.output.is_some() {
           return Err(TwAsmError::DuplicateReturn.into());
         }
@@ -97,7 +97,7 @@ impl<'a, 'b> GraphContext<'a, 'b> {
         if_body,
         else_body,
       } => {
-        let precondition = self.lookup_node(*precondition)?;
+        let precondition = self.generate_expr(g, None, precondition)?;
         let condition_true = if let Some(last) = self.condition_stack.last() {
           let last = *last;
           self.push_node((TwGraphNode::And, vec![precondition, last], None), None)

@@ -53,14 +53,14 @@ Stmt: StmtKind<'input> = {
     name: Some(name),
     value,
   },
-  Token<"return"> <name:Identifier> Token<";"> => StmtKind::Return {
-    name,
+  Token<"return"> <value:Expr> Token<";"> => StmtKind::Return {
+    value,
   },
   <value:Expr> Token<";"> => StmtKind::Node {
     name: None,
     value,
   },
-  Token<"if"> <precondition:Identifier>
+  Token<"if"> <precondition:Expr>
     Token<"{"> <if_body:StmtList> Token<"}">
     <else_body:(Token<"else"> Token<"{"> <StmtList> Token<"}">)?> => StmtKind::If {
     precondition,
@@ -82,18 +82,15 @@ Expr: Expr<'input> = {
 }
 
 ExprKind: ExprKind<'input> = {
-  Token<"param"> Token<"("> <x:Identifier> Token<")"> => ExprKind::LoadParam(x),
-  Token<"const"> Token<"("> <x:Literal> Token<")"> => ExprKind::LoadConst(x),
   Token<"build_table"> Token<"("> <x:Type> Token<")"> <y:ExprL2Ref> => ExprKind::BuildTable(x, y),
-  Token<"create_map"> => ExprKind::CreateMap,
   Token<"get_field"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::GetField(x, y),
   Token<"point_get"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::GetSetElement(x, y),
-  Token<"insert_into_map"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoMap(x, y, z),
-  Token<"insert_into_table"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoTable(x, y, z),
-  Token<"insert_into_set"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoSet(y, z),
-  Token<"delete_from_set"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::DeleteFromSet(y, z),
-  Token<"delete_from_map"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromMap(x, y),
-  Token<"delete_from_table"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromTable(x, y),
+  Token<"m_insert"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoMap(x, y, z),
+  Token<"t_insert"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoTable(x, y, z),
+  Token<"s_insert"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoSet(y, z),
+  Token<"m_delete"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromMap(x, y),
+  Token<"t_delete"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromTable(x, y),
+  Token<"s_delete"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::DeleteFromSet(y, z),
   Token<"eq"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Eq(x, y),
   Token<"ne"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Ne(x, y),
   Token<"and"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::And(x, y),
@@ -110,9 +107,13 @@ ExprL2Ref: &'input Expr<'input> = {
 ExprL2: Expr<'input> = {
   <location_start:@L> <kind:ExprKindL2> <location_end:@R> => Expr { location_start, location_end, kind },
   Token<"("> <e:Expr> Token<")"> => e,
+  Token<"$"> <e:Expr> => e,
 }
 
 ExprKindL2: ExprKind<'input> = {
+  Token<"const"> Token<"("> <x:Literal> Token<")"> => ExprKind::LoadConst(x),
+  Token<"param"> Token<"("> <x:Identifier> Token<")"> => ExprKind::LoadParam(x),
+  Token<"create_map"> => ExprKind::CreateMap,
   <x:Identifier> => ExprKind::Node(x),
 }
 

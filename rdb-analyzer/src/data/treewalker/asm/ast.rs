@@ -20,14 +20,14 @@ pub struct Stmt<'a> {
 
 pub enum StmtKind<'a> {
   Return {
-    name: &'a str,
+    value: Expr<'a>,
   },
   Node {
     name: Option<&'a str>,
     value: Expr<'a>,
   },
   If {
-    precondition: &'a str,
+    precondition: Expr<'a>,
     if_body: Vec<'a, Stmt<'a>>,
     else_body: Option<Vec<'a, Stmt<'a>>>,
   },
