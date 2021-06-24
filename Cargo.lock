@@ -1253,6 +1253,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rdb-pgsvc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bumpalo",
+ "hex",
+ "libc",
+ "log",
+ "pretty_env_logger",
+ "rdb-analyzer",
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "similar",
+ "thiserror",
+]
+
+[[package]]
 name = "rdb-proto"
 version = "0.1.0"
 dependencies = [

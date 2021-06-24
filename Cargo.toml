@@ -4,4 +4,5 @@ members = [
   "rdb-analyzer",
   "rdbctl",
   "rdb-proto",
+  "rdb-pgsvc",
 ]
