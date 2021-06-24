@@ -59,6 +59,9 @@ pub enum SchemaCompileError {
 
   #[error("type name must start with an upper-case letter: `{0}`")]
   TypeNameMustStartWithUpperCaseLetter(String),
+
+  #[error("optional field `{0}` in type `{1}` cannot have default value")]
+  OptionalFieldCannotHaveDefaultValue(String, String),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
@@ -217,6 +220,12 @@ impl FieldAnnotation {
   pub fn is_primary(&self) -> bool {
     match self {
       FieldAnnotation::PrimaryKey => true,
+      _ => false,
+    }
+  }
+  pub fn is_default(&self) -> bool {
+    match self {
+      FieldAnnotation::Default(_) => true,
       _ => false,
     }
   }
@@ -456,7 +465,7 @@ impl<'a> TypeResolutionContext<'a> {
         }
       }
 
-      // Validate index constraints.
+      // Validate constraints.
       // Rule 1: Currently, a primary/unique/non-unique index is only allowed on either packed or primitive fields.
       if annotations
         .iter()
@@ -487,6 +496,17 @@ impl<'a> TypeResolutionContext<'a> {
           }
           _ => {}
         }
+      }
+      // Rule 3: an optional field cannot have a default value.
+      // Maybe we can relax this in the future.
+      if annotations.iter().find(|x| x.is_default()).is_some() && field_ty.is_optional() {
+        return Err(
+          SchemaCompileError::OptionalFieldCannotHaveDefaultValue(
+            x.name.0.to_string(),
+            ty.name.0.to_string(),
+          )
+          .into(),
+        );
       }
       fields.insert(Arc::from(x.name.0), (field_ty, annotations));
     }
