@@ -72,7 +72,7 @@ async fn basic_exec() {
     name = some_item.name;
 
     dur = some_item.duration;
-    if eq "test" name {
+    if name == "test" {
       v1 = dur.start;
       k1 = "start";
     } else {

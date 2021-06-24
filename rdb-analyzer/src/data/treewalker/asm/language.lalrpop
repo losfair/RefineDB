@@ -90,13 +90,13 @@ ExprKind: ExprKind<'input> = {
   Token<"m_delete"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromMap(x, y),
   Token<"t_delete"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromTable(x, y),
   Token<"s_delete"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::DeleteFromSet(y, z),
-  Token<"eq"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Eq(x, y),
-  Token<"ne"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Ne(x, y),
-  Token<"and"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::And(x, y),
-  Token<"or"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Or(x, y),
-  Token<"not"> <x:ExprL2Ref> => ExprKind::Not(x),
   Token<"unwrap_optional"> <x:ExprL2Ref> => ExprKind::UnwrapOptional(x),
   Token<"select"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Select(x, y),
+  <x:ExprL3Ref> Token<"=="> <y:ExprL3Ref> => ExprKind::Eq(x, y),
+  <x:ExprL3Ref> Token<"!="> <y:ExprL3Ref> => ExprKind::Ne(x, y),
+  <x:ExprL3Ref> Token<"&&"> <y:ExprL3Ref> => ExprKind::And(x, y),
+  <x:ExprL3Ref> Token<"||"> <y:ExprL3Ref> => ExprKind::Or(x, y),
+  Token<"!"> <x:Expr> => ExprKind::Not(state.alloc.alloc(x)),
 }
 
 ExprL2Ref: &'input Expr<'input> = {
@@ -104,13 +104,8 @@ ExprL2Ref: &'input Expr<'input> = {
 }
 
 ExprL2: Expr<'input> = {
-  <location_start:@L> <kind:ExprKindL2> <location_end:@R> => Expr { location_start, location_end, kind },
   Token<"$"> <e:Expr> => e,
   ExprL3,
-}
-
-ExprKindL2: ExprKind<'input> = {
-  <y:ExprL3Ref> Token<"."> <x:Identifier> => ExprKind::GetField(x, y),
 }
 
 ExprL3Ref: &'input Expr<'input> = {
@@ -126,6 +121,7 @@ ExprKindL3: ExprKind<'input> = {
   <x:Literal> => ExprKind::LoadConst(x),
   Token<"create_map"> => ExprKind::CreateMap,
   <x:Identifier> => ExprKind::Node(x),
+  <y:ExprL3Ref> Token<"."> <x:Identifier> => ExprKind::GetField(x, y),
 }
 
 Identifier: &'input str = {
