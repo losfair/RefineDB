@@ -135,9 +135,7 @@ async fn basic_exec() {
   graph main(root: schema) {
     t_insert(name) root.some_item "test";
 
-    m = create_map;
-    m = m_insert(start) 1 m;
-    m = m_insert(end) 2 m;
+    m = m_insert(start) 1 $ m_insert(end) 2 $ create_map;
     dur = build_table(Duration<int64>) m;
 
     s_insert root.many_items $ build_table(Item)

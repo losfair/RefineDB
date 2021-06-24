@@ -36,4 +36,7 @@ pub enum TwAsmError {
 
   #[error("duplicate graph: {0}")]
   DuplicateGraph(String),
+
+  #[error("duplicate node name: {0}")]
+  DuplicateNodeName(String),
 }

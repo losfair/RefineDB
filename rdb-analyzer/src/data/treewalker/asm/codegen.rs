@@ -60,7 +60,7 @@ pub fn compile_twscript(input: &str) -> Result<TwScript> {
         condition_stack: vec![],
       };
       for (i, (p, _)) in g.params.iter().enumerate() {
-        ctx.push_node((TwGraphNode::LoadParam(i as u32), vec![], None), Some(*p));
+        ctx.push_node((TwGraphNode::LoadParam(i as u32), vec![], None), Some(*p))?;
       }
       for stmt in &g.stmts {
         ctx.generate_stmt(g, stmt)?;
@@ -104,7 +104,7 @@ impl<'a, 'b> GraphContext<'a, 'b> {
         else_body,
       } => {
         let precondition = self.generate_expr(g, None, precondition)?;
-        let condition_true = self.generate_condition(precondition);
+        let condition_true = self.generate_condition(precondition)?;
         self.condition_stack.push(condition_true);
         for stmt in if_body {
           self.generate_stmt(g, stmt)?;
@@ -112,8 +112,8 @@ impl<'a, 'b> GraphContext<'a, 'b> {
         self.condition_stack.pop().unwrap();
 
         if let Some(else_body) = else_body {
-          let precondition = self.push_node((TwGraphNode::Not, vec![precondition], None), None);
-          let condition_false = self.generate_condition(precondition);
+          let precondition = self.push_node((TwGraphNode::Not, vec![precondition], None), None)?;
+          let condition_false = self.generate_condition(precondition)?;
           self.condition_stack.push(condition_false);
           for stmt in else_body {
             self.generate_stmt(g, stmt)?;
@@ -128,12 +128,12 @@ impl<'a, 'b> GraphContext<'a, 'b> {
     Ok(())
   }
 
-  fn generate_condition(&mut self, condition: u32) -> u32 {
+  fn generate_condition(&mut self, condition: u32) -> Result<u32> {
     if let Some(last) = self.condition_stack.last() {
       let last = *last;
       self.push_node((TwGraphNode::And, vec![condition, last], None), None)
     } else {
-      condition
+      Ok(condition)
     }
   }
 
@@ -150,23 +150,23 @@ impl<'a, 'b> GraphContext<'a, 'b> {
       K::And(l, r) => {
         let l = self.generate_expr(g, None, l)?;
         let r = self.generate_expr(g, None, r)?;
-        self.push_node((TwGraphNode::And, vec![l, r], precondition), name)
+        self.push_node((TwGraphNode::And, vec![l, r], precondition), name)?
       }
       K::BuildTable(ty, map) => {
         let ty = self
           .builder
           .alloc_ident_external(&format_type_for_table(ty)?);
         let map = self.generate_expr(g, None, *map)?;
-        self.push_node((TwGraphNode::BuildTable(ty), vec![map], precondition), name)
+        self.push_node((TwGraphNode::BuildTable(ty), vec![map], precondition), name)?
       }
-      K::CreateMap => self.push_node((TwGraphNode::CreateMap, vec![], precondition), name),
+      K::CreateMap => self.push_node((TwGraphNode::CreateMap, vec![], precondition), name)?,
       K::DeleteFromMap(field, map) => {
         let field = self.builder.alloc_ident(*field);
         let map = self.generate_expr(g, None, *map)?;
         self.push_node(
           (TwGraphNode::DeleteFromMap(field), vec![map], precondition),
           name,
-        )
+        )?
       }
       K::DeleteFromSet(set, selector) => {
         let set = self.generate_expr(g, None, *set)?;
@@ -178,7 +178,7 @@ impl<'a, 'b> GraphContext<'a, 'b> {
             precondition,
           ),
           name,
-        )
+        )?
       }
       K::DeleteFromTable(field, table) => {
         let field = self.builder.alloc_ident(*field);
@@ -190,12 +190,12 @@ impl<'a, 'b> GraphContext<'a, 'b> {
             precondition,
           ),
           name,
-        )
+        )?
       }
       K::Eq(l, r) => {
         let l = self.generate_expr(g, None, *l)?;
         let r = self.generate_expr(g, None, *r)?;
-        self.push_node((TwGraphNode::Eq, vec![l, r], precondition), name)
+        self.push_node((TwGraphNode::Eq, vec![l, r], precondition), name)?
       }
       K::GetField(field, table_or_set) => {
         let field = self.builder.alloc_ident(*field);
@@ -207,7 +207,7 @@ impl<'a, 'b> GraphContext<'a, 'b> {
             precondition,
           ),
           name,
-        )
+        )?
       }
       K::GetSetElement(set, selector) => {
         let set = self.generate_expr(g, None, *set)?;
@@ -219,7 +219,7 @@ impl<'a, 'b> GraphContext<'a, 'b> {
             precondition,
           ),
           name,
-        )
+        )?
       }
       K::InsertIntoMap(field, v, map) => {
         let field = self.builder.alloc_ident(*field);
@@ -232,7 +232,7 @@ impl<'a, 'b> GraphContext<'a, 'b> {
             precondition,
           ),
           name,
-        )
+        )?
       }
       K::InsertIntoSet(set, v) => {
         let set = self.generate_expr(g, None, *set)?;
@@ -240,7 +240,7 @@ impl<'a, 'b> GraphContext<'a, 'b> {
         self.push_node(
           (TwGraphNode::InsertIntoSet, vec![v, set], precondition),
           name,
-        )
+        )?
       }
       K::InsertIntoTable(field, table, v) => {
         let field = self.builder.alloc_ident(*field);
@@ -253,58 +253,58 @@ impl<'a, 'b> GraphContext<'a, 'b> {
             precondition,
           ),
           name,
-        )
+        )?
       }
       K::LoadConst(x) => {
         let x = self.builder.alloc_const(literal_to_vmconst(x)?);
-        self.push_node((TwGraphNode::LoadConst(x), vec![], precondition), name)
+        self.push_node((TwGraphNode::LoadConst(x), vec![], precondition), name)?
       }
       K::Select(l, r) => {
         let l = self.generate_expr(g, None, *l)?;
         let r = self.generate_expr(g, None, *r)?;
-        self.push_node((TwGraphNode::Select, vec![l, r], precondition), name)
+        self.push_node((TwGraphNode::Select, vec![l, r], precondition), name)?
       }
       K::Ne(l, r) => {
         let l = self.generate_expr(g, None, *l)?;
         let r = self.generate_expr(g, None, *r)?;
-        self.push_node((TwGraphNode::Ne, vec![l, r], precondition), name)
+        self.push_node((TwGraphNode::Ne, vec![l, r], precondition), name)?
       }
       K::Or(l, r) => {
         let l = self.generate_expr(g, None, *l)?;
         let r = self.generate_expr(g, None, *r)?;
-        self.push_node((TwGraphNode::Or, vec![l, r], precondition), name)
+        self.push_node((TwGraphNode::Or, vec![l, r], precondition), name)?
       }
       K::Not(x) => {
         let x = self.generate_expr(g, None, *x)?;
-        self.push_node((TwGraphNode::Not, vec![x], precondition), name)
+        self.push_node((TwGraphNode::Not, vec![x], precondition), name)?
       }
       K::IsPresent(x) => {
         let x = self.generate_expr(g, None, *x)?;
-        self.push_node((TwGraphNode::IsPresent, vec![x], precondition), name)
+        self.push_node((TwGraphNode::IsPresent, vec![x], precondition), name)?
       }
       K::IsNull(x) => {
         let x = self.generate_expr(g, None, *x)?;
-        self.push_node((TwGraphNode::IsNull, vec![x], precondition), name)
+        self.push_node((TwGraphNode::IsNull, vec![x], precondition), name)?
       }
       K::OrElse(l, r) => {
         let l = self.generate_expr(g, None, *l)?;
-        let comparator = self.push_node((TwGraphNode::IsNull, vec![l], None), None);
-        let not_comparator = self.push_node((TwGraphNode::Not, vec![comparator], None), None);
+        let comparator = self.push_node((TwGraphNode::IsNull, vec![l], None), None)?;
+        let not_comparator = self.push_node((TwGraphNode::Not, vec![comparator], None), None)?;
 
         // If `l` is null...
-        let condition = self.generate_condition(comparator);
+        let condition = self.generate_condition(comparator)?;
         self.condition_stack.push(condition);
         let on_null = self.generate_expr(g, None, *r)?;
         self.condition_stack.pop().unwrap();
 
         // Otherwise, use `l`...
-        let condition = self.generate_condition(not_comparator);
-        let on_notnull = self.push_node((TwGraphNode::Nop, vec![l], Some(condition)), None);
+        let condition = self.generate_condition(not_comparator)?;
+        let on_notnull = self.push_node((TwGraphNode::Nop, vec![l], Some(condition)), None)?;
 
         self.push_node(
           (TwGraphNode::Select, vec![on_null, on_notnull], precondition),
           name,
-        )
+        )?
       }
     };
     Ok(ret)
@@ -314,13 +314,16 @@ impl<'a, 'b> GraphContext<'a, 'b> {
     &mut self,
     node: (TwGraphNode, Vec<u32>, Option<u32>),
     name: Option<&'a str>,
-  ) -> u32 {
+  ) -> Result<u32> {
     let index = self.target.nodes.len() as u32;
     self.target.nodes.push(node);
     if let Some(name) = name {
+      if self.names.contains_key(name) {
+        return Err(TwAsmError::DuplicateNodeName(name.into()).into());
+      }
       self.names.insert(name, index);
     }
-    index
+    Ok(index)
   }
 
   fn lookup_node(&self, name: &str) -> Result<u32> {
