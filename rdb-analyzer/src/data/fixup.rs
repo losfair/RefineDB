@@ -38,7 +38,7 @@ async fn walk_and_migrate<'a>(
   schema: &'a CompiledSchema,
   walker: Arc<PathWalker<'a>>,
   field_ty: &'a FieldType,
-  _annotations: &[FieldAnnotation],
+  annotations: &[FieldAnnotation],
 ) -> Result<()> {
   // First, ensure that this field is present...
   let key = walker.generate_key();
@@ -50,7 +50,16 @@ async fn walk_and_migrate<'a>(
     } else {
       // Otherwise, this is a new non-optional field and let's use the default value
       let default_value = match field_ty {
-        FieldType::Primitive(x) => rmp_serde::to_vec(&PrimitiveValue::default_value_for_type(*x))?,
+        FieldType::Primitive(x) => {
+          if let Some(x) = annotations.iter().find_map(|x| match x {
+            FieldAnnotation::Default(x) => Some(x),
+            _ => None,
+          }) {
+            rmp_serde::to_vec(x)?
+          } else {
+            rmp_serde::to_vec(&PrimitiveValue::default_value_for_type(*x))?
+          }
+        }
         _ => vec![],
       };
       txn.put(&key, &default_value).await?;

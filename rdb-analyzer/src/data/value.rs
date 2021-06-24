@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, iter::FromIterator};
+use std::{collections::BTreeMap, fmt::Display, iter::FromIterator};
 
 use byteorder::{BigEndian, ByteOrder};
 use serde::{Deserialize, Serialize};
@@ -28,6 +28,17 @@ pub enum PrimitiveValue {
 }
 
 const TOP_BIT: u64 = 1u64 << 63;
+
+impl Display for PrimitiveValue {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::String(x) => write!(f, "{}", serde_json::to_string(x).unwrap()),
+      Self::Bytes(x) => write!(f, "h\"{}\"", hex::encode(x)),
+      Self::Int64(x) => write!(f, "{}", x),
+      Self::Double(x) => write!(f, "{}", f64::from_bits(*x)),
+    }
+  }
+}
 
 impl PrimitiveValue {
   pub fn get_type(&self) -> PrimitiveType {

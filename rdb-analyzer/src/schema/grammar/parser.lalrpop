@@ -83,6 +83,7 @@ Literal: Literal<'input> = {
     error: SchemaError::InvalidLiteral,
   }),
   <s:StringLit> => Literal::String(state.resolve_str(&s)),
+  <s:HexBytesLit> => Literal::Bytes(s),
 }
 
 StringLit: String = {
@@ -90,6 +91,19 @@ StringLit: String = {
     .map_err(|_| ParseError::User {
       error: SchemaError::InvalidLiteral,
     }),
+}
+
+HexBytesLit: &'input [u8] = {
+  <s:Token<r#"h"([0-9a-fA-F][0-9a-fA-F])*""#>> =>? serde_json::from_str::<String>(s.strip_prefix("h\"").unwrap().strip_suffix("\"").unwrap())
+    .map_err(|_| ParseError::User {
+      error: SchemaError::InvalidLiteral,
+    })
+    .and_then(|x| hex::decode(&x)
+      .map_err(|_| ParseError::User {
+        error: SchemaError::InvalidLiteral,
+      })
+      .map(|x| state.alloc.alloc_slice_copy(&x) as &[u8])
+    ),
 }
 
 

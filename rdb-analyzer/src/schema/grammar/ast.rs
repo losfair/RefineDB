@@ -46,4 +46,5 @@ pub struct Identifier<'a>(pub &'a str);
 pub enum Literal<'a> {
   Integer(i64),
   String(&'a str),
+  Bytes(&'a [u8]),
 }

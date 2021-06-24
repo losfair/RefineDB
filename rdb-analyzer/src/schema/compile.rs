@@ -7,6 +7,7 @@ use anyhow::Result;
 use thiserror::Error;
 
 use super::grammar::ast::{self, TypeExpr};
+use crate::data::value::PrimitiveValue;
 use crate::schema::grammar::ast::Literal;
 use crate::schema::grammar::ast::SchemaItem;
 use serde::{Deserialize, Serialize};
@@ -166,6 +167,7 @@ pub enum FieldAnnotation {
   Index,
   Packed,
   RenameFrom(String),
+  Default(PrimitiveValue),
 }
 
 pub trait FieldAnnotationList {
@@ -228,6 +230,7 @@ impl Display for FieldAnnotation {
       Self::Index => write!(f, "@index"),
       Self::Packed => write!(f, "@packed"),
       Self::RenameFrom(x) => write!(f, "@rename_from({})", serde_json::to_string(x).unwrap()),
+      Self::Default(x) => write!(f, "@default({})", x),
     }
   }
 }
@@ -437,6 +440,9 @@ impl<'a> TypeResolutionContext<'a> {
           ("rename_from", [Literal::String(x)]) => {
             annotations.push(FieldAnnotation::RenameFrom(x.to_string()));
           }
+          ("default", [x]) => {
+            annotations.push(FieldAnnotation::Default(literal_to_primitive(x)));
+          }
           _ => {
             return Err(
               SchemaCompileError::UnknownAnnotationOnField(
@@ -501,5 +507,13 @@ impl<'a> TypeResolutionContext<'a> {
     self.resolved.get_mut(&repr).unwrap().fields = fields;
 
     Ok(FieldType::Table(repr))
+  }
+}
+
+fn literal_to_primitive(lit: &ast::Literal) -> PrimitiveValue {
+  match lit {
+    ast::Literal::Bytes(x) => PrimitiveValue::Bytes(x.to_vec()),
+    ast::Literal::Integer(x) => PrimitiveValue::Int64(*x),
+    ast::Literal::String(x) => PrimitiveValue::String(x.to_string()),
   }
 }

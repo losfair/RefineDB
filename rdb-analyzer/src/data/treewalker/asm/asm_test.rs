@@ -62,6 +62,7 @@ async fn basic_exec() {
   graph main(root: schema): map {
     id: string,
     name: string,
+    altname: string,
     value: int64,
     kind: string,
     set_member_name_1: string,
@@ -93,6 +94,7 @@ async fn basic_exec() {
       $ m_insert(name) name
       $ m_insert(value) value
       $ m_insert(kind) kind
+      $ m_insert(altname) some_item.altname
       $ m_insert(set_member_name_1) elem_name_1
       $ m_insert(set_member_name_2) elem_name_2
       $ m_insert(set_member_name_3) elem_name_3
@@ -108,6 +110,8 @@ async fn basic_exec() {
     @primary
     id: string,
     name: string,
+    @default("hello")
+    altname: string,
     duration: Duration<int64>,
   }
   type Duration<T> {
@@ -141,11 +145,13 @@ async fn basic_exec() {
     s_insert root.many_items $ build_table(Item)
       $ m_insert(id) "xxx"
       $ m_insert(name) "name_for_xxx"
+      $ m_insert(altname) "testalt"
       $ m_insert(duration) dur
       $ create_map;
     s_insert root.many_items $ build_table(Item)
       $ m_insert(id) "yyy"
       $ m_insert(name) "name_for_yyy"
+      $ m_insert(altname) "testalt"
       $ m_insert(duration) dur
       $ create_map;
   }
@@ -165,6 +171,10 @@ async fn basic_exec() {
           assert_eq!(
             x.elements.get("name").unwrap().unwrap_primitive(),
             &PrimitiveValue::String("test_name".into())
+          );
+          assert_eq!(
+            x.elements.get("altname").unwrap().unwrap_primitive(),
+            &PrimitiveValue::String("hello".into())
           );
           assert_eq!(
             x.elements.get("value").unwrap().unwrap_primitive(),
