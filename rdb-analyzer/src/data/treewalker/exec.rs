@@ -368,6 +368,23 @@ impl<'a, 'b> Executor<'a, 'b> {
         params[0].unwrap_bool() | params[1].unwrap_bool(),
       ))),
       TwGraphNode::Not => Some(Arc::new(VmValue::Bool(!params[0].unwrap_bool()))),
+      TwGraphNode::IsPresent => {
+        let walker = match &*params[0] {
+          VmValue::Set(x) => match &x.kind {
+            VmSetValueKind::Fresh(_) => return Ok(Some(Arc::new(VmValue::Bool(true)))),
+            VmSetValueKind::Resident(x) => x,
+          },
+          VmValue::Table(x) => match &x.kind {
+            VmTableValueKind::Fresh(_) => return Ok(Some(Arc::new(VmValue::Bool(true)))),
+            VmTableValueKind::Resident(x) => x,
+          },
+          VmValue::Null => return Ok(Some(Arc::new(VmValue::Bool(false)))),
+          _ => unreachable!(),
+        };
+        Some(Arc::new(VmValue::Bool(
+          txn.get(&walker.generate_key()).await?.is_some(),
+        )))
+      }
       _ => return Err(ExecError::NotImplemented(format!("{:?}", n)).into()),
     })
   }

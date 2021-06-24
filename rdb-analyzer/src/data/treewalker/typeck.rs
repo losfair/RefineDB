@@ -88,12 +88,14 @@ pub enum TypeckError {
   ParamCountMismatch(&'static str, u32, u32),
   #[error("select type mismatch: `{0}` != `{1}`")]
   SelectTypeMismatch(String, String),
+  #[error("presence check on an unsuppported type: `{0}`")]
+  PresenceCheckOnUnsupportedType(String),
 }
 
 pub struct GlobalTyckContext<'a, 'b> {
-  pub vm: &'b TwVm<'a>,
-  pub scc_post_order: Vec<HashSet<u32>>,
-  pub subgraph_expected_param_types: Vec<Vec<HashSet<VmType<&'a str>>>>,
+  vm: &'b TwVm<'a>,
+  scc_post_order: Vec<HashSet<u32>>,
+  subgraph_expected_param_types: Vec<Vec<HashSet<VmType<&'a str>>>>,
 }
 
 impl<'a, 'b> GlobalTyckContext<'a, 'b> {
@@ -141,10 +143,6 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
       scc_post_order: all_sccs,
       subgraph_expected_param_types,
     })
-  }
-
-  pub fn analyze(&mut self) -> Result<()> {
-    Ok(())
   }
 
   pub fn typeck(&mut self) -> Result<()> {
@@ -556,6 +554,15 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
             );
           }
           Some(left.clone())
+        }
+        TwGraphNode::IsPresent => {
+          let [x] = validate_in_edges::<1>(node, in_edges, &types)?;
+          match x {
+            VmType::Set(_) | VmType::Table(_) => Some(VmType::Bool),
+            _ => {
+              return Err(TypeckError::PresenceCheckOnUnsupportedType(format!("{:?}", x)).into())
+            }
+          }
         }
       };
       types.push(ty);

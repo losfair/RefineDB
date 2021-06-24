@@ -4,7 +4,7 @@ use super::language::RootParser;
 use super::{ast, state::State};
 use crate::data::treewalker::asm::TwAsmError;
 use crate::data::treewalker::bytecode::{TwGraph, TwGraphNode, TwScript};
-use crate::data::treewalker::vm_value::{VmConst, VmSetType, VmTableType, VmType};
+use crate::data::treewalker::vm_value::{VmConst, VmConstSetValue, VmSetType, VmTableType, VmType};
 use crate::data::value::PrimitiveValue;
 use crate::schema::compile::PrimitiveType;
 use crate::util::first_duplicate;
@@ -169,9 +169,9 @@ impl<'a, 'b> GraphContext<'a, 'b> {
           name,
         )
       }
-      K::DeleteFromSet(selector, set) => {
-        let selector = self.generate_expr(g, None, *selector)?;
+      K::DeleteFromSet(set, selector) => {
         let set = self.generate_expr(g, None, *set)?;
+        let selector = self.generate_expr(g, None, *selector)?;
         self.push_node(
           (
             TwGraphNode::DeleteFromSet,
@@ -210,9 +210,9 @@ impl<'a, 'b> GraphContext<'a, 'b> {
           name,
         )
       }
-      K::GetSetElement(selector, set) => {
-        let selector = self.generate_expr(g, None, *selector)?;
+      K::GetSetElement(set, selector) => {
         let set = self.generate_expr(g, None, *set)?;
+        let selector = self.generate_expr(g, None, *selector)?;
         self.push_node(
           (
             TwGraphNode::GetSetElement,
@@ -257,7 +257,7 @@ impl<'a, 'b> GraphContext<'a, 'b> {
         )
       }
       K::LoadConst(x) => {
-        let x = self.builder.alloc_const(literal_to_vmconst(x));
+        let x = self.builder.alloc_const(literal_to_vmconst(x)?);
         self.push_node((TwGraphNode::LoadConst(x), vec![], precondition), name)
       }
       K::Select(l, r) => {
@@ -282,6 +282,10 @@ impl<'a, 'b> GraphContext<'a, 'b> {
       K::Not(x) => {
         let x = self.generate_expr(g, None, *x)?;
         self.push_node((TwGraphNode::Not, vec![x], precondition), name)
+      }
+      K::IsPresent(x) => {
+        let x = self.generate_expr(g, None, *x)?;
+        self.push_node((TwGraphNode::IsPresent, vec![x], precondition), name)
       }
     };
     Ok(ret)
@@ -398,6 +402,7 @@ fn generate_vmtype(ty: &ast::Type) -> Result<VmType<String>> {
         .map(|(k, v)| generate_vmtype(v).map(|x| (k.to_string(), x)))
         .collect::<Result<_>>()?,
     ),
+    ast::Type::Bool => VmType::Bool,
     ast::Type::Schema => VmType::Schema,
   })
 }
@@ -424,12 +429,16 @@ fn format_type_for_table(ty: &ast::Type) -> Result<String> {
   })
 }
 
-fn literal_to_vmconst(x: &ast::Literal) -> VmConst {
-  match x {
+fn literal_to_vmconst(x: &ast::Literal) -> Result<VmConst> {
+  Ok(match x {
     ast::Literal::Null => VmConst::Null,
     ast::Literal::Bool(x) => VmConst::Bool(*x),
     ast::Literal::Integer(x) => VmConst::Primitive(PrimitiveValue::Int64(*x)),
     ast::Literal::HexBytes(x) => VmConst::Primitive(PrimitiveValue::Bytes(x.to_vec())),
     ast::Literal::String(x) => VmConst::Primitive(PrimitiveValue::String(x.to_string())),
-  }
+    ast::Literal::EmptySet(member_ty) => VmConst::Set(VmConstSetValue {
+      member_ty: format_type_for_table(member_ty)?,
+      members: vec![],
+    }),
+  })
 }

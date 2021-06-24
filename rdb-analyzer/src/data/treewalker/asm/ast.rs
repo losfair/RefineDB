@@ -47,6 +47,7 @@ pub enum Type<'a> {
   Primitive(PrimitiveType),
   Set(&'a Type<'a>),
   Map(Vec<'a, (&'a str, Type<'a>)>),
+  Bool,
   Schema,
 }
 
@@ -70,6 +71,7 @@ pub enum ExprKind<'a> {
   UnwrapOptional(&'a Expr<'a>),
   Select(&'a Expr<'a>, &'a Expr<'a>),
   Node(&'a str),
+  IsPresent(&'a Expr<'a>),
 }
 
 pub enum Literal<'a> {
@@ -78,4 +80,5 @@ pub enum Literal<'a> {
   Integer(i64),
   HexBytes(&'a [u8]),
   String(&'a str),
+  EmptySet(Type<'a>),
 }

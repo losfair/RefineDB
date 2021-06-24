@@ -131,6 +131,13 @@ pub enum TwGraphNode {
   ///
   /// T -> T -> T
   Select,
+
+  /// True if this table or set is actually present.
+  ///
+  /// Always true for fresh values, and true for resident values if its storage key exists.
+  ///
+  /// T -> Bool
+  IsPresent,
 }
 
 impl TwGraphNode {
