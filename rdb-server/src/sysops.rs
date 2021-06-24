@@ -22,12 +22,19 @@ impl TryFrom<&SysopCollection<&str>> for SysopCollection<TwScript> {
 #[allow(dead_code)]
 pub static SYSOPS: SysopCollection<&'static str> = SysopCollection {
   add_namespace: r#"
-  graph main(root: schema, namespace_id: string) {
-    s_insert root.system.namespaces $
-      build_table(Namespace) $
-      m_insert(id) namespace_id $
-      m_insert(all_deployments) empty_set<Deployment> $
-      create_map;
+  graph main(root: schema, namespace_id: string): bool {
+    ns = root.system.namespaces;
+    if is_present $ point_get ns namespace_id {
+      r1 = false;
+    } else {
+      s_insert root.system.namespaces $
+        build_table(Namespace) $
+        m_insert(id) namespace_id $
+        m_insert(all_deployments) empty_set<Deployment> $
+        create_map;
+      r2 = true;
+    }
+    return select r1 r2;
   }
   "#,
   delete_namespace: r#"
