@@ -126,166 +126,172 @@ impl<'a, 'b> GraphContext<'a, 'b> {
         }
       }
       ast::StmtKind::Node { name, value } => {
-        use ast::ExprKind as K;
-        let precondition = self.condition_stack.last().copied();
-        match &value.kind {
-          K::And(l, r) => {
-            let l = self.lookup_node(*l)?;
-            let r = self.lookup_node(*r)?;
-            self.push_node((TwGraphNode::And, vec![l, r], precondition), *name);
-          }
-          K::BuildTable(ty, map) => {
-            let ty = self
-              .builder
-              .alloc_ident_external(&format_type_for_table(ty)?);
-            let map = self.lookup_node(*map)?;
-            self.push_node(
-              (TwGraphNode::BuildTable(ty), vec![map], precondition),
-              *name,
-            );
-          }
-          K::CreateMap => {
-            self.push_node((TwGraphNode::CreateMap, vec![], precondition), *name);
-          }
-          K::DeleteFromMap(field, map) => {
-            let field = self.builder.alloc_ident(*field);
-            let map = self.lookup_node(*map)?;
-            self.push_node(
-              (TwGraphNode::DeleteFromMap(field), vec![map], precondition),
-              *name,
-            );
-          }
-          K::DeleteFromSet(selector, set) => {
-            let selector = self.lookup_node(*selector)?;
-            let set = self.lookup_node(*set)?;
-            self.push_node(
-              (
-                TwGraphNode::DeleteFromSet,
-                vec![selector, set],
-                precondition,
-              ),
-              *name,
-            );
-          }
-          K::DeleteFromTable(field, table) => {
-            let field = self.builder.alloc_ident(*field);
-            let table = self.lookup_node(*table)?;
-            self.push_node(
-              (
-                TwGraphNode::DeleteFromTable(field),
-                vec![table],
-                precondition,
-              ),
-              *name,
-            );
-          }
-          K::Eq(l, r) => {
-            let l = self.lookup_node(*l)?;
-            let r = self.lookup_node(*r)?;
-            self.push_node((TwGraphNode::Eq, vec![l, r], precondition), *name);
-          }
-          K::GetField(field, table_or_set) => {
-            let field = self.builder.alloc_ident(*field);
-            let table_or_set = self.lookup_node(*table_or_set)?;
-            self.push_node(
-              (
-                TwGraphNode::GetField(field),
-                vec![table_or_set],
-                precondition,
-              ),
-              *name,
-            );
-          }
-          K::GetSetElement(selector, set) => {
-            let selector = self.lookup_node(*selector)?;
-            let set = self.lookup_node(*set)?;
-            self.push_node(
-              (
-                TwGraphNode::GetSetElement,
-                vec![selector, set],
-                precondition,
-              ),
-              *name,
-            );
-          }
-          K::InsertIntoMap(field, v, map) => {
-            let field = self.builder.alloc_ident(*field);
-            let v = self.lookup_node(*v)?;
-            let map = self.lookup_node(*map)?;
-            self.push_node(
-              (
-                TwGraphNode::InsertIntoMap(field),
-                vec![v, map],
-                precondition,
-              ),
-              *name,
-            );
-          }
-          K::InsertIntoSet(v, set) => {
-            let v = self.lookup_node(*v)?;
-            let set = self.lookup_node(*set)?;
-            self.push_node(
-              (TwGraphNode::InsertIntoSet, vec![v, set], precondition),
-              *name,
-            );
-          }
-          K::InsertIntoTable(field, v, table) => {
-            let field = self.builder.alloc_ident(*field);
-            let v = self.lookup_node(*v)?;
-            let table = self.lookup_node(*table)?;
-            self.push_node(
-              (
-                TwGraphNode::InsertIntoTable(field),
-                vec![v, table],
-                precondition,
-              ),
-              *name,
-            );
-          }
-          K::LoadConst(x) => {
-            let x = self.builder.alloc_const(literal_to_vmconst(x));
-            self.push_node((TwGraphNode::LoadConst(x), vec![], precondition), *name);
-          }
-          K::LoadParam(param) => {
-            let param = g
-              .params
-              .iter()
-              .enumerate()
-              .find(|(_, x)| x.0 == *param)
-              .ok_or_else(|| TwAsmError::ParamNotFound(param.to_string()))?
-              .0;
-            self.push_node(
-              (TwGraphNode::LoadParam(param as u32), vec![], precondition),
-              *name,
-            );
-          }
-          K::Select(l, r) => {
-            let l = self.lookup_node(*l)?;
-            let r = self.lookup_node(*r)?;
-            self.push_node((TwGraphNode::Select, vec![l, r], precondition), *name);
-          }
-          K::UnwrapOptional(x) => {
-            let x = self.lookup_node(*x)?;
-            self.push_node((TwGraphNode::UnwrapOptional, vec![x], precondition), *name);
-          }
-          K::Ne(l, r) => {
-            let l = self.lookup_node(*l)?;
-            let r = self.lookup_node(*r)?;
-            self.push_node((TwGraphNode::Ne, vec![l, r], precondition), *name);
-          }
-          K::Or(l, r) => {
-            let l = self.lookup_node(*l)?;
-            let r = self.lookup_node(*r)?;
-            self.push_node((TwGraphNode::Or, vec![l, r], precondition), *name);
-          }
-          K::Not(x) => {
-            let x = self.lookup_node(*x)?;
-            self.push_node((TwGraphNode::Not, vec![x], precondition), *name);
-          }
-        }
+        self.generate_expr(g, *name, value)?;
       }
     }
     Ok(())
+  }
+
+  fn generate_expr(
+    &mut self,
+    g: &ast::Graph<'a>,
+    name: Option<&'a str>,
+    expr: &ast::Expr<'a>,
+  ) -> Result<u32> {
+    use ast::ExprKind as K;
+    let precondition = self.condition_stack.last().copied();
+    let ret = match &expr.kind {
+      K::Node(x) => self.lookup_node(*x)?,
+      K::And(l, r) => {
+        let l = self.generate_expr(g, None, l)?;
+        let r = self.generate_expr(g, None, r)?;
+        self.push_node((TwGraphNode::And, vec![l, r], precondition), name)
+      }
+      K::BuildTable(ty, map) => {
+        let ty = self
+          .builder
+          .alloc_ident_external(&format_type_for_table(ty)?);
+        let map = self.generate_expr(g, None, *map)?;
+        self.push_node((TwGraphNode::BuildTable(ty), vec![map], precondition), name)
+      }
+      K::CreateMap => self.push_node((TwGraphNode::CreateMap, vec![], precondition), name),
+      K::DeleteFromMap(field, map) => {
+        let field = self.builder.alloc_ident(*field);
+        let map = self.generate_expr(g, None, *map)?;
+        self.push_node(
+          (TwGraphNode::DeleteFromMap(field), vec![map], precondition),
+          name,
+        )
+      }
+      K::DeleteFromSet(selector, set) => {
+        let selector = self.generate_expr(g, None, *selector)?;
+        let set = self.generate_expr(g, None, *set)?;
+        self.push_node(
+          (
+            TwGraphNode::DeleteFromSet,
+            vec![selector, set],
+            precondition,
+          ),
+          name,
+        )
+      }
+      K::DeleteFromTable(field, table) => {
+        let field = self.builder.alloc_ident(*field);
+        let table = self.generate_expr(g, None, *table)?;
+        self.push_node(
+          (
+            TwGraphNode::DeleteFromTable(field),
+            vec![table],
+            precondition,
+          ),
+          name,
+        )
+      }
+      K::Eq(l, r) => {
+        let l = self.generate_expr(g, None, *l)?;
+        let r = self.generate_expr(g, None, *r)?;
+        self.push_node((TwGraphNode::Eq, vec![l, r], precondition), name)
+      }
+      K::GetField(field, table_or_set) => {
+        let field = self.builder.alloc_ident(*field);
+        let table_or_set = self.generate_expr(g, None, *table_or_set)?;
+        self.push_node(
+          (
+            TwGraphNode::GetField(field),
+            vec![table_or_set],
+            precondition,
+          ),
+          name,
+        )
+      }
+      K::GetSetElement(selector, set) => {
+        let selector = self.generate_expr(g, None, *selector)?;
+        let set = self.generate_expr(g, None, *set)?;
+        self.push_node(
+          (
+            TwGraphNode::GetSetElement,
+            vec![selector, set],
+            precondition,
+          ),
+          name,
+        )
+      }
+      K::InsertIntoMap(field, v, map) => {
+        let field = self.builder.alloc_ident(*field);
+        let v = self.generate_expr(g, None, *v)?;
+        let map = self.generate_expr(g, None, *map)?;
+        self.push_node(
+          (
+            TwGraphNode::InsertIntoMap(field),
+            vec![v, map],
+            precondition,
+          ),
+          name,
+        )
+      }
+      K::InsertIntoSet(v, set) => {
+        let v = self.generate_expr(g, None, *v)?;
+        let set = self.generate_expr(g, None, *set)?;
+        self.push_node(
+          (TwGraphNode::InsertIntoSet, vec![v, set], precondition),
+          name,
+        )
+      }
+      K::InsertIntoTable(field, v, table) => {
+        let field = self.builder.alloc_ident(*field);
+        let v = self.generate_expr(g, None, *v)?;
+        let table = self.generate_expr(g, None, *table)?;
+        self.push_node(
+          (
+            TwGraphNode::InsertIntoTable(field),
+            vec![v, table],
+            precondition,
+          ),
+          name,
+        )
+      }
+      K::LoadConst(x) => {
+        let x = self.builder.alloc_const(literal_to_vmconst(x));
+        self.push_node((TwGraphNode::LoadConst(x), vec![], precondition), name)
+      }
+      K::LoadParam(param) => {
+        let param = g
+          .params
+          .iter()
+          .enumerate()
+          .find(|(_, x)| x.0 == *param)
+          .ok_or_else(|| TwAsmError::ParamNotFound(param.to_string()))?
+          .0;
+        self.push_node(
+          (TwGraphNode::LoadParam(param as u32), vec![], precondition),
+          name,
+        )
+      }
+      K::Select(l, r) => {
+        let l = self.generate_expr(g, None, *l)?;
+        let r = self.generate_expr(g, None, *r)?;
+        self.push_node((TwGraphNode::Select, vec![l, r], precondition), name)
+      }
+      K::UnwrapOptional(x) => {
+        let x = self.generate_expr(g, None, *x)?;
+        self.push_node((TwGraphNode::UnwrapOptional, vec![x], precondition), name)
+      }
+      K::Ne(l, r) => {
+        let l = self.generate_expr(g, None, *l)?;
+        let r = self.generate_expr(g, None, *r)?;
+        self.push_node((TwGraphNode::Ne, vec![l, r], precondition), name)
+      }
+      K::Or(l, r) => {
+        let l = self.generate_expr(g, None, *l)?;
+        let r = self.generate_expr(g, None, *r)?;
+        self.push_node((TwGraphNode::Or, vec![l, r], precondition), name)
+      }
+      K::Not(x) => {
+        let x = self.generate_expr(g, None, *x)?;
+        self.push_node((TwGraphNode::Not, vec![x], precondition), name)
+      }
+    };
+    Ok(ret)
   }
 
   fn push_node(

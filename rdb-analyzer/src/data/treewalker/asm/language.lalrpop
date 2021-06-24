@@ -78,28 +78,42 @@ StmtList: Bvec<'input, Stmt<'input>> = {
 
 Expr: Expr<'input> = {
   <location_start:@L> <kind:ExprKind> <location_end:@R> => Expr { location_start, location_end, kind },
+  ExprL2,
 }
 
 ExprKind: ExprKind<'input> = {
   Token<"param"> Token<"("> <x:Identifier> Token<")"> => ExprKind::LoadParam(x),
   Token<"const"> Token<"("> <x:Literal> Token<")"> => ExprKind::LoadConst(x),
-  Token<"build_table"> Token<"("> <x:Type> Token<")"> <y:Identifier> => ExprKind::BuildTable(x, y),
+  Token<"build_table"> Token<"("> <x:Type> Token<")"> <y:ExprL2Ref> => ExprKind::BuildTable(x, y),
   Token<"create_map"> => ExprKind::CreateMap,
-  Token<"get_field"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> => ExprKind::GetField(x, y),
-  Token<"point_get"> <x:Identifier> <y:Identifier> => ExprKind::GetSetElement(x, y),
-  Token<"insert_into_map"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> <z:Identifier> => ExprKind::InsertIntoMap(x, y, z),
-  Token<"insert_into_table"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> <z:Identifier> => ExprKind::InsertIntoTable(x, y, z),
-  Token<"insert_into_set"> <y:Identifier> <z:Identifier> => ExprKind::InsertIntoSet(y, z),
-  Token<"delete_from_set"> <y:Identifier> <z:Identifier> => ExprKind::DeleteFromSet(y, z),
-  Token<"delete_from_map"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> => ExprKind::DeleteFromMap(x, y),
-  Token<"delete_from_table"> Token<"("> <x:Identifier> Token<")"> <y:Identifier> => ExprKind::DeleteFromTable(x, y),
-  Token<"eq"> <x:Identifier> <y:Identifier> => ExprKind::Eq(x, y),
-  Token<"ne"> <x:Identifier> <y:Identifier> => ExprKind::Ne(x, y),
-  Token<"and"> <x:Identifier> <y:Identifier> => ExprKind::And(x, y),
-  Token<"or"> <x:Identifier> <y:Identifier> => ExprKind::Or(x, y),
-  Token<"not"> <x:Identifier> => ExprKind::Not(x),
-  Token<"unwrap_optional"> <x:Identifier> => ExprKind::UnwrapOptional(x),
-  Token<"select"> <x:Identifier> <y:Identifier> => ExprKind::Select(x, y),
+  Token<"get_field"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::GetField(x, y),
+  Token<"point_get"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::GetSetElement(x, y),
+  Token<"insert_into_map"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoMap(x, y, z),
+  Token<"insert_into_table"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoTable(x, y, z),
+  Token<"insert_into_set"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoSet(y, z),
+  Token<"delete_from_set"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::DeleteFromSet(y, z),
+  Token<"delete_from_map"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromMap(x, y),
+  Token<"delete_from_table"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromTable(x, y),
+  Token<"eq"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Eq(x, y),
+  Token<"ne"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Ne(x, y),
+  Token<"and"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::And(x, y),
+  Token<"or"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Or(x, y),
+  Token<"not"> <x:ExprL2Ref> => ExprKind::Not(x),
+  Token<"unwrap_optional"> <x:ExprL2Ref> => ExprKind::UnwrapOptional(x),
+  Token<"select"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Select(x, y),
+}
+
+ExprL2Ref: &'input Expr<'input> = {
+  <e:ExprL2> => state.alloc.alloc(e),
+}
+
+ExprL2: Expr<'input> = {
+  <location_start:@L> <kind:ExprKindL2> <location_end:@R> => Expr { location_start, location_end, kind },
+  Token<"("> <e:Expr> Token<")"> => e,
+}
+
+ExprKindL2: ExprKind<'input> = {
+  <x:Identifier> => ExprKind::Node(x),
 }
 
 Identifier: &'input str = {
