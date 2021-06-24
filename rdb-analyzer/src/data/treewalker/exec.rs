@@ -112,20 +112,25 @@ impl<'a, 'b> Executor<'a, 'b> {
       }
 
       if let Some(to_fire) = fire_rules.get(&node_index) {
-        let result = result.unwrap_or_else(|| {
-          panic!(
-            "run_graph: node {} should fire some other nodes but does not produce a value",
-            node_index
-          )
-        });
         for item in to_fire {
           match &item.kind {
             FireRuleKind::ParamDep(param_position) => {
+              let result = result.as_ref().unwrap_or_else(|| {
+                panic!(
+                  "run_graph: node {} is a parameter dependency of some other nodes but does not produce a value",
+                  node_index
+                )
+              });
+
               deps_satisfied[item.target_node as usize][*param_position as usize] =
                 Some(result.clone());
             }
             FireRuleKind::Precondition => {
-              precondition_satisfied[item.target_node as usize] = result.unwrap_bool();
+              precondition_satisfied[item.target_node as usize] = match result.as_ref().map(|x| &**x) {
+                Some(VmValue::Bool(x)) => *x,
+                None => true,
+                _ => unreachable!()
+              };
             }
           }
         }

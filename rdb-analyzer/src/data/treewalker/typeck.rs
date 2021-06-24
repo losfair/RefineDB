@@ -261,7 +261,8 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
           return Err(TypeckError::InvalidPrecondition.into());
         }
 
-        if types[*j as usize] != Some(VmType::Bool) {
+        // Must be either an effect node or a boolean node
+        if types[*j as usize].is_some() && types[*j as usize] != Some(VmType::Bool) {
           return Err(TypeckError::InvalidPrecondition.into());
         }
       }
