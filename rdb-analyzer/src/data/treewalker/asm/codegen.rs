@@ -56,6 +56,9 @@ pub fn compile_twscript(input: &str) -> Result<TwScript> {
         target,
         condition_stack: vec![],
       };
+      for (i, (p, _)) in g.params.iter().enumerate() {
+        ctx.push_node((TwGraphNode::LoadParam(i as u32), vec![], None), Some(*p));
+      }
       for stmt in &g.stmts {
         ctx.generate_stmt(g, stmt)?;
       }
@@ -253,19 +256,6 @@ impl<'a, 'b> GraphContext<'a, 'b> {
       K::LoadConst(x) => {
         let x = self.builder.alloc_const(literal_to_vmconst(x));
         self.push_node((TwGraphNode::LoadConst(x), vec![], precondition), name)
-      }
-      K::LoadParam(param) => {
-        let param = g
-          .params
-          .iter()
-          .enumerate()
-          .find(|(_, x)| x.0 == *param)
-          .ok_or_else(|| TwAsmError::ParamNotFound(param.to_string()))?
-          .0;
-        self.push_node(
-          (TwGraphNode::LoadParam(param as u32), vec![], precondition),
-          name,
-        )
       }
       K::Select(l, r) => {
         let l = self.generate_expr(g, None, *l)?;

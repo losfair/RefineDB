@@ -51,7 +51,6 @@ pub enum Type<'a> {
 }
 
 pub enum ExprKind<'a> {
-  LoadParam(&'a str),
   LoadConst(Literal<'a>),
   BuildTable(Type<'a>, &'a Expr<'a>),
   CreateMap,

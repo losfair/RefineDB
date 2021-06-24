@@ -67,7 +67,6 @@ async fn basic_exec() {
     set_member_name_1: string,
     set_member_name_2: string,
   } {
-    root = param(root);
     some_item = get_field(some_item) root;
     id = get_field(id) some_item;
     name = get_field(name) some_item;
@@ -118,7 +117,6 @@ async fn basic_exec() {
     &[
       r#"
     graph main(root: schema) {
-      root = param(root);
       some_item = get_field(some_item) root;
       start = const(1);
       end = const(2);
@@ -137,7 +135,6 @@ async fn basic_exec() {
       READER,
       r#"
   graph main(root: schema) {
-    root = param(root);
     some_item = get_field(some_item) root;
     name = const("test");
     t_insert(name) name some_item;

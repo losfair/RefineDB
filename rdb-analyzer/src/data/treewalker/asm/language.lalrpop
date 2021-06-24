@@ -112,7 +112,6 @@ ExprL2: Expr<'input> = {
 
 ExprKindL2: ExprKind<'input> = {
   Token<"const"> Token<"("> <x:Literal> Token<")"> => ExprKind::LoadConst(x),
-  Token<"param"> Token<"("> <x:Identifier> Token<")"> => ExprKind::LoadParam(x),
   Token<"create_map"> => ExprKind::CreateMap,
   <x:Identifier> => ExprKind::Node(x),
 }
