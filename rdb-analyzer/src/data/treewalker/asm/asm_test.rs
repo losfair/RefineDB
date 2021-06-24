@@ -72,20 +72,20 @@ async fn basic_exec() {
     name = get_field(name) some_item;
 
     dur = get_field(duration) some_item;
-    if eq const("test") name {
+    if eq "test" name {
       v1 = get_field(start) dur;
-      k1 = const("start");
+      k1 = "start";
     } else {
       v2 = get_field(end) dur;
-      k2 = const("end");
+      k2 = "end";
     }
     value = select v1 v2;
     kind = select k1 k2;
 
     s = get_field(many_items) root;
-    elem_name_1 = get_field(name) (point_get const("xxx") s);
-    elem_name_2 = get_field(name) (point_get const("yyy") s);
-    elem_name_3 = get_field(name)(point_get const("zzz") s);
+    elem_name_1 = get_field(name) (point_get "xxx" s);
+    elem_name_2 = get_field(name) (point_get "yyy" s);
+    elem_name_3 = get_field(name) (point_get "zzz" s);
 
     return m_insert(id) id
       $ m_insert(name) name
@@ -118,49 +118,38 @@ async fn basic_exec() {
       r#"
     graph main(root: schema) {
       some_item = get_field(some_item) root;
-      start = const(1);
-      end = const(2);
       m = create_map;
-      m = m_insert(start) start m;
-      m = m_insert(end) end m;
+      m = m_insert(start) 1 m;
+      m = m_insert(end) 2 m;
       dur = build_table(Duration<int64>) m;
       t_insert(duration) dur some_item;
 
-      id = const("test_id");
-      name = const("test_name");
-      t_insert(id) id some_item;
-      t_insert(name) name some_item;
+      t_insert(id) "test_id" some_item;
+      t_insert(name) "test_name" some_item;
     }
     "#,
       READER,
       r#"
   graph main(root: schema) {
     some_item = get_field(some_item) root;
-    name = const("test");
-    t_insert(name) name some_item;
+    t_insert(name) "test" some_item;
 
-    start = const(1);
-    end = const(2);
     m = create_map;
-    m = m_insert(start) start m;
-    m = m_insert(end) end m;
+    m = m_insert(start) 1 m;
+    m = m_insert(end) 2 m;
     dur = build_table(Duration<int64>) m;
 
     elem = create_map;
-    v = const("xxx");
-    elem = m_insert(id) v elem;
-    v = const("name_for_xxx");
-    elem = m_insert(name) v elem;
+    elem = m_insert(id) "xxx" elem;
+    elem = m_insert(name) "name_for_xxx" elem;
     elem = m_insert(duration) dur elem;
     elem = build_table(Item<>) elem;
     s = get_field(many_items) root;
     s_insert elem s;
 
     elem = create_map;
-    v = const("yyy");
-    elem = m_insert(id) v elem;
-    v = const("name_for_yyy");
-    elem = m_insert(name) v elem;
+    elem = m_insert(id) "yyy" elem;
+    elem = m_insert(name) "name_for_yyy" elem;
     elem = m_insert(duration) dur elem;
     elem = build_table(Item<>) elem;
     s = get_field(many_items) root;
