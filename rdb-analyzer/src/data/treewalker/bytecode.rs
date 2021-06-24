@@ -124,9 +124,6 @@ pub enum TwGraphNode {
   /// Bool -> Bool
   Not,
 
-  /// Optional<T> -> T
-  UnwrapOptional,
-
   /// Fire if either of its parameters are satisfied.
   ///
   /// T -> T -> T
@@ -138,6 +135,14 @@ pub enum TwGraphNode {
   ///
   /// T -> Bool
   IsPresent,
+
+  /// Whether this value is null.
+  ///
+  /// T -> Bool
+  IsNull,
+
+  /// T -> T
+  Nop,
 }
 
 impl TwGraphNode {
@@ -151,6 +156,16 @@ impl TwGraphNode {
     match self {
       Self::FilterSet(x) => smallvec![*x],
       _ => smallvec![],
+    }
+  }
+
+  pub fn is_optional_chained(&self) -> bool {
+    match self {
+      TwGraphNode::IsNull
+      | TwGraphNode::Nop
+      | TwGraphNode::InsertIntoMap(_)
+      | TwGraphNode::DeleteFromMap(_) => false,
+      _ => true,
     }
   }
 }

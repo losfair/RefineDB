@@ -21,7 +21,7 @@ pub enum VmValue<'a> {
   /// VM-only
   Map(VmMapValue<'a>),
 
-  Null,
+  Null(VmType<&'a str>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -58,7 +58,6 @@ pub enum VmType<K: Clone + Ord + PartialOrd + Eq + PartialEq> {
   Primitive(PrimitiveType),
   Table(VmTableType<K>),
   Set(VmSetType<K>),
-  Null,
 
   /// VM-only
   Bool,
@@ -68,8 +67,6 @@ pub enum VmType<K: Clone + Ord + PartialOrd + Eq + PartialEq> {
 
   /// VM-only
   Map(RedBlackTreeMapSync<K, VmType<K>>),
-
-  OneOf(Vec<VmType<K>>),
 
   /// An unknown type. Placeholder for unfinished type inference.
   Unknown,
@@ -103,7 +100,6 @@ impl<
       VmType::Set(x) => VmType::Set(VmSetType {
         ty: Box::new(Self::from(&*x.ty)),
       }),
-      VmType::Null => VmType::Null,
       VmType::Bool => VmType::Bool,
       VmType::List(x) => VmType::List(Box::new(Self::from(&**x))),
       VmType::Map(x) => VmType::Map(
@@ -111,7 +107,6 @@ impl<
           .map(|(k, v)| (U::from(k.as_ref()), Self::from(v)))
           .collect(),
       ),
-      VmType::OneOf(x) => VmType::OneOf(x.iter().map(|x| Self::from(x)).collect()),
       VmType::Unknown => VmType::Unknown,
       VmType::Schema => VmType::Schema,
     }
@@ -145,7 +140,7 @@ impl<'a> From<&VmValue<'a>> for VmType<&'a str> {
           .map(|(k, v)| (*k, VmType::from(&**v)))
           .collect(),
       ),
-      VmValue::Null => VmType::Null,
+      VmValue::Null(x) => x.clone(),
     }
   }
 }
@@ -155,7 +150,7 @@ impl<'a, T: From<&'a str> + Clone + Ord + PartialOrd + Eq + PartialEq> From<&'a 
 {
   fn from(that: &'a FieldType) -> Self {
     match that {
-      FieldType::Optional(x) => VmType::OneOf(vec![VmType::Null, VmType::from(&**x)]),
+      FieldType::Optional(x) => VmType::from(&**x),
       FieldType::Primitive(x) => VmType::Primitive(*x),
       FieldType::Table(x) => VmType::Table(VmTableType {
         name: T::from(&**x),
@@ -168,37 +163,9 @@ impl<'a, T: From<&'a str> + Clone + Ord + PartialOrd + Eq + PartialEq> From<&'a 
 }
 
 impl<'a> VmType<&'a str> {
-  pub fn is_null(&self) -> bool {
-    match self {
-      Self::Null => true,
-      _ => false,
-    }
-  }
-
   pub fn is_covariant_from(&self, that: &VmType<&'a str>) -> bool {
     if self == that {
       true
-    } else if let VmType::OneOf(x) = self {
-      // First case: (Oneof<T, U>, T | U)
-      for elem in x {
-        if elem.is_covariant_from(that) {
-          return true;
-        }
-      }
-
-      // Second case: (OneOf<T, U>, OneOf<U, T>)
-      // THIS IS A HACK!
-      if let VmType::OneOf(y) = that {
-        let mut x = x.iter().collect::<Vec<_>>();
-        x.sort();
-
-        let mut y = y.iter().collect::<Vec<_>>();
-        y.sort();
-        if x == y {
-          return true;
-        }
-      }
-      false
     } else if let VmType::Map(x) = self {
       if let VmType::Map(y) = that {
         for (k_x, v_x) in x {
@@ -235,6 +202,30 @@ impl<'a> VmType<&'a str> {
       _ => None,
     }
   }
+
+  pub fn default_value(&self) -> Option<Arc<VmValue<'a>>> {
+    Some(Arc::new(match self {
+      VmType::Bool => VmValue::Bool(false),
+      VmType::List(_) => return None,
+      VmType::Map(x) => VmValue::Map(VmMapValue {
+        elements: x
+          .iter()
+          .map(|(k, v)| v.default_value().map(|v| (*k, v)))
+          .collect::<Option<_>>()?,
+      }),
+      VmType::Primitive(x) => VmValue::Primitive(PrimitiveValue::default_value_for_type(*x)),
+      VmType::Schema => return None,
+      VmType::Set(ty) => VmValue::Set(VmSetValue {
+        member_ty: (*ty.ty).clone(),
+        kind: VmSetValueKind::Fresh(BTreeMap::new()),
+      }),
+      VmType::Table(x) => VmValue::Table(VmTableValue {
+        ty: x.name,
+        kind: VmTableValueKind::Fresh(BTreeMap::new()),
+      }),
+      VmType::Unknown => return None,
+    }))
+  }
 }
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Debug)]
@@ -245,7 +236,7 @@ pub enum VmConst {
 
   Bool(bool),
 
-  Null,
+  Null(VmType<String>),
 }
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Debug)]
@@ -275,7 +266,14 @@ pub enum VmValueError {
 }
 
 impl<'a> VmValue<'a> {
-  pub fn from_const(schema: &'a CompiledSchema, c: &VmConst) -> Result<Self> {
+  pub fn is_null(&self) -> bool {
+    match self {
+      VmValue::Null(_) => true,
+      _ => false,
+    }
+  }
+
+  pub fn from_const(schema: &'a CompiledSchema, c: &'a VmConst) -> Result<Self> {
     match c {
       VmConst::Primitive(x) => Ok(Self::Primitive(x.clone())),
       VmConst::Table(x) => {
@@ -358,7 +356,7 @@ impl<'a> VmValue<'a> {
           kind: VmSetValueKind::Fresh(members),
         }))
       }
-      VmConst::Null => Ok(Self::Null),
+      VmConst::Null(x) => Ok(Self::Null(VmType::from(x))),
       VmConst::Bool(x) => Ok(Self::Bool(*x)),
     }
   }

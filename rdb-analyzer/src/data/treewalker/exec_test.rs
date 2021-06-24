@@ -99,11 +99,11 @@ async fn basic_exec() {
     ],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
+  let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 
   let kv = MockKv::new();
   migrate_schema(&schema, &plan, &kv).await.unwrap();
-  let executor = Executor::new_assume_typechecked(&vm, &kv);
+  let executor = Executor::new(&vm, &kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -142,8 +142,8 @@ async fn basic_exec() {
     types: vec![VmType::Schema, VmType::Primitive(PrimitiveType::String)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let executor = Executor::new_assume_typechecked(&vm, &kv);
+  let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
+  let executor = Executor::new(&vm, &kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -211,11 +211,11 @@ async fn set_queries() {
     types: vec![VmType::Schema],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
+  let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 
   let kv = MockKv::new();
   migrate_schema(&schema, &plan, &kv).await.unwrap();
-  let executor = Executor::new_assume_typechecked(&vm, &kv);
+  let executor = Executor::new(&vm, &kv, &type_info);
   executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -241,8 +241,8 @@ async fn set_queries() {
     types: vec![VmType::Schema, VmType::Primitive(PrimitiveType::String)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let executor = Executor::new_assume_typechecked(&vm, &kv);
+  let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
+  let executor = Executor::new(&vm, &kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -275,8 +275,8 @@ async fn set_queries() {
     ],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let executor = Executor::new_assume_typechecked(&vm, &kv);
+  let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
+  let executor = Executor::new(&vm, &kv, &type_info);
   executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -302,15 +302,15 @@ async fn set_queries() {
     types: vec![VmType::Schema, VmType::Primitive(PrimitiveType::String)],
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let executor = Executor::new_assume_typechecked(&vm, &kv);
+  let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
+  let executor = Executor::new(&vm, &kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
     .unwrap();
   println!("{:?}", output);
   match &*output.unwrap() {
-    VmValue::Null => {}
+    VmValue::Null(_) => {}
     _ => unreachable!(),
   };
 }

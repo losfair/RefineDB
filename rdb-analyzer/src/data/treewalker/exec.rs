@@ -25,6 +25,7 @@ use thiserror::Error;
 
 use super::{
   bytecode::{TwGraph, TwGraphNode},
+  typeck::GlobalTypeInfo,
   vm::TwVm,
 };
 
@@ -35,6 +36,7 @@ pub struct ExecConfig {
 pub struct Executor<'a, 'b> {
   vm: &'b TwVm<'a>,
   kv: &'b dyn KeyValueStore,
+  type_info: &'b GlobalTypeInfo<'a>,
 }
 
 #[derive(Clone)]
@@ -62,11 +64,18 @@ pub enum ExecError {
 
   #[error("export type not supported")]
   ExportTypeNotSupported,
+
+  #[error("missing value for non-optional field `{0}` of table `{1}`")]
+  MissingValueForNonOptionalField(String, Arc<str>),
 }
 
 impl<'a, 'b> Executor<'a, 'b> {
-  pub fn new_assume_typechecked(vm: &'b TwVm<'a>, kv: &'b dyn KeyValueStore) -> Self {
-    Self { vm, kv }
+  pub fn new(
+    vm: &'b TwVm<'a>,
+    kv: &'b dyn KeyValueStore,
+    type_info: &'b GlobalTypeInfo<'a>,
+  ) -> Self {
+    Self { vm, kv, type_info }
   }
 
   pub async fn run_graph(
@@ -75,6 +84,7 @@ impl<'a, 'b> Executor<'a, 'b> {
     graph_params: &[Arc<VmValue<'a>>],
   ) -> Result<Option<Arc<VmValue<'a>>>> {
     let g = &self.vm.script.graphs[graph_index];
+    let type_info = &self.type_info.graphs[graph_index];
     let fire_rules = generate_fire_rules(g);
     let mut deps_satisfied: Vec<Vec<Option<Arc<VmValue<'a>>>>> = g
       .nodes
@@ -92,7 +102,12 @@ impl<'a, 'b> Executor<'a, 'b> {
       if in_edges.is_empty() && precondition.is_none() {
         let txn = &*txn;
         futures.push(Box::pin(async move {
-          (i as u32, self.run_node(n, vec![], txn, graph_params).await)
+          (
+            i as u32,
+            self
+              .run_node(n, vec![], txn, graph_params, type_info.nodes[i].as_ref())
+              .await,
+          )
         }));
       }
     }
@@ -175,7 +190,15 @@ impl<'a, 'b> Executor<'a, 'b> {
                 futures.push(Box::pin(async move {
                   (
                     target_node as u32,
-                    self.run_node(node_info, params, txn, graph_params).await,
+                    self
+                      .run_node(
+                        node_info,
+                        params,
+                        txn,
+                        graph_params,
+                        type_info.nodes[target_node].as_ref(),
+                      )
+                      .await,
                   )
                 }))
               }
@@ -196,7 +219,23 @@ impl<'a, 'b> Executor<'a, 'b> {
     params: Vec<Arc<VmValue<'a>>>,
     txn: &dyn KvTransaction,
     graph_params: &[Arc<VmValue<'a>>],
+    type_info: Option<&VmType<&'a str>>,
   ) -> Result<Option<Arc<VmValue<'a>>>> {
+    // Optional chain
+    if n.is_optional_chained() {
+      for (i, p) in params.iter().enumerate() {
+        if p.is_null() {
+          log::trace!(
+            "optional chaining node {:?} because parameter {} is null: {:?}",
+            n,
+            i,
+            p
+          );
+          return Ok(type_info.map(|x| Arc::new(VmValue::Null(x.clone()))));
+        }
+      }
+    }
+
     Ok(match n {
       TwGraphNode::BuildSet => unimplemented!(),
       TwGraphNode::BuildTable(table_ty) => {
@@ -207,14 +246,21 @@ impl<'a, 'b> Executor<'a, 'b> {
         let ty = self.vm.script.idents[*table_ty as usize].as_str();
         let mut table: BTreeMap<&'a str, Arc<VmValue<'a>>> = BTreeMap::new();
         let specialized_ty = self.vm.schema.types.get(ty).unwrap();
-        for (field, _) in &specialized_ty.fields {
-          table.insert(
-            &**field,
-            map
-              .get(&**field)
-              .cloned()
-              .unwrap_or_else(|| Arc::new(VmValue::Null)),
-          );
+        for (field, (ty, _)) in &specialized_ty.fields {
+          let field_value = map
+            .get(&**field)
+            .cloned()
+            .unwrap_or_else(|| Arc::new(VmValue::Null(VmType::from(ty))));
+          if field_value.is_null() && !ty.is_optional() {
+            return Err(
+              ExecError::MissingValueForNonOptionalField(
+                field.to_string(),
+                specialized_ty.name.clone(),
+              )
+              .into(),
+            );
+          }
+          table.insert(&**field, field_value);
         }
         Some(Arc::new(VmValue::Table(VmTableValue {
           ty,
@@ -227,6 +273,7 @@ impl<'a, 'b> Executor<'a, 'b> {
       TwGraphNode::DeleteFromMap(key_index) => {
         let mut elements = match &*params[0] {
           VmValue::Map(x) => x.elements.clone(),
+          VmValue::Null(_) => return Ok(Some(params[0].clone())),
           _ => unreachable!(),
         };
         let key = self.vm.script.idents.get(*key_index as usize).unwrap();
@@ -245,7 +292,7 @@ impl<'a, 'b> Executor<'a, 'b> {
               .elements
               .get(key.as_str())
               .cloned()
-              .unwrap_or_else(|| Arc::new(VmValue::Null)),
+              .unwrap_or_else(|| panic!("map field not found: {}", key)),
           ),
           VmValue::Table(table) => Some(self.read_table_element(txn, table, key).await?),
           _ => unreachable!(),
@@ -279,6 +326,7 @@ impl<'a, 'b> Executor<'a, 'b> {
         let value = &params[0];
         let mut elements = match &*params[1] {
           VmValue::Map(x) => x.elements.clone(),
+          VmValue::Null(_) => return Ok(Some(params[1].clone())),
           _ => unreachable!(),
         };
         let key = self.vm.script.idents.get(*key_index as usize).unwrap();
@@ -332,10 +380,6 @@ impl<'a, 'b> Executor<'a, 'b> {
         Some(value)
       }
       TwGraphNode::LoadParam(param_index) => Some(graph_params[*param_index as usize].clone()),
-      TwGraphNode::UnwrapOptional => match &*params[0] {
-        VmValue::Null => return Err(ExecError::NullUnwrapped.into()),
-        _ => Some(params[0].clone()),
-      },
       TwGraphNode::DeleteFromSet => {
         let primary_key_value = match &*params[0] {
           VmValue::Primitive(x) => x,
@@ -384,13 +428,14 @@ impl<'a, 'b> Executor<'a, 'b> {
             VmTableValueKind::Fresh(_) => return Ok(Some(Arc::new(VmValue::Bool(true)))),
             VmTableValueKind::Resident(x) => x,
           },
-          VmValue::Null => return Ok(Some(Arc::new(VmValue::Bool(false)))),
           _ => unreachable!(),
         };
         Some(Arc::new(VmValue::Bool(
           txn.get(&walker.generate_key()).await?.is_some(),
         )))
       }
+      TwGraphNode::IsNull => Some(Arc::new(VmValue::Bool(params[0].is_null()))),
+      TwGraphNode::Nop => Some(params[0].clone()),
       _ => return Err(ExecError::NotImplemented(format!("{:?}", n)).into()),
     })
   }
@@ -405,7 +450,7 @@ impl<'a, 'b> Executor<'a, 'b> {
       VmTableValueKind::Fresh(x) => x
         .get(key)
         .cloned()
-        .unwrap_or_else(|| Arc::new(VmValue::Null)),
+        .unwrap_or_else(|| panic!("read_table_element: key not found in table: {}", key)),
       VmTableValueKind::Resident(walker) => {
         let specialized_ty = self.vm.schema.types.get(table.ty).unwrap();
         let (field, _) = specialized_ty.fields.get(key).unwrap();
@@ -414,7 +459,7 @@ impl<'a, 'b> Executor<'a, 'b> {
           .expect("inconsistency: field not found in table");
 
         match field.optional_unwrapped() {
-          FieldType::Primitive(_) => {
+          x @ FieldType::Primitive(_) => {
             // This is a primitive type - we cannot defer any more.
             // Let's load from the database.
             let key = walker.generate_key();
@@ -426,7 +471,7 @@ impl<'a, 'b> Executor<'a, 'b> {
             Arc::new(
               raw_data
                 .map(VmValue::Primitive)
-                .unwrap_or_else(|| VmValue::Null),
+                .unwrap_or_else(|| VmValue::Null(VmType::from(x))),
             )
           }
           FieldType::Set(member_ty) => Arc::new(VmValue::Set(VmSetValue {
@@ -451,7 +496,7 @@ impl<'a, 'b> Executor<'a, 'b> {
     value: Arc<VmValue<'a>>,
   ) -> Result<()> {
     match &*value {
-      VmValue::Null => {
+      VmValue::Null(_) => {
         txn.delete(&walker.generate_key()).await?;
       }
       VmValue::Primitive(x) => {

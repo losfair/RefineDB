@@ -91,14 +91,15 @@ ExprKind: ExprKind<'input> = {
   Token<"m_delete"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromMap(x, y),
   Token<"t_delete"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromTable(x, y),
   Token<"s_delete"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::DeleteFromSet(y, z),
-  Token<"unwrap_optional"> <x:ExprL2Ref> => ExprKind::UnwrapOptional(x),
   Token<"select"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Select(x, y),
   <x:ExprL3Ref> Token<"=="> <y:ExprL3Ref> => ExprKind::Eq(x, y),
   <x:ExprL3Ref> Token<"!="> <y:ExprL3Ref> => ExprKind::Ne(x, y),
   <x:ExprL3Ref> Token<"&&"> <y:ExprL3Ref> => ExprKind::And(x, y),
   <x:ExprL3Ref> Token<"||"> <y:ExprL3Ref> => ExprKind::Or(x, y),
+  <x:ExprL3Ref> Token<"??"> <y:ExprL3Ref> => ExprKind::OrElse(x, y),
   Token<"!"> <x:Expr> => ExprKind::Not(state.alloc.alloc(x)),
   Token<"is_present"> <x:Expr> => ExprKind::IsPresent(state.alloc.alloc(x)),
+  Token<"is_null"> <x:Expr> => ExprKind::IsNull(state.alloc.alloc(x)),
 }
 
 ExprL2Ref: &'input Expr<'input> = {
@@ -145,7 +146,7 @@ Literal: Literal<'input> = {
   }),
   <s:StringLit> => Literal::String(state.resolve_str(&s)),
   <s:HexBytesLit> => Literal::HexBytes(s),
-  Token<"null"> => Literal::Null,
+  Token<"null"> Token<"<"> <ty:Type> Token<">"> => Literal::Null(ty),
   Token<"true"> => Literal::Bool(true),
   Token<"false"> => Literal::Bool(false),
   Token<"empty_set"> Token<"<"> <member_ty:Type> Token<">"> => Literal::EmptySet(member_ty),

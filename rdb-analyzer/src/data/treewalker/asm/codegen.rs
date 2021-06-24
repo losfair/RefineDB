@@ -104,12 +104,7 @@ impl<'a, 'b> GraphContext<'a, 'b> {
         else_body,
       } => {
         let precondition = self.generate_expr(g, None, precondition)?;
-        let condition_true = if let Some(last) = self.condition_stack.last() {
-          let last = *last;
-          self.push_node((TwGraphNode::And, vec![precondition, last], None), None)
-        } else {
-          precondition
-        };
+        let condition_true = self.generate_condition(precondition);
         self.condition_stack.push(condition_true);
         for stmt in if_body {
           self.generate_stmt(g, stmt)?;
@@ -118,12 +113,7 @@ impl<'a, 'b> GraphContext<'a, 'b> {
 
         if let Some(else_body) = else_body {
           let precondition = self.push_node((TwGraphNode::Not, vec![precondition], None), None);
-          let condition_false = if let Some(last) = self.condition_stack.last() {
-            let last = *last;
-            self.push_node((TwGraphNode::And, vec![precondition, last], None), None)
-          } else {
-            precondition
-          };
+          let condition_false = self.generate_condition(precondition);
           self.condition_stack.push(condition_false);
           for stmt in else_body {
             self.generate_stmt(g, stmt)?;
@@ -136,6 +126,15 @@ impl<'a, 'b> GraphContext<'a, 'b> {
       }
     }
     Ok(())
+  }
+
+  fn generate_condition(&mut self, condition: u32) -> u32 {
+    if let Some(last) = self.condition_stack.last() {
+      let last = *last;
+      self.push_node((TwGraphNode::And, vec![condition, last], None), None)
+    } else {
+      condition
+    }
   }
 
   fn generate_expr(
@@ -265,10 +264,6 @@ impl<'a, 'b> GraphContext<'a, 'b> {
         let r = self.generate_expr(g, None, *r)?;
         self.push_node((TwGraphNode::Select, vec![l, r], precondition), name)
       }
-      K::UnwrapOptional(x) => {
-        let x = self.generate_expr(g, None, *x)?;
-        self.push_node((TwGraphNode::UnwrapOptional, vec![x], precondition), name)
-      }
       K::Ne(l, r) => {
         let l = self.generate_expr(g, None, *l)?;
         let r = self.generate_expr(g, None, *r)?;
@@ -286,6 +281,30 @@ impl<'a, 'b> GraphContext<'a, 'b> {
       K::IsPresent(x) => {
         let x = self.generate_expr(g, None, *x)?;
         self.push_node((TwGraphNode::IsPresent, vec![x], precondition), name)
+      }
+      K::IsNull(x) => {
+        let x = self.generate_expr(g, None, *x)?;
+        self.push_node((TwGraphNode::IsNull, vec![x], precondition), name)
+      }
+      K::OrElse(l, r) => {
+        let l = self.generate_expr(g, None, *l)?;
+        let comparator = self.push_node((TwGraphNode::IsNull, vec![l], None), None);
+        let not_comparator = self.push_node((TwGraphNode::Not, vec![comparator], None), None);
+
+        // If `l` is null...
+        let condition = self.generate_condition(comparator);
+        self.condition_stack.push(condition);
+        let on_null = self.generate_expr(g, None, *r)?;
+        self.condition_stack.pop().unwrap();
+
+        // Otherwise, use `l`...
+        let condition = self.generate_condition(not_comparator);
+        let on_notnull = self.push_node((TwGraphNode::Nop, vec![l], Some(condition)), None);
+
+        self.push_node(
+          (TwGraphNode::Select, vec![on_null, on_notnull], precondition),
+          name,
+        )
       }
     };
     Ok(ret)
@@ -431,7 +450,7 @@ fn format_type_for_table(ty: &ast::Type) -> Result<String> {
 
 fn literal_to_vmconst(x: &ast::Literal) -> Result<VmConst> {
   Ok(match x {
-    ast::Literal::Null => VmConst::Null,
+    ast::Literal::Null(ty) => VmConst::Null(generate_vmtype(ty)?),
     ast::Literal::Bool(x) => VmConst::Bool(*x),
     ast::Literal::Integer(x) => VmConst::Primitive(PrimitiveValue::Int64(*x)),
     ast::Literal::HexBytes(x) => VmConst::Primitive(PrimitiveValue::Bytes(x.to_vec())),

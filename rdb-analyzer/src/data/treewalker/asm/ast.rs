@@ -68,14 +68,15 @@ pub enum ExprKind<'a> {
   And(&'a Expr<'a>, &'a Expr<'a>),
   Or(&'a Expr<'a>, &'a Expr<'a>),
   Not(&'a Expr<'a>),
-  UnwrapOptional(&'a Expr<'a>),
   Select(&'a Expr<'a>, &'a Expr<'a>),
   Node(&'a str),
   IsPresent(&'a Expr<'a>),
+  IsNull(&'a Expr<'a>),
+  OrElse(&'a Expr<'a>, &'a Expr<'a>),
 }
 
 pub enum Literal<'a> {
-  Null,
+  Null(Type<'a>),
   Bool(bool),
   Integer(i64),
   HexBytes(&'a [u8]),

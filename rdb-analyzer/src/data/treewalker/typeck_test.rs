@@ -98,16 +98,13 @@ fn basic_typeck() {
     graphs: vec![TwGraph {
       name: "".into(),
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![], None),    // 0
-        (TwGraphNode::GetField(0), vec![0], None),    // 1
-        (TwGraphNode::GetField(1), vec![1], None),    // 2
-        (TwGraphNode::UnwrapOptional, vec![2], None), // 3
-        (TwGraphNode::GetField(2), vec![3], None),    // 4
-        (TwGraphNode::UnwrapOptional, vec![4], None), // 5
-        (TwGraphNode::GetField(3), vec![5], None),    // 6
-        (TwGraphNode::UnwrapOptional, vec![6], None), // 7
+        (TwGraphNode::LoadParam(0), vec![], None), // 0
+        (TwGraphNode::GetField(0), vec![0], None), // 1
+        (TwGraphNode::GetField(1), vec![1], None), // 2
+        (TwGraphNode::GetField(2), vec![2], None), // 3
+        (TwGraphNode::GetField(3), vec![3], None), // 4
       ],
-      output: Some(7),
+      output: Some(4),
       output_type: Some(1),
       param_types: vec![0],
     }],
@@ -159,7 +156,10 @@ fn filter_set() {
       },
     ],
     entry: 0,
-    consts: vec![VmConst::Bool(true), VmConst::Null],
+    consts: vec![
+      VmConst::Bool(true),
+      VmConst::Null(VmType::Primitive(PrimitiveType::Int64)),
+    ],
     idents: vec![
       "items".into(),
       "middle".into(),
@@ -168,12 +168,9 @@ fn filter_set() {
     ],
     types: vec![
       VmType::Schema,
-      VmType::OneOf(vec![
-        VmType::Null,
-        VmType::Table(VmTableType {
-          name: "Item<Duration<int64>>".into(),
-        }),
-      ]),
+      VmType::Table(VmTableType {
+        name: "Item<Duration<int64>>".into(),
+      }),
       VmType::Bool,
       VmType::Unknown,
     ],
@@ -195,16 +192,13 @@ fn basic_typeck_fail_unknown_name() {
     graphs: vec![TwGraph {
       name: "".into(),
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![], None),    // 0
-        (TwGraphNode::GetField(0), vec![0], None),    // 1
-        (TwGraphNode::GetField(1), vec![1], None),    // 2
-        (TwGraphNode::UnwrapOptional, vec![2], None), // 3
-        (TwGraphNode::GetField(2), vec![3], None),    // 4
-        (TwGraphNode::UnwrapOptional, vec![4], None), // 5
-        (TwGraphNode::GetField(3), vec![5], None),    // 6
-        (TwGraphNode::UnwrapOptional, vec![6], None), // 7
+        (TwGraphNode::LoadParam(0), vec![], None), // 0
+        (TwGraphNode::GetField(0), vec![0], None), // 1
+        (TwGraphNode::GetField(1), vec![1], None), // 2
+        (TwGraphNode::GetField(2), vec![2], None), // 3
+        (TwGraphNode::GetField(3), vec![3], None), // 4
       ],
-      output: Some(7),
+      output: Some(4),
       output_type: Some(1),
       param_types: vec![0],
     }],
@@ -230,50 +224,6 @@ fn basic_typeck_fail_unknown_name() {
 }
 
 #[test]
-fn basic_typeck_fail_missing_unwrap() {
-  let _ = pretty_env_logger::try_init();
-  let alloc = Bump::new();
-  let ast = parse(&alloc, SIMPLE_SCHEMA).unwrap();
-  let schema = compile(&ast).unwrap();
-  drop(ast);
-  drop(alloc);
-  let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
-  let script = TwScript {
-    graphs: vec![TwGraph {
-      name: "".into(),
-      nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![], None),    // 0
-        (TwGraphNode::GetField(0), vec![0], None),    // 1
-        (TwGraphNode::GetField(1), vec![1], None),    // 2
-        (TwGraphNode::UnwrapOptional, vec![2], None), // 3
-        (TwGraphNode::GetField(2), vec![3], None),    // 4
-        (TwGraphNode::UnwrapOptional, vec![4], None), // 5
-        (TwGraphNode::GetField(3), vec![5], None),    // 6
-      ],
-      output: Some(6),
-      output_type: Some(1),
-      param_types: vec![0],
-    }],
-    entry: 0,
-    consts: vec![],
-    idents: vec![
-      "a_trinary_tree".into(),
-      "middle".into(),
-      "left".into(),
-      "value".into(),
-    ],
-    types: vec![VmType::Schema, VmType::Primitive(PrimitiveType::Int64)],
-  };
-  let vm = TwVm::new(&schema, &plan, &script).unwrap();
-  assert!(GlobalTyckContext::new(&vm)
-    .unwrap()
-    .typeck()
-    .unwrap_err()
-    .to_string()
-    .contains("type `Primitive(Int64)` is not covariant from"));
-}
-
-#[test]
 fn basic_typeck_output_type_mismatch() {
   let _ = pretty_env_logger::try_init();
   let alloc = Bump::new();
@@ -286,16 +236,13 @@ fn basic_typeck_output_type_mismatch() {
     graphs: vec![TwGraph {
       name: "".into(),
       nodes: vec![
-        (TwGraphNode::LoadParam(0), vec![], None),    // 0
-        (TwGraphNode::GetField(0), vec![0], None),    // 1
-        (TwGraphNode::GetField(1), vec![1], None),    // 2
-        (TwGraphNode::UnwrapOptional, vec![2], None), // 3
-        (TwGraphNode::GetField(2), vec![3], None),    // 4
-        (TwGraphNode::UnwrapOptional, vec![4], None), // 5
-        (TwGraphNode::GetField(3), vec![5], None),    // 6
-        (TwGraphNode::UnwrapOptional, vec![6], None), // 7
+        (TwGraphNode::LoadParam(0), vec![], None), // 0
+        (TwGraphNode::GetField(0), vec![0], None), // 1
+        (TwGraphNode::GetField(1), vec![1], None), // 2
+        (TwGraphNode::GetField(2), vec![2], None), // 3
+        (TwGraphNode::GetField(3), vec![3], None), // 4
       ],
-      output: Some(7),
+      output: Some(4),
       output_type: Some(1),
       param_types: vec![0],
     }],

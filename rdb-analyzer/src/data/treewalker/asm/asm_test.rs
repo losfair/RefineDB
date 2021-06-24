@@ -40,11 +40,11 @@ async fn simple_test<F: FnMut(Option<Arc<VmValue>>)>(schema: &str, scripts: &[&s
     let vm = TwVm::new(&schema, &plan, &script).unwrap();
 
     let start = Instant::now();
-    GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
+    let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
     let tyck_end = Instant::now();
     println!("tyck took {:?}", tyck_end.duration_since(start));
 
-    let executor = Executor::new_assume_typechecked(&vm, &kv);
+    let executor = Executor::new(&vm, &kv, &type_info);
     let output = executor
       .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
       .await
@@ -66,6 +66,8 @@ async fn basic_exec() {
     kind: string,
     set_member_name_1: string,
     set_member_name_2: string,
+    set_member_name_3: string,
+    set_member_name_1_nonnull: string,
   } {
     some_item = root.some_item;
     id = some_item.id;
@@ -94,6 +96,7 @@ async fn basic_exec() {
       $ m_insert(set_member_name_1) elem_name_1
       $ m_insert(set_member_name_2) elem_name_2
       $ m_insert(set_member_name_3) elem_name_3
+      $ m_insert(set_member_name_1_nonnull) (elem_name_1 ?? "<unknown>")
       create_map;
   }
   "#;
@@ -173,17 +176,15 @@ async fn basic_exec() {
             x.elements.get("kind").unwrap().unwrap_primitive(),
             &PrimitiveValue::String("end".into())
           );
+          assert!(x.elements.get("set_member_name_1").unwrap().is_null());
+          assert!(x.elements.get("set_member_name_2").unwrap().is_null());
+          assert!(x.elements.get("set_member_name_3").unwrap().is_null());
           assert_eq!(
-            **x.elements.get("set_member_name_1").unwrap(),
-            VmValue::Null,
-          );
-          assert_eq!(
-            **x.elements.get("set_member_name_2").unwrap(),
-            VmValue::Null,
-          );
-          assert_eq!(
-            **x.elements.get("set_member_name_3").unwrap(),
-            VmValue::Null,
+            x.elements
+              .get("set_member_name_1_nonnull")
+              .unwrap()
+              .unwrap_primitive(),
+            &PrimitiveValue::String("<unknown>".into())
           );
         }
         2 => {}
@@ -220,9 +221,13 @@ async fn basic_exec() {
               .unwrap_primitive(),
             &PrimitiveValue::String("name_for_yyy".into())
           );
+          assert!(x.elements.get("set_member_name_3").unwrap().is_null());
           assert_eq!(
-            **x.elements.get("set_member_name_3").unwrap(),
-            VmValue::Null,
+            x.elements
+              .get("set_member_name_1_nonnull")
+              .unwrap()
+              .unwrap_primitive(),
+            &PrimitiveValue::String("name_for_xxx".into())
           );
         }
         _ => unreachable!(),

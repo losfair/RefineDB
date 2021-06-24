@@ -74,6 +74,8 @@ pub enum TypeckError {
   ExpectingBoolOutputForFilterSubgraphs(String),
   #[error("field `{0}` is not present in table `{1}`")]
   FieldNotPresentInTable(String, Arc<str>),
+  #[error("field `{0}` is not present in map")]
+  FieldNotPresentInMap(String),
   #[error("cannot unwrap non-optional type `{0}`")]
   CannotUnwrapNonOptional(String),
   #[error("field `{0}` of type `{1}` is not a primary key")]
@@ -96,6 +98,16 @@ pub struct GlobalTyckContext<'a, 'b> {
   vm: &'b TwVm<'a>,
   scc_post_order: Vec<HashSet<u32>>,
   subgraph_expected_param_types: Vec<Vec<HashSet<VmType<&'a str>>>>,
+}
+
+#[derive(Debug)]
+pub struct GlobalTypeInfo<'a> {
+  pub graphs: Vec<GraphTypeInfo<'a>>,
+}
+
+#[derive(Default, Debug)]
+pub struct GraphTypeInfo<'a> {
+  pub nodes: Vec<Option<VmType<&'a str>>>,
 }
 
 impl<'a, 'b> GlobalTyckContext<'a, 'b> {
@@ -145,14 +157,21 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
     })
   }
 
-  pub fn typeck(&mut self) -> Result<()> {
+  pub fn typeck(&mut self) -> Result<GlobalTypeInfo<'a>> {
+    let mut type_info = GlobalTypeInfo {
+      graphs: (0..self.vm.script.graphs.len())
+        .map(|_| GraphTypeInfo::default())
+        .collect(),
+    };
+
     // Typecheck subgraphs in reversed scc_post_order, to ensure param types can be inferred.
     for scc in self.scc_post_order.iter().rev() {
       let mut subgraph_expected_param_types_sink: HashMap<u32, Vec<HashSet<VmType<&'a str>>>> =
         HashMap::new();
       for i in scc {
         log::trace!("typeck: scc {:p}, subgraph {}", scc, i);
-        self.typeck_graph(*i as usize, &mut subgraph_expected_param_types_sink)?;
+        type_info.graphs[*i as usize].nodes =
+          self.typeck_graph(*i as usize, &mut subgraph_expected_param_types_sink)?;
       }
 
       for (i, x) in subgraph_expected_param_types_sink {
@@ -165,7 +184,7 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
         }
       }
     }
-    Ok(())
+    Ok(type_info)
   }
 
   fn typeck_graph(
@@ -394,7 +413,11 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
             .get(*key_index as usize)
             .ok_or_else(|| TypeckError::IdentIndexOob)?;
           match map_or_table_ty {
-            VmType::Map(x) => Some(x.get(key.as_str()).cloned().unwrap_or_else(|| VmType::Null)),
+            VmType::Map(x) => Some(
+              x.get(key.as_str())
+                .cloned()
+                .ok_or_else(|| TypeckError::FieldNotPresentInMap(key.clone()))?,
+            ),
             VmType::Table(x) => {
               let table_ty = vm
                 .schema
@@ -448,7 +471,7 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
             .output_type
             .and_then(|x| vm.script.types.get(x as usize).map(VmType::<&'a str>::from));
           if let Some(VmType::Bool) = output {
-            Some(VmType::OneOf(vec![set_member_ty.clone(), VmType::Null]))
+            Some(set_member_ty.clone())
           } else {
             return Err(
               TypeckError::ExpectingBoolOutputForFilterSubgraphs(format!("{:?}", output)).into(),
@@ -543,10 +566,6 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
           ensure_type_eq(x, &VmType::Bool)?;
           Some(VmType::Bool)
         }
-        TwGraphNode::UnwrapOptional => {
-          let [input] = validate_in_edges::<1>(node, in_edges, &types)?;
-          Some(unwrap_optional(input.clone())?)
-        }
         TwGraphNode::Select => {
           let [left, right] = validate_in_edges::<2>(node, in_edges, &types)?;
           if left != right {
@@ -564,6 +583,14 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
               return Err(TypeckError::PresenceCheckOnUnsupportedType(format!("{:?}", x)).into())
             }
           }
+        }
+        TwGraphNode::IsNull => {
+          let [_] = validate_in_edges::<1>(node, in_edges, &types)?;
+          Some(VmType::Bool)
+        }
+        TwGraphNode::Nop => {
+          let [x] = validate_in_edges::<1>(node, in_edges, &types)?;
+          Some(x.clone())
         }
       };
       types.push(ty);
@@ -684,21 +711,5 @@ fn extract_set_element_type<'a, 'b>(x: &'b VmType<&'a str>) -> Result<&'b VmType
   match x {
     VmType::Set(x) => Ok(&*x.ty),
     _ => Err(TypeckError::ExpectingSet(format!("{:?}", x)).into()),
-  }
-}
-
-fn unwrap_optional<'a, 'b>(x: VmType<&'a str>) -> Result<VmType<&'a str>, TypeckError> {
-  match x {
-    VmType::OneOf(x) if x.iter().find(|x| x.is_null()).is_some() => Ok(flatten_oneof(
-      VmType::OneOf(x.into_iter().filter(|x| !x.is_null()).collect()),
-    )),
-    _ => return Err(TypeckError::CannotUnwrapNonOptional(format!("{:?}", x))),
-  }
-}
-
-fn flatten_oneof<'a>(x: VmType<&'a str>) -> VmType<&'a str> {
-  match x {
-    VmType::OneOf(x) if x.len() == 1 => x.into_iter().next().unwrap(),
-    _ => x,
   }
 }
