@@ -143,7 +143,7 @@ async fn basic_exec() {
     elem = m_insert(id) "xxx" elem;
     elem = m_insert(name) "name_for_xxx" elem;
     elem = m_insert(duration) dur elem;
-    elem = build_table(Item<>) elem;
+    elem = build_table(Item) elem;
     s = get_field(many_items) root;
     s_insert elem s;
 
@@ -151,7 +151,7 @@ async fn basic_exec() {
     elem = m_insert(id) "yyy" elem;
     elem = m_insert(name) "name_for_yyy" elem;
     elem = m_insert(duration) dur elem;
-    elem = build_table(Item<>) elem;
+    elem = build_table(Item) elem;
     s = get_field(many_items) root;
     s_insert elem s;
   }
