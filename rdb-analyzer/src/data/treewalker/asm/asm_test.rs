@@ -83,9 +83,9 @@ async fn basic_exec() {
     kind = select k1 k2;
 
     s = root.many_items;
-    elem_name_1 = (point_get "xxx" s).name;
-    elem_name_2 = (point_get "yyy" s).name;
-    elem_name_3 = (point_get "zzz" s).name;
+    elem_name_1 = (point_get s "xxx").name;
+    elem_name_2 = (point_get s "yyy").name;
+    elem_name_3 = (point_get s "zzz").name;
 
     return m_insert(id) id
       $ m_insert(name) name
