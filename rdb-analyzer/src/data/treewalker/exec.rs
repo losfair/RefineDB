@@ -126,11 +126,12 @@ impl<'a, 'b> Executor<'a, 'b> {
                 Some(result.clone());
             }
             FireRuleKind::Precondition => {
-              precondition_satisfied[item.target_node as usize] = match result.as_ref().map(|x| &**x) {
-                Some(VmValue::Bool(x)) => *x,
-                None => true,
-                _ => unreachable!()
-              };
+              precondition_satisfied[item.target_node as usize] =
+                match result.as_ref().map(|x| &**x) {
+                  Some(VmValue::Bool(x)) => *x,
+                  None => true,
+                  _ => unreachable!(),
+                };
             }
           }
         }
