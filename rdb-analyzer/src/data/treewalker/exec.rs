@@ -67,7 +67,12 @@ pub enum ExecError {
 
   #[error("missing value for non-optional field `{0}` of table `{1}`")]
   MissingValueForNonOptionalField(String, Arc<str>),
+
+  #[error("max recursion depth exceeded: {0}")]
+  MaxRecursionDepthExceeded(usize),
 }
+
+const MAX_RECURSION_DEPTH: usize = 128;
 
 impl<'a, 'b> Executor<'a, 'b> {
   pub fn new(
@@ -83,6 +88,21 @@ impl<'a, 'b> Executor<'a, 'b> {
     graph_index: usize,
     graph_params: &[Arc<VmValue<'a>>],
   ) -> Result<Option<Arc<VmValue<'a>>>> {
+    self
+      .recursively_run_graph(graph_index, graph_params, 0)
+      .await
+  }
+
+  async fn recursively_run_graph(
+    &self,
+    graph_index: usize,
+    graph_params: &[Arc<VmValue<'a>>],
+    recursion_depth: usize,
+  ) -> Result<Option<Arc<VmValue<'a>>>> {
+    if recursion_depth >= MAX_RECURSION_DEPTH {
+      return Err(ExecError::MaxRecursionDepthExceeded(recursion_depth).into());
+    }
+    let recursion_depth = recursion_depth + 1;
     let g = &self.vm.script.graphs[graph_index];
     let type_info = &self.type_info.graphs[graph_index];
     let fire_rules = generate_fire_rules(g);
@@ -105,7 +125,14 @@ impl<'a, 'b> Executor<'a, 'b> {
           (
             i as u32,
             self
-              .run_node(n, vec![], txn, graph_params, type_info.nodes[i].as_ref())
+              .run_node(
+                n,
+                vec![],
+                txn,
+                graph_params,
+                type_info.nodes[i].as_ref(),
+                recursion_depth,
+              )
               .await,
           )
         }));
@@ -197,6 +224,7 @@ impl<'a, 'b> Executor<'a, 'b> {
                         txn,
                         graph_params,
                         type_info.nodes[target_node].as_ref(),
+                        recursion_depth,
                       )
                       .await,
                   )
@@ -220,6 +248,7 @@ impl<'a, 'b> Executor<'a, 'b> {
     txn: &dyn KvTransaction,
     graph_params: &[Arc<VmValue<'a>>],
     type_info: Option<&VmType<&'a str>>,
+    recursion_depth: usize,
   ) -> Result<Option<Arc<VmValue<'a>>>> {
     // Optional chain
     if n.is_optional_chained() {
@@ -436,6 +465,42 @@ impl<'a, 'b> Executor<'a, 'b> {
       }
       TwGraphNode::IsNull => Some(Arc::new(VmValue::Bool(params[0].is_null()))),
       TwGraphNode::Nop => Some(params[0].clone()),
+      TwGraphNode::Call(subgraph_index) => {
+        let output = self
+          .recursively_run_graph(*subgraph_index as usize, &params, recursion_depth)
+          .await?;
+        output
+      }
+      TwGraphNode::Add => Some(Arc::new(match (&*params[0], &*params[1]) {
+        (
+          VmValue::Primitive(PrimitiveValue::Int64(l)),
+          VmValue::Primitive(PrimitiveValue::Int64(r)),
+        ) => VmValue::Primitive(PrimitiveValue::Int64(l.wrapping_add(*r))),
+        (
+          VmValue::Primitive(PrimitiveValue::Double(l)),
+          VmValue::Primitive(PrimitiveValue::Double(r)),
+        ) => VmValue::Primitive(PrimitiveValue::Double(
+          (f64::from_bits(*l) + f64::from_bits(*r)).to_bits(),
+        )),
+        (
+          VmValue::Primitive(PrimitiveValue::String(l)),
+          VmValue::Primitive(PrimitiveValue::String(r)),
+        ) => VmValue::Primitive(PrimitiveValue::String(format!("{}{}", l, r))),
+        _ => unreachable!(),
+      })),
+      TwGraphNode::Sub => Some(Arc::new(match (&*params[0], &*params[1]) {
+        (
+          VmValue::Primitive(PrimitiveValue::Int64(l)),
+          VmValue::Primitive(PrimitiveValue::Int64(r)),
+        ) => VmValue::Primitive(PrimitiveValue::Int64(l.wrapping_sub(*r))),
+        (
+          VmValue::Primitive(PrimitiveValue::Double(l)),
+          VmValue::Primitive(PrimitiveValue::Double(r)),
+        ) => VmValue::Primitive(PrimitiveValue::Double(
+          (f64::from_bits(*l) - f64::from_bits(*r)).to_bits(),
+        )),
+        _ => unreachable!(),
+      })),
       _ => return Err(ExecError::NotImplemented(format!("{:?}", n)).into()),
     })
   }

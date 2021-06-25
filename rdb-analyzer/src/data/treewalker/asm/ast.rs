@@ -84,6 +84,9 @@ pub enum ExprKind<'a> {
   IsPresent(&'a Expr<'a>),
   IsNull(&'a Expr<'a>),
   OrElse(&'a Expr<'a>, &'a Expr<'a>),
+  Call(&'a str, Vec<'a, Expr<'a>>),
+  Add(&'a Expr<'a>, &'a Expr<'a>),
+  Sub(&'a Expr<'a>, &'a Expr<'a>),
 }
 
 pub enum Literal<'a> {

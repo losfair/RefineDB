@@ -247,3 +247,36 @@ async fn basic_exec() {
   .await;
   assert_eq!(chkindex, 4);
 }
+
+#[tokio::test]
+async fn fib() {
+  let _ = pretty_env_logger::try_init();
+  let mut ok = false;
+  simple_test(
+    r#"
+  "#,
+    &[r#"
+    graph main(root: schema): int64 {
+      return call(fib) [20];
+    }
+    graph fib(x: int64): int64 {
+      if x == 1 || x == 2 {
+        v1 = 1;
+      } else {
+        v2 = call(fib) [x - 1] + call(fib) [x - 2];
+      }
+      return select v1 v2;
+    }
+    "#],
+    |x| {
+      assert_eq!(
+        **x.as_ref().unwrap(),
+        VmValue::Primitive(PrimitiveValue::Int64(6765))
+      );
+      ok = true;
+    },
+  )
+  .await;
+
+  assert!(ok);
+}

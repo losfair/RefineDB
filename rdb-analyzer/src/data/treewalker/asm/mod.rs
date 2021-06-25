@@ -42,4 +42,7 @@ pub enum TwAsmError {
 
   #[error("duplicate type alias: {0}")]
   DuplicateTypeAlias(String),
+
+  #[error("graph not found: {0}")]
+  GraphNotFound(String),
 }

@@ -143,6 +143,19 @@ pub enum TwGraphNode {
 
   /// T -> T
   Nop,
+
+  /// Call subgraph.
+  ///
+  /// T* -> R
+  ///
+  /// Const param: subgraph index
+  Call(u32),
+
+  /// (int64 -> int64 -> int64) | (double -> double -> double) | (string -> string -> string)
+  Add,
+
+  /// (int64 -> int64 -> int64) | (double -> double -> double)
+  Sub,
 }
 
 impl TwGraphNode {

@@ -23,6 +23,7 @@ pub fn compile_twscript(input: &str) -> Result<TwScript> {
     vmtype_pool: HashMap::new(),
     const_pool: HashMap::new(),
     type_aliases: HashMap::new(),
+    root: &root,
   };
   if let Some(x) = first_duplicate(root.graphs.iter().map(|x| x.name)) {
     return Err(TwAsmError::DuplicateGraph(x.into()).into());
@@ -92,6 +93,7 @@ struct Builder<'a> {
   vmtype_pool: HashMap<BumpBox<'a, VmType<String>>, u32>,
   const_pool: HashMap<VmConst, u32>,
   type_aliases: HashMap<&'a str, VmType<String>>,
+  root: &'a ast::Root<'a>,
 }
 
 struct GraphContext<'a, 'b> {
@@ -319,6 +321,31 @@ impl<'a, 'b> GraphContext<'a, 'b> {
           (TwGraphNode::Select, vec![on_null, on_notnull], precondition),
           name,
         )?
+      }
+      K::Call(target_graph, params) => {
+        let (i, _) = self
+          .builder
+          .root
+          .graphs
+          .iter()
+          .enumerate()
+          .find(|(_, x)| x.name == *target_graph)
+          .ok_or_else(|| TwAsmError::GraphNotFound(target_graph.to_string()))?;
+        let params = params
+          .iter()
+          .map(|x| self.generate_expr(g, None, x))
+          .collect::<Result<Vec<_>>>()?;
+        self.push_node((TwGraphNode::Call(i as u32), params, precondition), name)?
+      }
+      K::Add(l, r) => {
+        let l = self.generate_expr(g, None, *l)?;
+        let r = self.generate_expr(g, None, *r)?;
+        self.push_node((TwGraphNode::Add, vec![l, r], precondition), name)?
+      }
+      K::Sub(l, r) => {
+        let l = self.generate_expr(g, None, *l)?;
+        let r = self.generate_expr(g, None, *r)?;
+        self.push_node((TwGraphNode::Sub, vec![l, r], precondition), name)?
       }
     };
     Ok(ret)

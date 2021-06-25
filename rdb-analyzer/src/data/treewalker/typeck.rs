@@ -13,7 +13,7 @@ use crate::{
     bytecode::TwGraphNode,
     vm_value::{VmSetType, VmTableType},
   },
-  schema::compile::FieldType,
+  schema::compile::{FieldType, PrimitiveType},
 };
 
 use super::{bytecode::TwGraph, vm::TwVm, vm_value::VmType};
@@ -92,6 +92,8 @@ pub enum TypeckError {
   SelectTypeMismatch(String, String),
   #[error("presence check on an unsuppported type: `{0}`")]
   PresenceCheckOnUnsupportedType(String),
+  #[error("bad binop operands: `{0}` and `{1}`")]
+  BadBinopOperands(String, String),
 }
 
 pub struct GlobalTyckContext<'a, 'b> {
@@ -591,6 +593,60 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
         TwGraphNode::Nop => {
           let [x] = validate_in_edges::<1>(node, in_edges, &types)?;
           Some(x.clone())
+        }
+        TwGraphNode::Call(subgraph_index) => {
+          let param_types = in_edges
+            .iter()
+            .map(|x| ensure_type(types[*x as usize].as_ref()).map(|x| x.clone()))
+            .collect::<Result<Vec<_>, TypeckError>>()?;
+          let subgraph = self.validate_subgraph_call(
+            "Call",
+            *subgraph_index,
+            subgraph_expected_param_types_sink,
+            param_types,
+          )?;
+          let output = subgraph
+            .output_type
+            .and_then(|x| vm.script.types.get(x as usize).map(VmType::<&'a str>::from));
+          output
+        }
+        TwGraphNode::Add => {
+          let [l, r] = validate_in_edges::<2>(node, in_edges, &types)?;
+          match (l, r) {
+            (VmType::Primitive(PrimitiveType::Int64), VmType::Primitive(PrimitiveType::Int64)) => {
+              Some(VmType::Primitive(PrimitiveType::Int64))
+            }
+            (
+              VmType::Primitive(PrimitiveType::Double),
+              VmType::Primitive(PrimitiveType::Double),
+            ) => Some(VmType::Primitive(PrimitiveType::Double)),
+            (
+              VmType::Primitive(PrimitiveType::String),
+              VmType::Primitive(PrimitiveType::String),
+            ) => Some(VmType::Primitive(PrimitiveType::String)),
+            _ => {
+              return Err(
+                TypeckError::BadBinopOperands(format!("{:?}", l), format!("{:?}", r)).into(),
+              )
+            }
+          }
+        }
+        TwGraphNode::Sub => {
+          let [l, r] = validate_in_edges::<2>(node, in_edges, &types)?;
+          match (l, r) {
+            (VmType::Primitive(PrimitiveType::Int64), VmType::Primitive(PrimitiveType::Int64)) => {
+              Some(VmType::Primitive(PrimitiveType::Int64))
+            }
+            (
+              VmType::Primitive(PrimitiveType::Double),
+              VmType::Primitive(PrimitiveType::Double),
+            ) => Some(VmType::Primitive(PrimitiveType::Double)),
+            _ => {
+              return Err(
+                TypeckError::BadBinopOperands(format!("{:?}", l), format!("{:?}", r)).into(),
+              )
+            }
+          }
         }
       };
       types.push(ty);
