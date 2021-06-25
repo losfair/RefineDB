@@ -168,6 +168,7 @@ impl TwGraphNode {
   pub fn subgraph_references(&self) -> SmallVec<[u32; 1]> {
     match self {
       Self::FilterSet(x) => smallvec![*x],
+      Self::Call(x) => smallvec![*x],
       _ => smallvec![],
     }
   }

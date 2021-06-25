@@ -1261,6 +1261,7 @@ dependencies = [
  "hex",
  "libc",
  "log",
+ "petgraph",
  "pretty_env_logger",
  "rdb-analyzer",
  "rmp-serde",

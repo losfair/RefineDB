@@ -1,7 +1,10 @@
+mod dfvis;
+
 use std::{ffi::CStr, os::raw::c_char, panic::AssertUnwindSafe, ptr::NonNull};
 
 use anyhow::Result;
 use bumpalo::Bump;
+use dfvis::visualize_df;
 use rdb_analyzer::{
   data::treewalker::{
     asm::codegen::compile_twscript,
@@ -79,6 +82,11 @@ pub extern "C" fn rdb_vm_tyck<'a>(vm: &TwVm<'a>) -> Option<Box<GlobalTypeInfo<'a
   wrap("rdb_vm_tyck", || {
     Ok(Box::new(GlobalTyckContext::new(vm)?.typeck()?))
   })
+}
+
+#[no_mangle]
+pub extern "C" fn rdb_vm_visualize_df<'a>(vm: &TwVm<'a>) -> Option<NonNull<c_char>> {
+  wrap("rdb_vm_visualize_df", || Ok(mkcstr(&visualize_df(vm)?)))
 }
 
 #[no_mangle]
