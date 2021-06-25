@@ -16,23 +16,26 @@ pub fn compile_twscript(input: &str) -> Result<TwScript> {
   let bump = Bump::new();
   let root = parse(&bump, input)?;
 
-  // Collect type aliases
-  if let Some(x) = first_duplicate(root.type_aliases.iter().map(|x| x.name)) {
-    return Err(TwAsmError::DuplicateTypeAlias(x.into()).into());
-  }
-  let type_aliases: HashMap<&str, &ast::Type> =
-    root.type_aliases.iter().map(|x| (x.name, &x.ty)).collect();
-
   let mut builder = Builder {
     bump: &bump,
     script: TwScript::default(),
     ident_pool: HashMap::new(),
     vmtype_pool: HashMap::new(),
     const_pool: HashMap::new(),
-    type_aliases,
+    type_aliases: HashMap::new(),
   };
   if let Some(x) = first_duplicate(root.graphs.iter().map(|x| x.name)) {
     return Err(TwAsmError::DuplicateGraph(x.into()).into());
+  }
+
+  // Collect type aliases
+  if let Some(x) = first_duplicate(root.type_aliases.iter().map(|x| x.name)) {
+    return Err(TwAsmError::DuplicateTypeAlias(x.into()).into());
+  }
+  // XXX: Here we don't allow recursive type aliases - should this be changed?
+  for alias in &root.type_aliases {
+    let vmtype = builder.generate_vmtype(&alias.ty)?;
+    builder.type_aliases.insert(alias.name, vmtype);
   }
 
   for g in &root.graphs {
@@ -88,7 +91,7 @@ struct Builder<'a> {
   ident_pool: HashMap<&'a str, u32>,
   vmtype_pool: HashMap<BumpBox<'a, VmType<String>>, u32>,
   const_pool: HashMap<VmConst, u32>,
-  type_aliases: HashMap<&'a str, &'a ast::Type<'a>>,
+  type_aliases: HashMap<&'a str, VmType<String>>,
 }
 
 struct GraphContext<'a, 'b> {
@@ -412,7 +415,7 @@ impl<'a> Builder<'a> {
       ast::Type::Primitive(x) => VmType::Primitive(*x),
       ast::Type::Table { name, .. } => {
         if let Some(x) = self.type_aliases.get(name) {
-          self.generate_vmtype(*x)?
+          x.clone()
         } else {
           VmType::Table(VmTableType {
             name: format_type_for_table(ty)?,
