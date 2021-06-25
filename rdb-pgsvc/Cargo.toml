@@ -25,3 +25,4 @@ petgraph = "0.5"
 rpds = { version = "0.9", features = ["serde"] }
 async-trait = "0.1"
 base64 = "0.13"
+futures = "0.3"

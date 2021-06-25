@@ -1260,6 +1260,7 @@ dependencies = [
  "async-trait",
  "base64",
  "bumpalo",
+ "futures",
  "hex",
  "libc",
  "log",

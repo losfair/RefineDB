@@ -2,12 +2,13 @@ mod dfvis;
 mod memkv;
 mod query;
 
-use std::{ffi::CStr, os::raw::c_char, panic::AssertUnwindSafe, ptr::NonNull};
+use std::{ffi::CStr, os::raw::c_char, panic::AssertUnwindSafe, ptr::NonNull, sync::Arc};
 
 use anyhow::Result;
 use bumpalo::Bump;
 use dfvis::visualize_df;
-use query::get_vm_graphs;
+use memkv::MemKv;
+use query::{get_vm_graphs, run_vm_query, VmGraphQuery};
 use rdb_analyzer::{
   data::treewalker::{
     asm::codegen::compile_twscript,
@@ -48,6 +49,14 @@ pub extern "C" fn rdb_drop_vm<'a>(_: Option<Box<TwVm<'a>>>) {}
 
 #[no_mangle]
 pub extern "C" fn rdb_drop_global_type_info<'a>(_: Option<Box<GlobalTypeInfo<'a>>>) {}
+
+#[no_mangle]
+pub extern "C" fn rdb_acquire_memkv(x: Option<&Arc<MemKv>>) -> Option<Box<Arc<MemKv>>> {
+  x.map(|x| Box::new(x.clone()))
+}
+
+#[no_mangle]
+pub extern "C" fn rdb_release_memkv(_: Option<Box<Arc<MemKv>>>) {}
 
 #[no_mangle]
 pub unsafe extern "C" fn rdb_compile_schema(schema: *const c_char) -> Option<Box<CompiledSchema>> {
@@ -97,6 +106,27 @@ pub extern "C" fn rdb_vm_get_graphs<'a>(vm: &TwVm<'a>) -> Option<NonNull<c_char>
   wrap("rdb_vm_get_graphs", || {
     Ok(mkcstr(&serde_json::to_string(&get_vm_graphs(vm))?))
   })
+}
+
+#[no_mangle]
+pub extern "C" fn rdb_vm_run_query<'a>(
+  vm: &TwVm<'a>,
+  kv: &Arc<MemKv>,
+  type_info: &GlobalTypeInfo<'a>,
+  query: *const c_char,
+) -> Option<NonNull<c_char>> {
+  wrap("rdb_vm_run_query", || {
+    let query = unsafe { CStr::from_ptr(query) };
+    let query: VmGraphQuery = serde_json::from_str(query.to_str()?)?;
+    Ok(mkcstr(&serde_json::to_string(&run_vm_query(
+      vm, &**kv, type_info, &query,
+    )?)?))
+  })
+}
+
+#[no_mangle]
+pub extern "C" fn rdb_memkv_create() -> Option<Box<Arc<MemKv>>> {
+  wrap("rdb_memkv_create", || Ok(Box::new(Arc::new(MemKv::new()))))
 }
 
 #[no_mangle]
