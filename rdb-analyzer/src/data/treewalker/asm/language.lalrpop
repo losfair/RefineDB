@@ -93,29 +93,18 @@ StmtList: Bvec<'input, Stmt<'input>> = {
   }), &state.alloc),
 }
 
+ExprRef: &'input Expr<'input> = {
+  <e:Expr> => state.alloc.alloc(e),
+}
+
 Expr: Expr<'input> = {
   <location_start:@L> <kind:ExprKind> <location_end:@R> => Expr { location_start, location_end, kind },
   ExprL2,
 }
 
 ExprKind: ExprKind<'input> = {
-  Token<"build_table"> Token<"("> <x:Type> Token<")"> <y:ExprL2Ref> => ExprKind::BuildTable(x, y),
-  Token<"point_get"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::GetSetElement(x, y),
-  Token<"m_insert"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoMap(x, y, z),
-  Token<"t_insert"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoTable(x, y, z),
-  Token<"s_insert"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::InsertIntoSet(y, z),
-  Token<"m_delete"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromMap(x, y),
-  Token<"t_delete"> Token<"("> <x:Identifier> Token<")"> <y:ExprL2Ref> => ExprKind::DeleteFromTable(x, y),
-  Token<"s_delete"> <y:ExprL2Ref> <z:ExprL2Ref> => ExprKind::DeleteFromSet(y, z),
-  Token<"select"> <x:ExprL2Ref> <y:ExprL2Ref> => ExprKind::Select(x, y),
-  <x:ExprL3Ref> Token<"=="> <y:ExprL3Ref> => ExprKind::Eq(x, y),
-  <x:ExprL3Ref> Token<"!="> <y:ExprL3Ref> => ExprKind::Ne(x, y),
-  <x:ExprL3Ref> Token<"&&"> <y:ExprL3Ref> => ExprKind::And(x, y),
-  <x:ExprL3Ref> Token<"||"> <y:ExprL3Ref> => ExprKind::Or(x, y),
-  <x:ExprL3Ref> Token<"??"> <y:ExprL3Ref> => ExprKind::OrElse(x, y),
-  Token<"!"> <x:Expr> => ExprKind::Not(state.alloc.alloc(x)),
-  Token<"is_present"> <x:Expr> => ExprKind::IsPresent(state.alloc.alloc(x)),
-  Token<"is_null"> <x:Expr> => ExprKind::IsNull(state.alloc.alloc(x)),
+  <x:ExprRef> Token<"&&"> <y:ExprL2Ref> => ExprKind::And(x, y),
+  <x:ExprRef> Token<"||"> <y:ExprL2Ref> => ExprKind::Or(x, y),
 }
 
 ExprL2Ref: &'input Expr<'input> = {
@@ -123,8 +112,13 @@ ExprL2Ref: &'input Expr<'input> = {
 }
 
 ExprL2: Expr<'input> = {
-  Token<"$"> <e:Expr> => e,
+  <location_start:@L> <kind:ExprKindL2> <location_end:@R> => Expr { location_start, location_end, kind },
   ExprL3,
+}
+
+ExprKindL2: ExprKind<'input> = {
+  <x:ExprL2Ref> Token<"=="> <y:ExprL3Ref> => ExprKind::Eq(x, y),
+  <x:ExprL2Ref> Token<"!="> <y:ExprL3Ref> => ExprKind::Ne(x, y),
 }
 
 ExprL3Ref: &'input Expr<'input> = {
@@ -133,14 +127,60 @@ ExprL3Ref: &'input Expr<'input> = {
 
 ExprL3: Expr<'input> = {
   <location_start:@L> <kind:ExprKindL3> <location_end:@R> => Expr { location_start, location_end, kind },
-  Token<"("> <e:Expr> Token<")"> => e,
+  ExprL4,
 }
 
 ExprKindL3: ExprKind<'input> = {
+  <x:ExprL3Ref> Token<"+"> <y:ExprL4Ref> => ExprKind::Add(x, y),
+  <x:ExprL3Ref> Token<"-"> <y:ExprL4Ref> => ExprKind::Sub(x, y),
+  <x:ExprL3Ref> Token<"??"> <y:ExprL4Ref> => ExprKind::OrElse(x, y),
+
+}
+
+ExprL4Ref: &'input Expr<'input> = {
+  <e:ExprL4> => state.alloc.alloc(e),
+}
+
+ExprL4: Expr<'input> = {
+  <location_start:@L> <kind:ExprKindL4> <location_end:@R> => Expr { location_start, location_end, kind },
+  ExprL5,
+}
+
+TrailingExprRef: &'input Expr<'input> = {
+  <e:ExprL5Ref> => e,
+  Token<"$"> <e:ExprL4Ref> => e,
+}
+
+ExprKindL4: ExprKind<'input> = {
+  Token<"build_table"> Token<"("> <x:Type> Token<")"> <y:TrailingExprRef> => ExprKind::BuildTable(x, y),
+  Token<"point_get"> <x:ExprL5Ref> <y:TrailingExprRef> => ExprKind::GetSetElement(x, y),
+  Token<"m_insert"> Token<"("> <x:Identifier> Token<")"> <y:ExprL5Ref> <z:TrailingExprRef> => ExprKind::InsertIntoMap(x, y, z),
+  Token<"t_insert"> Token<"("> <x:Identifier> Token<")"> <y:ExprL5Ref> <z:TrailingExprRef> => ExprKind::InsertIntoTable(x, y, z),
+  Token<"s_insert"> <y:ExprL5Ref> <z:TrailingExprRef> => ExprKind::InsertIntoSet(y, z),
+  Token<"m_delete"> Token<"("> <x:Identifier> Token<")"> <y:TrailingExprRef> => ExprKind::DeleteFromMap(x, y),
+  Token<"t_delete"> Token<"("> <x:Identifier> Token<")"> <y:TrailingExprRef> => ExprKind::DeleteFromTable(x, y),
+  Token<"s_delete"> <y:ExprL5Ref> <z:TrailingExprRef> => ExprKind::DeleteFromSet(y, z),
+  Token<"select"> <x:ExprL5Ref> <y:TrailingExprRef> => ExprKind::Select(x, y),
+  Token<"!"> <x:ExprL4Ref> => ExprKind::Not(x),
+  Token<"is_present"> <x:TrailingExprRef> => ExprKind::IsPresent(x),
+  Token<"is_null"> <x:TrailingExprRef> => ExprKind::IsNull(x),
+  Token<"call"> Token<"("> <name:Identifier> Token<")"> Token<"["> <params:ZeroOrMore<Expr, ",">> Token<"]"> => ExprKind::Call(name, Bvec::from_iter_in(params.into_iter(), &state.alloc)),
+}
+
+ExprL5Ref: &'input Expr<'input> = {
+  <e:ExprL5> => state.alloc.alloc(e),
+}
+
+ExprL5: Expr<'input> = {
+  <location_start:@L> <kind:ExprKindL5> <location_end:@R> => Expr { location_start, location_end, kind },
+  Token<"("> <e:Expr> Token<")"> => e,
+}
+
+ExprKindL5: ExprKind<'input> = {
   <x:Literal> => ExprKind::LoadConst(x),
   Token<"create_map"> => ExprKind::CreateMap,
   <x:Identifier> => ExprKind::Node(x),
-  <y:ExprL3Ref> Token<"."> <x:Identifier> => ExprKind::GetField(x, y),
+  <y:ExprL5Ref> Token<"."> <x:Identifier> => ExprKind::GetField(x, y),
 }
 
 Identifier: &'input str = {
@@ -148,7 +188,7 @@ Identifier: &'input str = {
 }
 
 Literal: Literal<'input> = {
-  <s:Token<r"[0-9]+">> =>? s.parse().map(Literal::Integer).map_err(|_| ParseError::User {
+  <s:Token<r"-?[0-9]+">> =>? s.parse().map(Literal::Integer).map_err(|_| ParseError::User {
     error: TwAsmError::InvalidLiteral,
   }),
   <s:Token<r"0x[0-9a-fA-F]+">> =>? i64::from_str_radix(s.strip_prefix("0x").unwrap(), 16).map(Literal::Integer).map_err(|_| ParseError::User {
