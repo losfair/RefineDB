@@ -1,10 +1,13 @@
 mod dfvis;
+mod memkv;
+mod query;
 
 use std::{ffi::CStr, os::raw::c_char, panic::AssertUnwindSafe, ptr::NonNull};
 
 use anyhow::Result;
 use bumpalo::Bump;
 use dfvis::visualize_df;
+use query::get_vm_graphs;
 use rdb_analyzer::{
   data::treewalker::{
     asm::codegen::compile_twscript,
@@ -87,6 +90,13 @@ pub extern "C" fn rdb_vm_tyck<'a>(vm: &TwVm<'a>) -> Option<Box<GlobalTypeInfo<'a
 #[no_mangle]
 pub extern "C" fn rdb_vm_visualize_df<'a>(vm: &TwVm<'a>) -> Option<NonNull<c_char>> {
   wrap("rdb_vm_visualize_df", || Ok(mkcstr(&visualize_df(vm)?)))
+}
+
+#[no_mangle]
+pub extern "C" fn rdb_vm_get_graphs<'a>(vm: &TwVm<'a>) -> Option<NonNull<c_char>> {
+  wrap("rdb_vm_get_graphs", || {
+    Ok(mkcstr(&serde_json::to_string(&get_vm_graphs(vm))?))
+  })
 }
 
 #[no_mangle]
