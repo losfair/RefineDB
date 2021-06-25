@@ -1,13 +1,13 @@
 use lalrpop_util::lalrpop_mod;
 
-pub mod ast;
+mod ast;
 pub mod codegen;
 mod state;
 
 #[cfg(test)]
 mod asm_test;
 
-lalrpop_mod!(pub language, "/data/treewalker/asm/language.rs");
+lalrpop_mod!(language, "/data/treewalker/asm/language.rs");
 
 use thiserror::Error;
 
@@ -39,4 +39,7 @@ pub enum TwAsmError {
 
   #[error("duplicate node name: {0}")]
   DuplicateNodeName(String),
+
+  #[error("duplicate type alias: {0}")]
+  DuplicateTypeAlias(String),
 }

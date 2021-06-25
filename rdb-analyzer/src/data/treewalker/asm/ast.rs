@@ -3,7 +3,18 @@ use bumpalo::collections::vec::Vec;
 use crate::schema::compile::PrimitiveType;
 
 pub struct Root<'a> {
-  pub graphs: Vec<'a, Graph<'a>>,
+  pub graphs: Vec<'a, &'a Graph<'a>>,
+  pub type_aliases: Vec<'a, &'a TypeAlias<'a>>,
+}
+
+pub struct TypeAlias<'a> {
+  pub name: &'a str,
+  pub ty: Type<'a>,
+}
+
+pub enum Item<'a> {
+  Graph(&'a Graph<'a>),
+  TypeAlias(&'a TypeAlias<'a>),
 }
 
 pub struct Graph<'a> {

@@ -12,9 +12,25 @@ extern {
 }
 
 pub Root: Root<'input> = {
-  Comment* <graphs:Graph*> => Root {
-    graphs: Bvec::from_iter_in(graphs.into_iter(), &state.alloc),
+  Comment* <items:Item*> => Root {
+    graphs: Bvec::from_iter_in(items.iter().filter_map(|x| match x {
+      Item::Graph(x) => Some(*x),
+      _ => None,
+    }), &state.alloc),
+    type_aliases: Bvec::from_iter_in(items.iter().filter_map(|x| match x {
+      Item::TypeAlias(x) => Some(*x),
+      _ => None,
+    }), &state.alloc),
   }
+}
+
+Item: Item<'input> = {
+  <g:Graph> => Item::Graph(state.alloc.alloc(g)),
+  <t:TypeAlias> => Item::TypeAlias(state.alloc.alloc(t)),
+}
+
+TypeAlias: TypeAlias<'input> = {
+  Token<"type"> <name:Identifier> Token<"="> <ty:Type> Token<";"> => TypeAlias { name, ty },
 }
 
 Graph: Graph<'input> = {

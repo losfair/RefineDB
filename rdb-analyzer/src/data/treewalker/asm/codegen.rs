@@ -15,12 +15,21 @@ use bumpalo::Bump;
 pub fn compile_twscript(input: &str) -> Result<TwScript> {
   let bump = Bump::new();
   let root = parse(&bump, input)?;
+
+  // Collect type aliases
+  if let Some(x) = first_duplicate(root.type_aliases.iter().map(|x| x.name)) {
+    return Err(TwAsmError::DuplicateTypeAlias(x.into()).into());
+  }
+  let type_aliases: HashMap<&str, &ast::Type> =
+    root.type_aliases.iter().map(|x| (x.name, &x.ty)).collect();
+
   let mut builder = Builder {
     bump: &bump,
     script: TwScript::default(),
     ident_pool: HashMap::new(),
     vmtype_pool: HashMap::new(),
     const_pool: HashMap::new(),
+    type_aliases,
   };
   if let Some(x) = first_duplicate(root.graphs.iter().map(|x| x.name)) {
     return Err(TwAsmError::DuplicateGraph(x.into()).into());
@@ -39,7 +48,7 @@ pub fn compile_twscript(input: &str) -> Result<TwScript> {
         .iter()
         .map(|(_, ty)| {
           ty.as_ref()
-            .map(|x| generate_vmtype(x))
+            .map(|x| builder.generate_vmtype(x))
             .unwrap_or_else(|| Ok(VmType::Unknown))
             .map(|x| builder.alloc_vmtype(x))
         })
@@ -47,7 +56,7 @@ pub fn compile_twscript(input: &str) -> Result<TwScript> {
       output_type: g
         .return_type
         .as_ref()
-        .map(generate_vmtype)
+        .map(|x| builder.generate_vmtype(x))
         .transpose()?
         .map(|x| builder.alloc_vmtype(x)),
     };
@@ -79,6 +88,7 @@ struct Builder<'a> {
   ident_pool: HashMap<&'a str, u32>,
   vmtype_pool: HashMap<BumpBox<'a, VmType<String>>, u32>,
   const_pool: HashMap<VmConst, u32>,
+  type_aliases: HashMap<&'a str, &'a ast::Type<'a>>,
 }
 
 struct GraphContext<'a, 'b> {
@@ -256,7 +266,8 @@ impl<'a, 'b> GraphContext<'a, 'b> {
         )?
       }
       K::LoadConst(x) => {
-        let x = self.builder.alloc_const(literal_to_vmconst(x)?);
+        let vmconst = self.builder.literal_to_vmconst(x)?;
+        let x = self.builder.alloc_const(vmconst);
         self.push_node((TwGraphNode::LoadConst(x), vec![], precondition), name)?
       }
       K::Select(l, r) => {
@@ -395,6 +406,45 @@ impl<'a> Builder<'a> {
     self.script.idents = ident_pool.into_iter().map(|x| x.0.to_string()).collect();
     self.script.types = vmtype_pool.into_iter().map(|x| x.0.clone()).collect();
   }
+
+  fn generate_vmtype(&self, ty: &ast::Type) -> Result<VmType<String>> {
+    Ok(match ty {
+      ast::Type::Primitive(x) => VmType::Primitive(*x),
+      ast::Type::Table { name, .. } => {
+        if let Some(x) = self.type_aliases.get(name) {
+          self.generate_vmtype(*x)?
+        } else {
+          VmType::Table(VmTableType {
+            name: format_type_for_table(ty)?,
+          })
+        }
+      }
+      ast::Type::Set(x) => VmType::Set(VmSetType {
+        ty: Box::new(self.generate_vmtype(*x)?),
+      }),
+      ast::Type::Map(x) => VmType::Map(
+        x.iter()
+          .map(|(k, v)| self.generate_vmtype(v).map(|x| (k.to_string(), x)))
+          .collect::<Result<_>>()?,
+      ),
+      ast::Type::Bool => VmType::Bool,
+      ast::Type::Schema => VmType::Schema,
+    })
+  }
+
+  fn literal_to_vmconst(&self, x: &ast::Literal) -> Result<VmConst> {
+    Ok(match x {
+      ast::Literal::Null(ty) => VmConst::Null(self.generate_vmtype(ty)?),
+      ast::Literal::Bool(x) => VmConst::Bool(*x),
+      ast::Literal::Integer(x) => VmConst::Primitive(PrimitiveValue::Int64(*x)),
+      ast::Literal::HexBytes(x) => VmConst::Primitive(PrimitiveValue::Bytes(x.to_vec())),
+      ast::Literal::String(x) => VmConst::Primitive(PrimitiveValue::String(x.to_string())),
+      ast::Literal::EmptySet(member_ty) => VmConst::Set(VmConstSetValue {
+        member_ty: format_type_for_table(member_ty)?,
+        members: vec![],
+      }),
+    })
+  }
 }
 
 fn parse<'a, 'b: 'a>(alloc: &'a Bump, input: &'b str) -> Result<ast::Root<'a>> {
@@ -408,25 +458,6 @@ fn parse<'a, 'b: 'a>(alloc: &'a Bump, input: &'b str) -> Result<ast::Root<'a>> {
     .parse(&mut st, input)
     .map_err(|x| x.map_token(|x| x.to_string()))?;
   Ok(root)
-}
-
-fn generate_vmtype(ty: &ast::Type) -> Result<VmType<String>> {
-  Ok(match ty {
-    ast::Type::Primitive(x) => VmType::Primitive(*x),
-    ast::Type::Table { .. } => VmType::Table(VmTableType {
-      name: format_type_for_table(ty)?,
-    }),
-    ast::Type::Set(x) => VmType::Set(VmSetType {
-      ty: Box::new(generate_vmtype(*x)?),
-    }),
-    ast::Type::Map(x) => VmType::Map(
-      x.iter()
-        .map(|(k, v)| generate_vmtype(v).map(|x| (k.to_string(), x)))
-        .collect::<Result<_>>()?,
-    ),
-    ast::Type::Bool => VmType::Bool,
-    ast::Type::Schema => VmType::Schema,
-  })
 }
 
 fn format_type_for_table(ty: &ast::Type) -> Result<String> {
@@ -448,19 +479,5 @@ fn format_type_for_table(ty: &ast::Type) -> Result<String> {
         .join(", "),
     ),
     _ => return Err(TwAsmError::TypeUnsupportedInTable.into()),
-  })
-}
-
-fn literal_to_vmconst(x: &ast::Literal) -> Result<VmConst> {
-  Ok(match x {
-    ast::Literal::Null(ty) => VmConst::Null(generate_vmtype(ty)?),
-    ast::Literal::Bool(x) => VmConst::Bool(*x),
-    ast::Literal::Integer(x) => VmConst::Primitive(PrimitiveValue::Int64(*x)),
-    ast::Literal::HexBytes(x) => VmConst::Primitive(PrimitiveValue::Bytes(x.to_vec())),
-    ast::Literal::String(x) => VmConst::Primitive(PrimitiveValue::String(x.to_string())),
-    ast::Literal::EmptySet(member_ty) => VmConst::Set(VmConstSetValue {
-      member_ty: format_type_for_table(member_ty)?,
-      members: vec![],
-    }),
   })
 }

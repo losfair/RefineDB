@@ -59,6 +59,7 @@ async fn simple_test<F: FnMut(Option<Arc<VmValue>>)>(schema: &str, scripts: &[&s
 #[tokio::test]
 async fn basic_exec() {
   const READER: &str = r#"
+  type SomeString = string;
   graph main(root: schema): map {
     id: string,
     name: string,
@@ -68,7 +69,7 @@ async fn basic_exec() {
     set_member_name_1: string,
     set_member_name_2: string,
     set_member_name_3: string,
-    set_member_name_1_nonnull: string,
+    set_member_name_1_nonnull: SomeString,
   } {
     some_item = root.some_item;
     id = some_item.id;
