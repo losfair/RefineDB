@@ -172,7 +172,7 @@ impl<'a, 'b> Executor<'a, 'b> {
                 match result.as_ref().map(|x| &**x) {
                   Some(VmValue::Bool(x)) => *x,
                   None => true,
-                  _ => unreachable!(),
+                  _ => panic!("inconsistency detected: invalid precondition: {:?}", result),
                 };
             }
           }
