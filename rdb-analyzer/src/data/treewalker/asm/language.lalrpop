@@ -34,11 +34,12 @@ TypeAlias: TypeAlias<'input> = {
 }
 
 Graph: Graph<'input> = {
-  Token<"graph"> <name:Identifier>
+  <exp:Token<"export">?> Token<"graph"> <name:Identifier>
     Token<"("> <params:ZeroOrMore<(Identifier (":" <Type>)?), ",">> Token<")">
     <return_type:(Token<":"> <Type>)?>
     Token<"{"> <stmts:(@L Stmt)*> Token<"}"> => Graph {
       name,
+      exported: exp.is_some(),
       params: Bvec::from_iter_in(params.into_iter().map(|x| (x.0, x.1)), &state.alloc),
       return_type,
       stmts: Bvec::from_iter_in(stmts.into_iter().map(|x| Stmt {

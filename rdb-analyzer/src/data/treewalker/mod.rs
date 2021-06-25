@@ -1,6 +1,7 @@
 pub mod asm;
 pub mod bytecode;
 pub mod exec;
+pub mod serialize;
 pub mod typeck;
 pub mod vm;
 pub mod vm_value;

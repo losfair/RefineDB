@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rpds::RedBlackTreeMapSync;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 use thiserror::Error;
 
 use crate::{
@@ -73,6 +73,28 @@ pub enum VmType<K: Clone + Ord + PartialOrd + Eq + PartialEq> {
 
   /// The schema type. Placeholder.
   Schema,
+}
+
+impl<K: AsRef<str> + Clone + Ord + PartialOrd + Eq + PartialEq> Display for VmType<K> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      VmType::Primitive(x) => write!(f, "{}", x),
+      VmType::Table(x) => write!(f, "{}", x.name.as_ref()),
+      VmType::Unknown => write!(f, "unknown"),
+      VmType::Bool => write!(f, "bool"),
+      VmType::Map(m) => {
+        write!(f, "map {{")?;
+        for (k, v) in m {
+          write!(f, " {}: {},", k.as_ref(), v)?;
+        }
+        write!(f, " }}")?;
+        Ok(())
+      }
+      VmType::List(x) => write!(f, "list<{}>", x),
+      VmType::Set(x) => write!(f, "set<{}>", x.ty),
+      VmType::Schema => write!(f, "schema"),
+    }
+  }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]

@@ -45,6 +45,7 @@ pub fn compile_twscript(input: &str) -> Result<TwScript> {
     }
     let target = TwGraph {
       name: g.name.to_string(),
+      exported: g.exported,
       nodes: vec![],
       output: None,
       param_types: g

@@ -19,6 +19,7 @@ pub enum Item<'a> {
 
 pub struct Graph<'a> {
   pub name: &'a str,
+  pub exported: bool,
   pub params: Vec<'a, (&'a str, Option<Type<'a>>)>,
   pub return_type: Option<Type<'a>>,
   pub stmts: Vec<'a, Stmt<'a>>,

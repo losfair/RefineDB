@@ -97,6 +97,7 @@ fn basic_typeck() {
   let script = TwScript {
     graphs: vec![TwGraph {
       name: "".into(),
+      exported: false,
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None), // 0
         (TwGraphNode::GetField(0), vec![0], None), // 1
@@ -135,6 +136,7 @@ fn filter_set() {
     graphs: vec![
       TwGraph {
         name: "".into(),
+        exported: false,
         nodes: vec![
           (TwGraphNode::LoadParam(0), vec![], None),     // 0
           (TwGraphNode::GetField(0), vec![0], None),     // 1
@@ -147,6 +149,7 @@ fn filter_set() {
       },
       TwGraph {
         name: "".into(),
+        exported: false,
         nodes: vec![
           (TwGraphNode::LoadConst(0), vec![], None), // 0
         ],
@@ -191,6 +194,7 @@ fn basic_typeck_fail_unknown_name() {
   let script = TwScript {
     graphs: vec![TwGraph {
       name: "".into(),
+      exported: false,
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None), // 0
         (TwGraphNode::GetField(0), vec![0], None), // 1
@@ -235,6 +239,7 @@ fn basic_typeck_output_type_mismatch() {
   let script = TwScript {
     graphs: vec![TwGraph {
       name: "".into(),
+      exported: false,
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None), // 0
         (TwGraphNode::GetField(0), vec![0], None), // 1
@@ -290,6 +295,7 @@ fn typeck_set_point_get() {
   let script = TwScript {
     graphs: vec![TwGraph {
       name: "".into(),
+      exported: false,
       nodes: vec![
         (TwGraphNode::LoadParam(0), vec![], None),         // 0
         (TwGraphNode::LoadConst(0), vec![], None),         // 1

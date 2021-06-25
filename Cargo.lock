@@ -1257,6 +1257,8 @@ name = "rdb-pgsvc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "base64",
  "bumpalo",
  "hex",
  "libc",
@@ -1265,6 +1267,7 @@ dependencies = [
  "pretty_env_logger",
  "rdb-analyzer",
  "rmp-serde",
+ "rpds",
  "serde",
  "serde_json",
  "serde_yaml",

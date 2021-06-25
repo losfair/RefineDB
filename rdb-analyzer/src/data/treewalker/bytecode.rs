@@ -17,6 +17,9 @@ pub struct TwGraph {
   /// Name.
   pub name: String,
 
+  /// Whether this is exported.
+  pub exported: bool,
+
   /// Topologically sorted nodes.
   ///
   /// (node, in_edges, precondition)
