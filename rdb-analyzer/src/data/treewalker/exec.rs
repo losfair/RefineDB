@@ -1,13 +1,9 @@
-use std::{
-  collections::{BTreeMap, HashMap},
-  future::Future,
-  pin::Pin,
-  sync::Arc,
-};
+use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
 
 use anyhow::Result;
 use async_recursion::async_recursion;
 use rpds::{ListSync, RedBlackTreeMapSync};
+use smallvec::{smallvec, SmallVec};
 
 use crate::{
   data::{
@@ -38,6 +34,7 @@ pub struct Executor<'a, 'b> {
   vm: &'b TwVm<'a>,
   kv: &'b dyn KeyValueStore,
   type_info: &'b GlobalTypeInfo<'a>,
+  fire_rule_tables: Vec<FireRuleTable>,
 }
 
 #[derive(Clone)]
@@ -51,6 +48,8 @@ enum FireRuleKind {
   ParamDep(u32),
   Precondition,
 }
+
+type FireRuleTable = Vec<SmallVec<[FireRuleItem; 4]>>;
 
 #[derive(Error, Debug)]
 pub enum ExecError {
@@ -81,7 +80,16 @@ impl<'a, 'b> Executor<'a, 'b> {
     kv: &'b dyn KeyValueStore,
     type_info: &'b GlobalTypeInfo<'a>,
   ) -> Self {
-    Self { vm, kv, type_info }
+    let mut fire_rule_tables = Vec::with_capacity(vm.script.graphs.len());
+    for g in &vm.script.graphs {
+      fire_rule_tables.push(generate_fire_rules(g));
+    }
+    Self {
+      vm,
+      kv,
+      type_info,
+      fire_rule_tables,
+    }
   }
 
   pub async fn run_graph(
@@ -111,13 +119,13 @@ impl<'a, 'b> Executor<'a, 'b> {
     let recursion_depth = recursion_depth + 1;
     let g = &self.vm.script.graphs[graph_index];
     let type_info = &self.type_info.graphs[graph_index];
-    let fire_rules = generate_fire_rules(g);
-    let mut deps_satisfied: Vec<Vec<Option<Arc<VmValue<'a>>>>> = g
+    let fire_rules = &self.fire_rule_tables[graph_index];
+    let mut deps_satisfied: SmallVec<[SmallVec<[Option<Arc<VmValue<'a>>>; 3]>; 16]> = g
       .nodes
       .iter()
-      .map(|(_, x, _)| vec![None; x.len()])
+      .map(|(_, x, _)| smallvec![None; x.len()])
       .collect();
-    let mut precondition_satisfied: Vec<bool> =
+    let mut precondition_satisfied: SmallVec<[bool; 16]> =
       g.nodes.iter().map(|(_, _, x)| x.is_none()).collect();
 
     // The initial batch
@@ -159,83 +167,82 @@ impl<'a, 'b> Executor<'a, 'b> {
         ret = result.clone();
       }
 
-      if let Some(to_fire) = fire_rules.get(&node_index) {
-        for item in to_fire {
-          match &item.kind {
-            FireRuleKind::ParamDep(param_position) => {
-              let result = result.as_ref().unwrap_or_else(|| {
+      let to_fire = fire_rules[node_index as usize].as_slice();
+      for item in to_fire {
+        match &item.kind {
+          FireRuleKind::ParamDep(param_position) => {
+            let result = result.as_ref().unwrap_or_else(|| {
                 panic!(
                   "run_graph: node {} is a parameter dependency of some other nodes but does not produce a value",
                   node_index
                 )
               });
 
-              deps_satisfied[item.target_node as usize][*param_position as usize] =
-                Some(result.clone());
-            }
-            FireRuleKind::Precondition => {
-              precondition_satisfied[item.target_node as usize] =
-                match result.as_ref().map(|x| &**x) {
-                  Some(VmValue::Bool(x)) => *x,
-                  None => true,
-                  _ => panic!("inconsistency detected: invalid precondition: {:?}", result),
-                };
-            }
+            deps_satisfied[item.target_node as usize][*param_position as usize] =
+              Some(result.clone());
+          }
+          FireRuleKind::Precondition => {
+            precondition_satisfied[item.target_node as usize] = match result.as_ref().map(|x| &**x)
+            {
+              Some(VmValue::Bool(x)) => *x,
+              None => true,
+              _ => panic!("inconsistency detected: invalid precondition: {:?}", result),
+            };
           }
         }
+      }
 
-        // Do this in another iteration in case that a single source node is connect to a single target node's
-        // multiple parameters.
-        for item in to_fire {
-          let target_node = item.target_node as usize;
-          let node_info = &g.nodes[target_node].0;
+      // Do this in another iteration in case that a single source node is connect to a single target node's
+      // multiple parameters.
+      for item in to_fire {
+        let target_node = item.target_node as usize;
+        let node_info = &g.nodes[target_node].0;
 
-          // If all deps and the precondition are satisfied...
-          if precondition_satisfied[item.target_node as usize] {
-            if node_info.is_select() {
-              if deps_satisfied[item.target_node as usize].is_empty() {
-                log::warn!("both select candidates are fired");
-              }
+        // If all deps and the precondition are satisfied...
+        if precondition_satisfied[item.target_node as usize] {
+          if node_info.is_select() {
+            if deps_satisfied[item.target_node as usize].is_empty() {
+              log::warn!("both select candidates are fired");
+            }
 
-              if let Some(x) = deps_satisfied[item.target_node as usize]
-                .iter()
-                .find_map(|x| x.as_ref())
-              {
-                let x = x.clone();
+            if let Some(x) = deps_satisfied[item.target_node as usize]
+              .iter()
+              .find_map(|x| x.as_ref())
+            {
+              let x = x.clone();
 
-                // Fire only once!
-                deps_satisfied[item.target_node as usize] = vec![];
+              // Fire only once!
+              deps_satisfied[item.target_node as usize] = smallvec![];
 
-                futures.push(Box::pin(async move { (target_node as u32, Ok(Some(x))) }))
-              }
-            } else {
-              if deps_satisfied[item.target_node as usize]
-                .iter()
-                .find(|x| x.is_none())
-                .is_none()
-              {
-                let params =
-                  std::mem::replace(&mut deps_satisfied[item.target_node as usize], vec![])
-                    .into_iter()
-                    .map(|x| x.unwrap())
-                    .collect::<Vec<_>>();
-                let txn = &*txn;
-                futures.push(Box::pin(async move {
-                  (
-                    target_node as u32,
-                    self
-                      .run_node(
-                        node_info,
-                        params,
-                        txn,
-                        graph_params,
-                        type_info.nodes[target_node].as_ref(),
-                        recursion_depth,
-                      )
-                      .await,
-                  )
-                }))
-              }
+              futures.push(Box::pin(async move { (target_node as u32, Ok(Some(x))) }))
+            }
+          } else {
+            if deps_satisfied[item.target_node as usize]
+              .iter()
+              .find(|x| x.is_none())
+              .is_none()
+            {
+              let params =
+                std::mem::replace(&mut deps_satisfied[item.target_node as usize], smallvec![])
+                  .into_iter()
+                  .map(|x| x.unwrap())
+                  .collect::<Vec<_>>();
+              let txn = &*txn;
+              futures.push(Box::pin(async move {
+                (
+                  target_node as u32,
+                  self
+                    .run_node(
+                      node_info,
+                      params,
+                      txn,
+                      graph_params,
+                      type_info.nodes[target_node].as_ref(),
+                      recursion_depth,
+                    )
+                    .await,
+                )
+              }))
             }
           }
         }
@@ -797,17 +804,17 @@ impl<'a, 'b> Executor<'a, 'b> {
   }
 }
 
-fn generate_fire_rules(g: &TwGraph) -> HashMap<u32, Vec<FireRuleItem>> {
-  let mut m: HashMap<u32, Vec<FireRuleItem>> = HashMap::new();
+fn generate_fire_rules(g: &TwGraph) -> FireRuleTable {
+  let mut m: FireRuleTable = (0..g.nodes.len()).map(|_| smallvec![]).collect();
   for (target_node, (_, in_edges, precondition)) in g.nodes.iter().enumerate() {
     for (param_position, source_node) in in_edges.iter().enumerate() {
-      m.entry(*source_node).or_default().push(FireRuleItem {
+      m[*source_node as usize].push(FireRuleItem {
         target_node: target_node as u32,
         kind: FireRuleKind::ParamDep(param_position as u32),
       });
     }
     if let Some(source_node) = precondition {
-      m.entry(*source_node).or_default().push(FireRuleItem {
+      m[*source_node as usize].push(FireRuleItem {
         target_node: target_node as u32,
         kind: FireRuleKind::Precondition,
       });
