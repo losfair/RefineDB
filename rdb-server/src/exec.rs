@@ -28,6 +28,14 @@ impl ExecContext {
   ) -> Result<SerializedVmValue> {
     let graph_index = self.vm().lookup_exported_graph_by_name(name)?;
     let param_types = &self.type_info().graphs[graph_index].params;
+
+    // We also need raw types because we need a way to detect the `Schema` pseudo-type.
+    let raw_param_types = self.vm().script.graphs[graph_index]
+      .param_types
+      .iter()
+      .map(|x| &self.vm().types[*x as usize])
+      .collect::<Vec<_>>();
+    assert_eq!(param_types.len(), raw_param_types.len());
     if param_types.len() != params.len() {
       return Err(ExecError::ParamCountMismatch(param_types.len(), params.len()).into());
     }
@@ -35,7 +43,8 @@ impl ExecContext {
     let params = params
       .iter()
       .zip(param_types)
-      .map(|(v, ty)| match ty {
+      .zip(raw_param_types)
+      .map(|((v, ty), raw_ty)| match raw_ty {
         VmType::Schema => Ok(self.root_map().clone()),
         _ => v.decode(ty).map(Arc::new),
       })
