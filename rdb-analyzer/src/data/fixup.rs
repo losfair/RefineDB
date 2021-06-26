@@ -75,18 +75,9 @@ async fn walk_and_migrate<'a>(
         walk_and_migrate(txn, schema, walker, field_ty, field_annotations.as_slice()).await?;
       }
     }
-    FieldType::Set(member_ty) => {
-      let range_start = walker.set_fast_scan_prefix().unwrap();
-      let mut range_end = range_start.clone();
-      *range_end.last_mut().unwrap() += 1;
-      let range_end = range_end;
-
-      let mut it = txn.scan_keys(&range_start, &range_end).await?;
-      while let Some(k) = it.next().await? {
-        let k = k.strip_prefix(range_start.as_slice()).unwrap();
-        let walker = walker.enter_set_raw(k).unwrap();
-        walk_and_migrate(txn, schema, walker, &**member_ty, &[]).await?;
-      }
+    FieldType::Set(_) => {
+      // Don't try to look into sets. Only migrate top-level tables.
+      // Sets may contain a lot of data, and we probably won't complete migration within the transaction time budget.
     }
     _ => {}
   }
