@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, ops::Range, sync::Arc};
 
 use anyhow::Result;
 use async_trait::async_trait;
-use foundationdb::{future::FdbValues, Database, RangeOption, Transaction};
+use foundationdb::{future::FdbValues, Database, KeySelector, RangeOption, Transaction};
 use rdb_analyzer::data::kv::{KeyValueStore, KvError, KvKeyIterator, KvTransaction};
 use tokio::sync::Mutex;
 
@@ -149,6 +149,7 @@ pub struct FdbIterator {
 impl KvKeyIterator for FdbIterator {
   async fn next(&mut self) -> Result<Option<Vec<u8>>> {
     if self.values.is_none() {
+      log::trace!("get_range iteration {}", self.iteration);
       let values = self
         .txn
         .get_range(&self.range, self.iteration, false)
@@ -161,16 +162,16 @@ impl KvKeyIterator for FdbIterator {
     }
 
     let (values, value_index) = self.values.as_mut().unwrap();
-    let key = values[*value_index]
-      .key()
-      .strip_prefix(&*self.prefix)
-      .unwrap()
-      .to_vec();
+    let raw_key = values[*value_index].key();
+    let key = raw_key.strip_prefix(&*self.prefix).unwrap().to_vec();
     if *value_index + 1 == values.len() {
+      self.range.begin = KeySelector::first_greater_than(raw_key.to_vec());
       self.values = None;
     } else {
       *value_index += 1;
     }
+
+    log::trace!("got key: {}", base64::encode(&key));
 
     Ok(Some(key))
   }
