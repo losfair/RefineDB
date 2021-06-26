@@ -70,6 +70,9 @@ pub enum ExecError {
 
   #[error("max recursion depth exceeded: {0}")]
   MaxRecursionDepthExceeded(usize),
+
+  #[error("both select candidates are fired - this is not deterministic and not allowed")]
+  BothSelectCandidatesFired,
 }
 
 const MAX_RECURSION_DEPTH: usize = 128;
@@ -202,7 +205,7 @@ impl<'a, 'b> Executor<'a, 'b> {
         if precondition_satisfied[item.target_node as usize] {
           if node_info.is_select() {
             if deps_satisfied[item.target_node as usize].is_empty() {
-              log::warn!("both select candidates are fired");
+              return Err(ExecError::BothSelectCandidatesFired.into());
             }
 
             if let Some(x) = deps_satisfied[item.target_node as usize]
