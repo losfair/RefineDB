@@ -1,0 +1,55 @@
+syntax = "proto3";
+package rdbrpc;
+
+service RdbControl {
+  rpc createNamespace(CreateNamespaceRequest) returns (CreateNamespaceReply) {}
+  rpc deleteNamespace(DeleteNamespaceRequest) returns (DeleteNamespaceReply) {}
+  rpc createDeployment(CreateDeploymentRequest) returns (CreateDeploymentReply) {}
+  rpc getDeployment(GetDeploymentRequest) returns (GetDeploymentReply) {}
+  rpc listDeployments(ListDeploymentsRequest) returns (ListDeploymentsReply) {}
+//  rpc createQueryScript(CreateQueryScriptRequest) returns (CreateQueryScriptReply) {}
+}
+
+message CreateNamespaceRequest {
+  string id = 1;
+}
+
+message DeleteNamespaceRequest {
+  string id = 1;
+}
+
+message CreateNamespaceReply {
+  bool created = 1;
+}
+
+message DeleteNamespaceReply {
+  bool deleted = 1;
+}
+
+message CreateDeploymentRequest {
+  string namespace_id = 1;
+  string schema = 2;
+  string plan = 3;
+}
+
+message CreateDeploymentReply {
+  string deployment_id = 1;
+}
+
+message GetDeploymentRequest {
+  string namespace_id = 1;
+  string deployment_id = 2;
+}
+
+message GetDeploymentReply {
+  string schema = 1;
+  string plan = 2;
+}
+
+message ListDeploymentsRequest {
+  string namespace_id = 1;
+}
+
+message ListDeploymentsReply {
+  repeated string deployment_id = 1;
+}

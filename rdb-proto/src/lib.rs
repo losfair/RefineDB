@@ -1,4 +1,3 @@
-pub mod protos;
-
-pub use protobuf;
-pub use grpcio;
+pub mod proto;
+pub use prost;
+pub use tonic;
