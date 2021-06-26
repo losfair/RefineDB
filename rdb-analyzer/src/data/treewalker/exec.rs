@@ -97,6 +97,7 @@ impl<'a, 'b> Executor<'a, 'b> {
     Ok(ret)
   }
 
+  #[async_recursion]
   async fn recursively_run_graph(
     &self,
     graph_index: usize,
@@ -120,8 +121,9 @@ impl<'a, 'b> Executor<'a, 'b> {
       g.nodes.iter().map(|(_, _, x)| x.is_none()).collect();
 
     // The initial batch
-    let mut futures: Vec<Pin<Box<dyn Future<Output = (u32, Result<Option<Arc<VmValue<'a>>>>)>>>> =
-      vec![];
+    let mut futures: Vec<
+      Pin<Box<dyn Future<Output = (u32, Result<Option<Arc<VmValue<'a>>>>)> + Send>>,
+    > = vec![];
     for (i, (n, in_edges, precondition)) in g.nodes.iter().enumerate() {
       if in_edges.is_empty() && precondition.is_none() {
         let txn = &*txn;
