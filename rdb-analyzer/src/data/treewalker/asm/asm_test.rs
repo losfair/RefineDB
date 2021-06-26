@@ -1,5 +1,6 @@
 use std::{sync::Arc, time::Instant};
 
+use anyhow::Result;
 use bumpalo::Bump;
 
 use crate::{
@@ -20,7 +21,11 @@ use crate::{
   storage_plan::planner::generate_plan_for_schema,
 };
 
-async fn simple_test<F: FnMut(Option<Arc<VmValue>>)>(schema: &str, scripts: &[&str], mut check: F) {
+async fn simple_test_with_error<F: FnMut(Result<Option<Arc<VmValue>>>)>(
+  schema: &str,
+  scripts: &[&str],
+  mut check: F,
+) {
   let alloc = Bump::new();
   let ast = parse(&alloc, schema).unwrap();
   let schema = compile(&ast).unwrap();
@@ -48,13 +53,16 @@ async fn simple_test<F: FnMut(Option<Arc<VmValue>>)>(schema: &str, scripts: &[&s
     let mut executor = Executor::new(&vm, &kv, &type_info);
     let output = executor
       .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
-      .await
-      .unwrap();
+      .await;
     let exec_end = Instant::now();
     println!("exec took {:?}", exec_end.duration_since(tyck_end));
     println!("{:?}", output);
     check(output);
   }
+}
+
+async fn simple_test<F: FnMut(Option<Arc<VmValue>>)>(schema: &str, scripts: &[&str], mut check: F) {
+  simple_test_with_error(schema, scripts, |x| check(x.unwrap())).await
 }
 
 #[tokio::test]
@@ -449,4 +457,34 @@ async fn list_ops() {
   .await;
 
   assert_eq!(chkindex, 2);
+}
+
+#[tokio::test]
+async fn path_integrity() {
+  let _ = pretty_env_logger::try_init();
+  let mut ok = false;
+  simple_test_with_error(
+    r#"
+    type Item {
+      @primary
+      id: int64,
+      value: int64,
+    }
+    export set<Item> items1;
+    export set<Item> items2;
+  "#,
+    &[r#"
+    graph main(root: schema) {
+      t_insert(value) (point_get root.items1 42) 1;
+      t_insert(value) (point_get root.items2 42) 1;
+    }
+    "#],
+    |x| {
+      assert!(x.unwrap_err().to_string().contains("missing path(s)"));
+      ok = true;
+    },
+  )
+  .await;
+
+  assert!(ok);
 }
