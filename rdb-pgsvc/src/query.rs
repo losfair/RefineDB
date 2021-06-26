@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use rdb_analyzer::{
   data::{
+    fixup::migrate_schema,
     kv::KeyValueStore,
     treewalker::{
       bytecode::TwGraph,
@@ -79,6 +80,7 @@ pub fn run_vm_query<'a>(
   type_info: &GlobalTypeInfo<'a>,
   query: &VmGraphQuery,
 ) -> Result<Option<SerializedVmValue>> {
+  futures::executor::block_on(migrate_schema(&vm.schema, &vm.storage_plan, kv))?;
   let mut executor = Executor::new(vm, kv, type_info);
   let (i, g) = vm
     .script
