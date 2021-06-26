@@ -16,6 +16,10 @@ use super::{
 };
 use async_recursion::async_recursion;
 
+/// Deprecated: DO NOT USE. Let's just leave the added fields empty.
+///
+/// It's unlikely that for large datasets we can complete the migration transaction in a
+/// reasonable time.
 pub async fn migrate_schema(
   schema: &CompiledSchema,
   plan: &StoragePlan,

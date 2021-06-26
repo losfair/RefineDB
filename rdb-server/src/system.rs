@@ -1,7 +1,7 @@
 use bumpalo::Bump;
 use console::Style;
 use rdb_analyzer::{
-  data::{fixup::migrate_schema, kv::KeyValueStore},
+  data::{kv::KeyValueStore},
   schema::{
     compile::{compile, CompiledSchema},
     grammar::parse,
@@ -62,7 +62,6 @@ impl SystemSchema {
           std::process::abort();
         }
         log::warn!("Applying schema migration.");
-        migrate_schema(&schema, &new_plan, store).await.unwrap();
         txn.put(b"schema", SCHEMA.as_bytes()).await.unwrap();
         txn
           .put(b"plan", &new_plan.serialize_compressed().unwrap())
@@ -77,7 +76,6 @@ impl SystemSchema {
       let new_plan =
         generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
       log::warn!("Creating system schema.");
-      migrate_schema(&schema, &new_plan, store).await.unwrap();
       txn.put(b"schema", SCHEMA.as_bytes()).await.unwrap();
       txn
         .put(b"plan", &new_plan.serialize_compressed().unwrap())
