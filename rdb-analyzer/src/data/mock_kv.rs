@@ -180,7 +180,7 @@ impl KvKeyIterator for MockIterator {
         // Move to next
         self.current = k.iter().copied().chain(std::iter::once(0x00u8)).collect();
         match &v.0 {
-          Some(x) => break Ok(Some(x.clone())),
+          Some(_) => break Ok(Some(k.clone())),
           None => {}
         }
       } else {

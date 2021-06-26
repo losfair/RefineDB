@@ -11,9 +11,9 @@ use thiserror::Error;
 use crate::{
   data::treewalker::{
     bytecode::TwGraphNode,
-    vm_value::{VmSetType, VmTableType},
+    vm_value::{VmListType, VmSetType, VmTableType},
   },
-  schema::compile::{FieldType, PrimitiveType},
+  schema::compile::{FieldAnnotationList, FieldType, PrimitiveType},
 };
 
 use super::{bytecode::TwGraph, vm::TwVm, vm_value::VmType};
@@ -30,6 +30,8 @@ pub enum TypeckError {
   IdentIndexOob,
   #[error("param index out of bounds")]
   ParamIndexOob,
+  #[error("type index out of bounds")]
+  TypeIndexOob,
   #[error("subgraph index out of bounds")]
   SubgraphIndexOob,
   #[error("expecting {0} in edges on node `{1}`, got {2}")]
@@ -94,6 +96,18 @@ pub enum TypeckError {
   PresenceCheckOnUnsupportedType(String),
   #[error("bad binop operands: `{0}` and `{1}`")]
   BadBinopOperands(String, String),
+  #[error("invalid list prepend: list=`{0}` value=`{1}`")]
+  InvalidListPrepend(String, String),
+  #[error("cannot build set from a list of non-table member type: `{0}`")]
+  CannotBuildSetFromList(String),
+  #[error("not a list: `{0}`")]
+  NotList(String),
+  #[error("not a list or set: `{0}`")]
+  NotListOrSet(String),
+  #[error("missing output from a reduce function")]
+  MissingOutputFromReduce,
+  #[error("cannot insert primary key into a table")]
+  CannotInsertPrimaryKey,
 }
 
 pub struct GlobalTyckContext<'a, 'b> {
@@ -292,6 +306,9 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
         TwGraphNode::BuildSet => {
           let [list_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
           let element_ty = extract_list_element_type(list_ty)?;
+          if !matches!(element_ty, VmType::Table(_)) {
+            return Err(TypeckError::CannotBuildSetFromList(format!("{:?}", element_ty)).into());
+          }
           Some(VmType::Set(VmSetType {
             ty: Box::new(element_ty.clone()),
           }))
@@ -341,11 +358,21 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
             name: &*table_ty.name,
           }))
         }
+        TwGraphNode::CreateList(member_ty) => {
+          let member_ty = vm
+            .types
+            .get(*member_ty as usize)
+            .ok_or_else(|| TypeckError::TypeIndexOob)?;
+
+          Some(VmType::List(VmListType {
+            ty: Box::new(member_ty.clone()),
+          }))
+        }
         TwGraphNode::CreateMap => Some(VmType::Map(RedBlackTreeMapSync::new_sync())),
         TwGraphNode::DeleteFromSet => {
           let [primary_key_value_ty, set_ty] = validate_in_edges::<2>(node, in_edges, &types)?;
           let set_member_ty = extract_set_element_type(set_ty)?;
-          let (key, _) = set_ty.primary_key(vm.schema).unwrap();
+          let (key, _) = set_ty.set_primary_key(vm.schema).unwrap();
           match set_member_ty {
             VmType::Table(x) => {
               let table_ty = vm
@@ -442,7 +469,7 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
         TwGraphNode::GetSetElement => {
           let [primary_key_value_ty, set_ty] = validate_in_edges::<2>(node, in_edges, &types)?;
           let set_member_ty = extract_set_element_type(set_ty)?;
-          let (key, _) = set_ty.primary_key(vm.schema).unwrap();
+          let (key, _) = set_ty.set_primary_key(vm.schema).unwrap();
           match set_member_ty {
             VmType::Table(x) => {
               let table_ty = vm
@@ -520,13 +547,16 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
                 .types
                 .get(x.name)
                 .ok_or_else(|| TypeckError::TableTypeNotFound(x.name.to_string()))?;
-              let field_ty = table_ty
+              let (field_ty, field_annotations) = table_ty
                 .fields
                 .get(key.as_str())
-                .map(|x| VmType::from(&x.0))
+                .map(|x| (VmType::from(&x.0), &x.1))
                 .ok_or_else(|| {
                   TypeckError::FieldNotPresentInTable(key.clone(), table_ty.name.clone())
                 })?;
+              if field_annotations.as_slice().is_primary() {
+                return Err(TypeckError::CannotInsertPrimaryKey.into());
+              }
               ensure_covariant(&field_ty, value_ty)?;
               None
             }
@@ -648,6 +678,59 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
             }
           }
         }
+        TwGraphNode::PrependToList => {
+          let [value, list] = validate_in_edges::<2>(node, in_edges, &types)?;
+          match list {
+            VmType::List(x) if x.ty.is_covariant_from(value) => Some(list.clone()),
+            _ => {
+              return Err(
+                TypeckError::InvalidListPrepend(format!("{:?}", list), format!("{:?}", value))
+                  .into(),
+              );
+            }
+          }
+        }
+        TwGraphNode::PopFromList => {
+          let [list] = validate_in_edges::<1>(node, in_edges, &types)?;
+          if !matches!(list, VmType::List(_)) {
+            return Err(TypeckError::NotList(format!("{:?}", list)).into());
+          }
+          Some(list.clone())
+        }
+        TwGraphNode::ListHead => {
+          let [list] = validate_in_edges::<1>(node, in_edges, &types)?;
+          match list {
+            VmType::List(x) => Some((*x.ty).clone()),
+            _ => {
+              return Err(TypeckError::NotList(format!("{:?}", list)).into());
+            }
+          }
+        }
+        TwGraphNode::Reduce(subgraph_index) => {
+          let [subgraph_param, reduce_init, list_or_set_ty] =
+            validate_in_edges::<3>(node, in_edges, &types)?;
+          let member_ty = match list_or_set_ty {
+            VmType::List(x) => &*x.ty,
+            VmType::Set(x) => &*x.ty,
+            _ => return Err(TypeckError::NotListOrSet(format!("{:?}", list_or_set_ty)).into()),
+          };
+          let subgraph = self.validate_subgraph_call(
+            "Reduce",
+            *subgraph_index,
+            subgraph_expected_param_types_sink,
+            vec![
+              subgraph_param.clone(),
+              reduce_init.clone(),
+              member_ty.clone(),
+            ],
+          )?;
+          let output = subgraph
+            .output_type
+            .and_then(|x| vm.script.types.get(x as usize).map(VmType::<&'a str>::from))
+            .ok_or_else(|| TypeckError::MissingOutputFromReduce)?;
+          ensure_covariant(reduce_init, &output)?;
+          Some(output.clone())
+        }
       };
       types.push(ty);
     }
@@ -758,7 +841,7 @@ fn ensure_type_eq<'a>(dst: &VmType<&'a str>, src: &VmType<&'a str>) -> Result<()
 
 fn extract_list_element_type<'a, 'b>(x: &'b VmType<&'a str>) -> Result<&'b VmType<&'a str>> {
   match x {
-    VmType::List(x) => Ok(&**x),
+    VmType::List(x) => Ok(&*x.ty),
     _ => Err(TypeckError::ExpectingList(format!("{:?}", x)).into()),
   }
 }

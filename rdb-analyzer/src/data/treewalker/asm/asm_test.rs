@@ -274,3 +274,76 @@ async fn fib() {
 
   assert!(ok);
 }
+
+#[tokio::test]
+async fn set_reduce() {
+  const READER: &str = r#"
+  graph main(root: schema): string {
+    return (reduce(f) create_map (
+      m_insert(first) true $
+      m_insert(result) "" create_map
+    ) root.items).result;
+  }
+  graph f(ctx: map{}, current: map {
+    first: bool,
+    result: string,
+  }, item: Item): map {
+    first: bool,
+    result: string,
+  } {
+    if !current.first {
+      r1 = current.result + " " + item.id;
+    } else {
+      r2 = item.id;
+    }
+    return m_insert(first) false
+      $ m_insert(result) (select r1 r2)
+      create_map;
+  }
+  "#;
+  let _ = pretty_env_logger::try_init();
+  let mut chkindex = 0usize;
+  simple_test(
+    r#"
+  type Item {
+    @primary
+    id: string,
+  }
+  export set<Item> items;
+  "#,
+    &[
+      READER,
+      r#"
+      graph main(root: schema) {
+        s_insert root.items $ build_table(Item)
+          $ m_insert(id) "id1" create_map;
+        s_insert root.items $ build_table(Item)
+          $ m_insert(id) "id2" create_map;
+      }
+      "#,
+      READER,
+    ],
+    |x| {
+      match chkindex {
+        0 => {
+          assert_eq!(
+            **x.as_ref().unwrap(),
+            VmValue::Primitive(PrimitiveValue::String("".into()))
+          );
+        }
+        1 => {}
+        2 => {
+          assert_eq!(
+            **x.as_ref().unwrap(),
+            VmValue::Primitive(PrimitiveValue::String("id1 id2".into()))
+          );
+        }
+        _ => unreachable!(),
+      }
+      chkindex += 1;
+    },
+  )
+  .await;
+
+  assert_eq!(chkindex, 3);
+}

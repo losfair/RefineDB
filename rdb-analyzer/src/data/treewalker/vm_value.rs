@@ -22,6 +22,20 @@ pub enum VmValue<'a> {
   Map(VmMapValue<'a>),
 
   Null(VmType<&'a str>),
+
+  List(VmListValue<'a>),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct VmListValue<'a> {
+  pub member_ty: VmType<&'a str>,
+  pub node: Option<Arc<VmListNode<'a>>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct VmListNode<'a> {
+  pub value: Arc<VmValue<'a>>,
+  pub next: Option<Arc<VmListNode<'a>>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -63,7 +77,7 @@ pub enum VmType<K: Clone + Ord + PartialOrd + Eq + PartialEq> {
   Bool,
 
   /// VM-only
-  List(Box<VmType<K>>),
+  List(VmListType<K>),
 
   /// VM-only
   Map(RedBlackTreeMapSync<K, VmType<K>>),
@@ -90,7 +104,7 @@ impl<K: AsRef<str> + Clone + Ord + PartialOrd + Eq + PartialEq> Display for VmTy
         write!(f, " }}")?;
         Ok(())
       }
-      VmType::List(x) => write!(f, "list<{}>", x),
+      VmType::List(x) => write!(f, "list<{}>", x.ty),
       VmType::Set(x) => write!(f, "set<{}>", x.ty),
       VmType::Schema => write!(f, "schema"),
     }
@@ -99,6 +113,11 @@ impl<K: AsRef<str> + Clone + Ord + PartialOrd + Eq + PartialEq> Display for VmTy
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
 pub struct VmSetType<K: Clone + Ord + PartialOrd + Eq + PartialEq> {
+  pub ty: Box<VmType<K>>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
+pub struct VmListType<K: Clone + Ord + PartialOrd + Eq + PartialEq> {
   pub ty: Box<VmType<K>>,
 }
 
@@ -123,7 +142,9 @@ impl<
         ty: Box::new(Self::from(&*x.ty)),
       }),
       VmType::Bool => VmType::Bool,
-      VmType::List(x) => VmType::List(Box::new(Self::from(&**x))),
+      VmType::List(x) => VmType::List(VmListType {
+        ty: Box::new(Self::from(&*x.ty)),
+      }),
       VmType::Map(x) => VmType::Map(
         x.iter()
           .map(|(k, v)| (U::from(k.as_ref()), Self::from(v)))
@@ -163,6 +184,7 @@ impl<'a> From<&VmValue<'a>> for VmType<&'a str> {
           .collect(),
       ),
       VmValue::Null(x) => x.clone(),
+      VmValue::List(x) => x.member_ty.clone(),
     }
   }
 }
@@ -209,7 +231,7 @@ impl<'a> VmType<&'a str> {
     }
   }
 
-  pub fn primary_key(&self, schema: &'a CompiledSchema) -> Option<(&'a str, &'a FieldType)> {
+  pub fn set_primary_key(&self, schema: &'a CompiledSchema) -> Option<(&'a str, &'a FieldType)> {
     match self {
       VmType::Set(x) => match &*x.ty {
         VmType::Table(x) => {
@@ -346,7 +368,7 @@ impl<'a> VmValue<'a> {
         let (primary_key, _) = VmType::Set(VmSetType {
           ty: Box::new(member_ty.clone()),
         })
-        .primary_key(schema)
+        .set_primary_key(schema)
         .ok_or_else(|| VmValueError::MissingPrimaryKey)?;
         let mut members = BTreeMap::new();
         for member in &x.members {

@@ -56,6 +56,7 @@ Type: Type<'input> = {
   Token<"bytes"> => Type::Primitive(PrimitiveType::Bytes),
   Token<"bool"> => Type::Bool,
   Token<"set"> Token<"<"> <ty:Type> Token<">"> => Type::Set(state.alloc.alloc(ty)),
+  Token<"list"> Token<"<"> <ty:Type> Token<">"> => Type::List(state.alloc.alloc(ty)),
   Token<"map"> Token<"{"> <members:ZeroOrMore<(Identifier Token<":"> Type), Token<",">>> Token<"}"> => Type::Map(Bvec::from_iter_in(
     members.into_iter().map(|x| (x.0, x.2)),
     &state.alloc
@@ -128,14 +129,26 @@ ExprL3Ref: &'input Expr<'input> = {
 
 ExprL3: Expr<'input> = {
   <location_start:@L> <kind:ExprKindL3> <location_end:@R> => Expr { location_start, location_end, kind },
-  ExprL4,
+  ExprL3Right,
 }
 
 ExprKindL3: ExprKind<'input> = {
-  <x:ExprL3Ref> Token<"+"> <y:ExprL4Ref> => ExprKind::Add(x, y),
-  <x:ExprL3Ref> Token<"-"> <y:ExprL4Ref> => ExprKind::Sub(x, y),
-  <x:ExprL3Ref> Token<"??"> <y:ExprL4Ref> => ExprKind::OrElse(x, y),
+  <x:ExprL3Ref> Token<"+"> <y:ExprL3RightRef> => ExprKind::Add(x, y),
+  <x:ExprL3Ref> Token<"-"> <y:ExprL3RightRef> => ExprKind::Sub(x, y),
+  <x:ExprL3Ref> Token<"??"> <y:ExprL3RightRef> => ExprKind::OrElse(x, y),
+}
 
+ExprL3RightRef: &'input Expr<'input> = {
+  <e:ExprL3Right> => state.alloc.alloc(e),
+}
+
+ExprL3Right: Expr<'input> = {
+  <location_start:@L> <kind:ExprKindL3Right> <location_end:@R> => Expr { location_start, location_end, kind },
+  ExprL4,
+}
+
+ExprKindL3Right: ExprKind<'input> = {
+  <x:ExprL4Ref> Token<":"> <y:ExprL3RightRef> => ExprKind::Prepend(x, y),
 }
 
 ExprL4Ref: &'input Expr<'input> = {
@@ -166,6 +179,12 @@ ExprKindL4: ExprKind<'input> = {
   Token<"is_present"> <x:TrailingExprRef> => ExprKind::IsPresent(x),
   Token<"is_null"> <x:TrailingExprRef> => ExprKind::IsNull(x),
   Token<"call"> Token<"("> <name:Identifier> Token<")"> Token<"["> <params:ZeroOrMore<Expr, ",">> Token<"]"> => ExprKind::Call(name, Bvec::from_iter_in(params.into_iter(), &state.alloc)),
+  Token<"reduce"> Token<"("> <name:Identifier> Token<")">
+    <subgraph_param:ExprL5Ref> <reduce_init:ExprL5Ref> <list_or_set:TrailingExprRef> => ExprKind::Reduce(
+      name, subgraph_param, reduce_init, list_or_set,
+    ),
+  Token<"pop"> <x:TrailingExprRef> => ExprKind::Pop(x),
+  Token<"head"> <x:TrailingExprRef> => ExprKind::Head(x),
 }
 
 ExprL5Ref: &'input Expr<'input> = {
@@ -180,6 +199,7 @@ ExprL5: Expr<'input> = {
 ExprKindL5: ExprKind<'input> = {
   <x:Literal> => ExprKind::LoadConst(x),
   Token<"create_map"> => ExprKind::CreateMap,
+  Token<"create_list"> Token<"("> <ty:Type> Token<")"> => ExprKind::CreateList(ty),
   <x:Identifier> => ExprKind::Node(x),
   <y:ExprL5Ref> Token<"."> <x:Identifier> => ExprKind::GetField(x, y),
 }

@@ -14,7 +14,8 @@ use crate::{
     kv::{KeyValueStore, KvTransaction},
     pathwalker::PathWalker,
     treewalker::vm_value::{
-      VmMapValue, VmSetValue, VmSetValueKind, VmTableValue, VmTableValueKind, VmType, VmValue,
+      VmListNode, VmListValue, VmMapValue, VmSetType, VmSetValue, VmSetValueKind, VmTableValue,
+      VmTableValueKind, VmType, VmValue,
     },
     value::PrimitiveValue,
   },
@@ -266,7 +267,38 @@ impl<'a, 'b> Executor<'a, 'b> {
     }
 
     Ok(match n {
-      TwGraphNode::BuildSet => unimplemented!(),
+      TwGraphNode::BuildSet => {
+        let list = match &*params[0] {
+          VmValue::List(x) => x,
+          _ => unreachable!(),
+        };
+        let mut node = list.node.as_ref();
+        let mut members = BTreeMap::new();
+        let (primary_key, _) = VmType::Set(VmSetType {
+          ty: Box::new(list.member_ty.clone()),
+        })
+        .set_primary_key(self.vm.schema)
+        .expect("inconsistency: primary key not found");
+        while let Some(n) = node {
+          let primary_key_value = match &n.value.unwrap_table().kind {
+            VmTableValueKind::Fresh(x) => x
+              .get(primary_key)
+              .unwrap()
+              .unwrap_primitive()
+              .serialize_for_key_component(),
+            _ => {
+              return Err(ExecError::NotImplemented("table copy is not implemented".into()).into())
+            }
+          };
+          members.insert(primary_key_value.to_vec(), n.value.clone());
+          node = n.next.as_ref();
+        }
+        let set = VmSetValue {
+          member_ty: list.member_ty.clone(),
+          kind: VmSetValueKind::Fresh(members),
+        };
+        Some(Arc::new(VmValue::Set(set)))
+      }
       TwGraphNode::BuildTable(table_ty) => {
         let map = match &*params[0] {
           VmValue::Map(x) => &x.elements,
@@ -366,7 +398,7 @@ impl<'a, 'b> Executor<'a, 'b> {
         // Effect node
         let value = params[0].clone();
         let (primary_key, _) = VmType::<&'a str>::from(&*params[1])
-          .primary_key(self.vm.schema)
+          .set_primary_key(self.vm.schema)
           .expect("inconsistency: primary key not found for set member");
         let primary_key_value = self
           .read_table_element(txn, value.unwrap_table(), primary_key)
@@ -378,6 +410,10 @@ impl<'a, 'b> Executor<'a, 'b> {
 
         match &set.kind {
           VmSetValueKind::Resident(walker) => {
+            let mut fast_scan_key = walker.set_fast_scan_prefix().unwrap();
+            fast_scan_key.extend_from_slice(&primary_key_value);
+            txn.put(&fast_scan_key, &[]).await?;
+
             let walker = walker.enter_set_raw(&primary_key_value).unwrap();
             self.walk_and_insert(txn, walker, value).await?;
           }
@@ -420,19 +456,9 @@ impl<'a, 'b> Executor<'a, 'b> {
         };
         match &set.kind {
           VmSetValueKind::Resident(walker) => {
-            let primary_key_value_raw = primary_key_value.serialize_for_key_component();
-            let mut fast_scan_key = walker.set_fast_scan_prefix().unwrap();
-            fast_scan_key.extend_from_slice(&primary_key_value_raw);
-
-            let mut data_start_key = walker.set_data_prefix().unwrap();
-            data_start_key.extend_from_slice(&primary_key_value_raw);
-            data_start_key.push(0x00);
-
-            let mut data_end_key = data_start_key.clone();
-            *data_end_key.last_mut().unwrap() = 0x01;
-
-            txn.delete(&fast_scan_key).await?;
-            txn.delete_range(&data_start_key, &data_end_key).await?;
+            self
+              .delete_entry_from_set(txn, walker, primary_key_value)
+              .await?;
             None
           }
           VmSetValueKind::Fresh(_) => return Err(ExecError::FreshTableOrSetNotSupported.into()),
@@ -501,7 +527,115 @@ impl<'a, 'b> Executor<'a, 'b> {
         )),
         _ => unreachable!(),
       })),
-      _ => return Err(ExecError::NotImplemented(format!("{:?}", n)).into()),
+      TwGraphNode::CreateList(member_ty) => {
+        let member_ty = self.vm.types.get(*member_ty as usize).unwrap().clone();
+        Some(Arc::new(VmValue::List(VmListValue {
+          member_ty,
+          node: None,
+        })))
+      }
+      TwGraphNode::PrependToList => {
+        let value = params[0].clone();
+        let list = match &*params[1] {
+          VmValue::List(x) => x,
+          _ => unreachable!(),
+        };
+        Some(Arc::new(VmValue::List(VmListValue {
+          member_ty: list.member_ty.clone(),
+          node: Some(Arc::new(VmListNode {
+            value,
+            next: list.node.clone(),
+          })),
+        })))
+      }
+      TwGraphNode::PopFromList => {
+        let list = match &*params[0] {
+          VmValue::List(x) => x,
+          _ => unreachable!(),
+        };
+        Some(Arc::new(match &list.node {
+          Some(x) => VmValue::List(VmListValue {
+            member_ty: list.member_ty.clone(),
+            node: x.next.clone(),
+          }),
+          None => VmValue::Null(VmType::from(&*params[0])),
+        }))
+      }
+      TwGraphNode::ListHead => {
+        let list = match &*params[0] {
+          VmValue::List(x) => x,
+          _ => unreachable!(),
+        };
+        Some(match &list.node {
+          Some(x) => x.value.clone(),
+          None => Arc::new(VmValue::Null(list.member_ty.clone())),
+        })
+      }
+      TwGraphNode::Select => panic!("inconsistency: got select in run_node"),
+      TwGraphNode::FilterSet(_) => {
+        return Err(ExecError::NotImplemented(format!("{:?}", n)).into())
+      }
+      TwGraphNode::Reduce(subgraph_index) => {
+        let subgraph_param = &params[0];
+        let reduce_init = &params[1];
+        let list_or_set = &params[2];
+        let mut subgraph_params = vec![
+          subgraph_param.clone(),
+          reduce_init.clone(),
+          Arc::new(VmValue::Bool(false)), // placeholder
+        ];
+        match &**list_or_set {
+          VmValue::List(list) => {
+            let mut node = list.node.as_ref();
+            while let Some(n) = node {
+              subgraph_params[2] = n.value.clone();
+              let output = self
+                .recursively_run_graph(*subgraph_index as usize, &subgraph_params, recursion_depth)
+                .await?
+                .expect("inconsistency: ReduceList did not get an output from subgraph");
+              subgraph_params[1] = output;
+              node = n.next.as_ref();
+            }
+          }
+          VmValue::Set(set) => {
+            let walker = match &set.kind {
+              VmSetValueKind::Resident(x) => x,
+              _ => return Err(ExecError::FreshTableOrSetNotSupported.into()),
+            };
+            let specialized_ty = match &set.member_ty {
+              VmType::Table(x) => self.vm.schema.types.get(x.name).unwrap(),
+              _ => unreachable!(),
+            };
+            let range_start = walker.set_fast_scan_prefix().unwrap();
+            let mut range_end = range_start.clone();
+            *range_end.last_mut().unwrap() += 1;
+            let range_end = range_end;
+
+            log::trace!(
+              "reduce set: scan keys: {} {}",
+              base64::encode(&range_start),
+              base64::encode(&range_end)
+            );
+
+            let mut it = txn.scan_keys(&range_start, &range_end).await?;
+            while let Some(k) = it.next().await? {
+              let k = k.strip_prefix(range_start.as_slice()).unwrap();
+              let walker = walker.enter_set_raw(k).unwrap();
+              subgraph_params[2] = Arc::new(VmValue::Table(VmTableValue {
+                ty: &*specialized_ty.name,
+                kind: VmTableValueKind::Resident(walker),
+              }));
+              let output = self
+                .recursively_run_graph(*subgraph_index as usize, &subgraph_params, recursion_depth)
+                .await?
+                .expect("inconsistency: ReduceList did not get an output from subgraph");
+              subgraph_params[1] = output;
+            }
+          }
+          _ => unreachable!(),
+        }
+        Some(subgraph_params[1].clone())
+      }
     })
   }
 
@@ -572,6 +706,9 @@ impl<'a, 'b> Executor<'a, 'b> {
         txn.put(&walker.generate_key(), &[]).await?;
         match &x.kind {
           VmSetValueKind::Fresh(members) => {
+            // Clear set
+            self.delete_set(txn, &walker).await?;
+
             // Need to clone this. Otherwise `async_recursion` errors
             let members = members.clone();
             for (primary_key_value, member) in members {
@@ -605,13 +742,51 @@ impl<'a, 'b> Executor<'a, 'b> {
           }
         }
       }
-      VmValue::Bool(_) | VmValue::Map(_) => {
+      VmValue::Bool(_) | VmValue::Map(_) | VmValue::List(_) => {
         panic!(
           "inconsistency: walk_and_insert encountered non-storable type: {:?}",
           value
         );
       }
     }
+    Ok(())
+  }
+
+  async fn delete_set(&self, txn: &dyn KvTransaction, walker: &Arc<PathWalker<'a>>) -> Result<()> {
+    let fast_scan_start_key = walker.set_fast_scan_prefix().unwrap();
+    let mut fast_scan_end_key = fast_scan_start_key.clone();
+    *fast_scan_end_key.last_mut().unwrap() += 1;
+
+    let data_start_key = walker.set_data_prefix().unwrap();
+    let mut data_end_key = data_start_key.clone();
+    *data_end_key.last_mut().unwrap() += 1;
+
+    txn
+      .delete_range(&fast_scan_start_key, &fast_scan_end_key)
+      .await?;
+    txn.delete_range(&data_start_key, &data_end_key).await?;
+    Ok(())
+  }
+
+  async fn delete_entry_from_set(
+    &self,
+    txn: &dyn KvTransaction,
+    walker: &Arc<PathWalker<'a>>,
+    primary_key_value: &PrimitiveValue,
+  ) -> Result<()> {
+    let primary_key_value_raw = primary_key_value.serialize_for_key_component();
+    let mut fast_scan_key = walker.set_fast_scan_prefix().unwrap();
+    fast_scan_key.extend_from_slice(&primary_key_value_raw);
+
+    let mut data_start_key = walker.set_data_prefix().unwrap();
+    data_start_key.extend_from_slice(&primary_key_value_raw);
+    data_start_key.push(0x00);
+
+    let mut data_end_key = data_start_key.clone();
+    *data_end_key.last_mut().unwrap() = 0x01;
+
+    txn.delete(&fast_scan_key).await?;
+    txn.delete_range(&data_start_key, &data_end_key).await?;
     Ok(())
   }
 }

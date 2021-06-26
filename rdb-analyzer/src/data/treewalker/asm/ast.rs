@@ -58,6 +58,7 @@ pub enum Type<'a> {
   },
   Primitive(PrimitiveType),
   Set(&'a Type<'a>),
+  List(&'a Type<'a>),
   Map(Vec<'a, (&'a str, Type<'a>)>),
   Bool,
   Schema,
@@ -88,6 +89,11 @@ pub enum ExprKind<'a> {
   Call(&'a str, Vec<'a, Expr<'a>>),
   Add(&'a Expr<'a>, &'a Expr<'a>),
   Sub(&'a Expr<'a>, &'a Expr<'a>),
+  CreateList(Type<'a>),
+  Reduce(&'a str, &'a Expr<'a>, &'a Expr<'a>, &'a Expr<'a>),
+  Prepend(&'a Expr<'a>, &'a Expr<'a>),
+  Pop(&'a Expr<'a>),
+  Head(&'a Expr<'a>),
 }
 
 pub enum Literal<'a> {

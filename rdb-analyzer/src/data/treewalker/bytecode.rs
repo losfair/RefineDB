@@ -58,6 +58,27 @@ pub enum TwGraphNode {
   /// Map
   CreateMap,
 
+  /// List<T>
+  ///
+  /// Const param: ident (table_type)
+  CreateList(u32),
+
+  /// T -> List<T> -> List<T>
+  PrependToList,
+
+  /// List<T> -> List<T>
+  PopFromList,
+
+  /// List<T> -> T
+  ListHead,
+
+  /// U -> P -> (List<T> | Set<T>) -> P
+  ///
+  /// Subgraph: (U, P, T) -> P
+  ///
+  /// Const param: subgraph_index
+  Reduce(u32),
+
   /// (Map | Table<T>) -> T
   ///
   /// Const param: ident
@@ -172,6 +193,7 @@ impl TwGraphNode {
     match self {
       Self::FilterSet(x) => smallvec![*x],
       Self::Call(x) => smallvec![*x],
+      Self::Reduce(x) => smallvec![*x],
       _ => smallvec![],
     }
   }

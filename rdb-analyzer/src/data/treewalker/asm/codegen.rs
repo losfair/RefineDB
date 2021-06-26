@@ -4,7 +4,9 @@ use super::language::RootParser;
 use super::{ast, state::State};
 use crate::data::treewalker::asm::TwAsmError;
 use crate::data::treewalker::bytecode::{TwGraph, TwGraphNode, TwScript};
-use crate::data::treewalker::vm_value::{VmConst, VmConstSetValue, VmSetType, VmTableType, VmType};
+use crate::data::treewalker::vm_value::{
+  VmConst, VmConstSetValue, VmListType, VmSetType, VmTableType, VmType,
+};
 use crate::data::value::PrimitiveValue;
 use crate::schema::compile::PrimitiveType;
 use crate::util::first_duplicate;
@@ -348,6 +350,41 @@ impl<'a, 'b> GraphContext<'a, 'b> {
         let r = self.generate_expr(g, None, *r)?;
         self.push_node((TwGraphNode::Sub, vec![l, r], precondition), name)?
       }
+
+      K::CreateList(ty) => {
+        let ty = self.builder.generate_vmtype(ty)?;
+        let ty = self.builder.alloc_vmtype(ty);
+        self.push_node((TwGraphNode::CreateList(ty), vec![], precondition), name)?
+      }
+      K::Reduce(target_graph, subgraph_param, reduce_init, list_or_set) => {
+        let (i, _) = self
+          .builder
+          .root
+          .graphs
+          .iter()
+          .enumerate()
+          .find(|(_, x)| x.name == *target_graph)
+          .ok_or_else(|| TwAsmError::GraphNotFound(target_graph.to_string()))?;
+        let params = vec![
+          self.generate_expr(g, None, *subgraph_param)?,
+          self.generate_expr(g, None, *reduce_init)?,
+          self.generate_expr(g, None, *list_or_set)?,
+        ];
+        self.push_node((TwGraphNode::Reduce(i as u32), params, precondition), name)?
+      }
+      K::Prepend(l, r) => {
+        let l = self.generate_expr(g, None, *l)?;
+        let r = self.generate_expr(g, None, *r)?;
+        self.push_node((TwGraphNode::PrependToList, vec![l, r], precondition), name)?
+      }
+      K::Pop(x) => {
+        let x = self.generate_expr(g, None, *x)?;
+        self.push_node((TwGraphNode::PopFromList, vec![x], precondition), name)?
+      }
+      K::Head(x) => {
+        let x = self.generate_expr(g, None, *x)?;
+        self.push_node((TwGraphNode::ListHead, vec![x], precondition), name)?
+      }
     };
     Ok(ret)
   }
@@ -460,6 +497,9 @@ impl<'a> Builder<'a> {
       ),
       ast::Type::Bool => VmType::Bool,
       ast::Type::Schema => VmType::Schema,
+      ast::Type::List(x) => VmType::List(VmListType {
+        ty: Box::new(self.generate_vmtype(*x)?),
+      }),
     })
   }
 
