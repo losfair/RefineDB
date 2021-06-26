@@ -131,14 +131,12 @@ impl<'a> PathWalker<'a> {
     let mut link = Some(self);
     let mut result = vec![];
     while let Some(x) = link {
-      if x.is_intermediate {
-        continue;
-      }
-
-      if let Some(segment) = x.path_segment {
-        result.push(segment);
-      } else {
-        result.push("(selector)");
+      if !x.is_intermediate {
+        if let Some(segment) = x.path_segment {
+          result.push(segment);
+        } else {
+          result.push("(selector)");
+        }
       }
       link = x.link.as_ref().map(|x| &**x);
     }
@@ -153,13 +151,10 @@ impl<'a> PathWalker<'a> {
     let mut result = vec![];
 
     while let Some(x) = link {
-      // Skip intermediate nodes, as they should be transparent.
-      if x.is_intermediate {
-        continue;
+      if !x.is_intermediate {
+        let path_segments = x.collect_non_intermediate_path_segments_on_path_including_self();
+        result.push((x.generate_key(), path_segments));
       }
-
-      let path_segments = x.collect_non_intermediate_path_segments_on_path_including_self();
-      result.push((x.generate_key(), path_segments));
       link = x.link.as_ref();
     }
     result
