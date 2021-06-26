@@ -1,4 +1,4 @@
-use std::{panic::AssertUnwindSafe, sync::Arc};
+use std::{panic::AssertUnwindSafe, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use futures::FutureExt;
@@ -6,9 +6,12 @@ use rdb_analyzer::data::{
   kv::KeyValueStore,
   treewalker::{exec::Executor, serialize::SerializedVmValue, vm_value::VmType},
 };
+use tokio::time::sleep;
 
 use crate::exec_core::ExecContext;
 use thiserror::Error;
+
+const QUERY_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Error, Debug)]
 pub enum ExecError {
@@ -17,10 +20,29 @@ pub enum ExecError {
 
   #[error("param count mismatch: expected {0}, got {1}")]
   ParamCountMismatch(usize, usize),
+
+  #[error("query timeout")]
+  Timeout,
 }
 
 impl ExecContext {
   pub async fn run_exported_graph(
+    &self,
+    kv: &dyn KeyValueStore,
+    name: &str,
+    params: &[SerializedVmValue],
+  ) -> Result<SerializedVmValue> {
+    let run_fut = AssertUnwindSafe(self.run_exported_graph_inner(kv, name, params)).catch_unwind();
+    let timeout_fut = sleep(QUERY_TIMEOUT);
+    tokio::select! {
+      res = run_fut => {
+        res.unwrap_or_else(|_| Err(ExecError::GraphExecutorPanic.into()))
+      }
+      _ = timeout_fut => Err(ExecError::Timeout.into()),
+    }
+  }
+
+  async fn run_exported_graph_inner(
     &self,
     kv: &dyn KeyValueStore,
     name: &str,
@@ -49,10 +71,9 @@ impl ExecContext {
         _ => v.decode(ty).map(Arc::new),
       })
       .collect::<Result<Vec<_>>>()?;
-    let output = AssertUnwindSafe(executor.run_graph(graph_index, &params))
-      .catch_unwind()
-      .await
-      .unwrap_or_else(|_| Err(ExecError::GraphExecutorPanic.into()))?
+    let output = executor
+      .run_graph(graph_index, &params)
+      .await?
       .map(|x| SerializedVmValue::encode(&*x))
       .transpose()?;
     Ok(output.unwrap_or_else(|| SerializedVmValue::Null(None)))
