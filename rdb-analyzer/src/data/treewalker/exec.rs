@@ -41,6 +41,7 @@ pub struct Executor<'a, 'b> {
   type_info: &'b GlobalTypeInfo<'a>,
   fire_rule_tables: Vec<FireRuleTable>,
   path_integrity_assertions: Mutex<HashMap<Vec<u8>, BTreeSet<Vec<&'a str>>>>,
+  yield_fn: Option<fn() -> Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
 
 #[derive(Clone)]
@@ -102,7 +103,12 @@ impl<'a, 'b> Executor<'a, 'b> {
       type_info,
       fire_rule_tables,
       path_integrity_assertions: Mutex::new(HashMap::new()),
+      yield_fn: None,
     }
+  }
+
+  pub fn set_yield_fn(&mut self, f: fn() -> Pin<Box<dyn Future<Output = ()> + Send>>) {
+    self.yield_fn = Some(f);
   }
 
   pub async fn run_graph(
@@ -155,6 +161,11 @@ impl<'a, 'b> Executor<'a, 'b> {
     if recursion_depth >= MAX_RECURSION_DEPTH {
       return Err(ExecError::MaxRecursionDepthExceeded(recursion_depth).into());
     }
+
+    if let Some(f) = self.yield_fn {
+      f().await;
+    }
+
     let recursion_depth = recursion_depth + 1;
     let g = &self.vm.script.graphs[graph_index];
     let type_info = &self.type_info.graphs[graph_index];

@@ -6,12 +6,12 @@ use rdb_analyzer::data::{
   kv::KeyValueStore,
   treewalker::{exec::Executor, serialize::SerializedVmValue, vm_value::VmType},
 };
-use tokio::time::sleep;
+use tokio::{task::yield_now, time::sleep};
 
 use crate::exec_core::ExecContext;
 use thiserror::Error;
 
-const QUERY_TIMEOUT: Duration = Duration::from_secs(3);
+const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Error, Debug)]
 pub enum ExecError {
@@ -62,6 +62,7 @@ impl ExecContext {
       return Err(ExecError::ParamCountMismatch(param_types.len(), params.len()).into());
     }
     let mut executor = Executor::new(self.vm(), kv, self.type_info());
+    executor.set_yield_fn(|| Box::pin(yield_now()));
     let params = params
       .iter()
       .zip(param_types)
