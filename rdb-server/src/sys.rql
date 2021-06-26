@@ -1,0 +1,26 @@
+export graph add_namespace(root: schema, namespace_id: string, create_time: int64): bool {
+  ns = root.system.namespaces;
+  if is_present $ point_get ns namespace_id {
+    r1 = false;
+  } else {
+    s_insert root.system.namespaces $
+      build_table(Namespace) $
+      m_insert(id) namespace_id $
+      m_insert(deployments) empty_set<Deployment> $
+      m_insert(create_time) create_time $
+      create_map;
+    r2 = true;
+  }
+  return select r1 r2;
+}
+
+export graph delete_namespace(root: schema, namespace_id: string): bool {
+  ns = root.system.namespaces;
+  if is_present $ point_get ns namespace_id {
+    s_delete ns namespace_id;
+    r1 = true;
+  } else {
+    r2 = false;
+  }
+  return select r1 r2;
+}

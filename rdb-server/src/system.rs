@@ -1,29 +1,26 @@
+use std::sync::Arc;
+
 use bumpalo::Bump;
 use console::Style;
 use rdb_analyzer::{
-  data::{kv::KeyValueStore},
-  schema::{
-    compile::{compile, CompiledSchema},
-    grammar::parse,
-  },
+  data::kv::KeyValueStore,
+  schema::{compile::compile, grammar::parse},
   storage_plan::{planner::generate_plan_for_schema, StoragePlan},
 };
 use sha2::{Digest, Sha256};
 use similar::{ChangeTag, TextDiff};
 
+use crate::exec_core::{ExecContext, SchemaContext};
+
 pub struct SystemSchema {
-  pub schema: CompiledSchema,
-  pub plan: StoragePlan,
+  pub exec_ctx: ExecContext,
 }
 
 pub const SCHEMA: &str = include_str!("./system_schema.rschema");
+pub const SYS_RQL: &str = include_str!("./sys.rql");
 
 impl SystemSchema {
-  pub async fn new(
-    migration_hash: Option<String>,
-    store: &dyn KeyValueStore,
-    meta_store: &dyn KeyValueStore,
-  ) -> Self {
+  pub async fn new(migration_hash: Option<String>, meta_store: &dyn KeyValueStore) -> Self {
     let schema = compile(&parse(&Bump::new(), SCHEMA).unwrap()).unwrap();
     let txn = meta_store.begin_transaction().await.unwrap();
     let old_schema_text = txn
@@ -85,7 +82,9 @@ impl SystemSchema {
       new_plan
     };
 
-    Self { schema, plan }
+    let exec_ctx = ExecContext::load(Arc::new(SchemaContext { schema, plan }), SYS_RQL).unwrap();
+
+    Self { exec_ctx }
   }
 }
 

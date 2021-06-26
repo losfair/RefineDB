@@ -5,8 +5,8 @@ type System {
 type Namespace {
   @primary
   id: string,
-  current_deployment: Deployment?,
-  all_deployments: set<Deployment>,
+  deployments: set<Deployment>,
+  create_time: int64,
 }
 
 type Deployment {
@@ -14,6 +14,7 @@ type Deployment {
   id: string,
   schema: string,
   plan: string,
+  create_time: int64,
 }
 
 export System system;

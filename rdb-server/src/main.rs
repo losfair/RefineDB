@@ -3,23 +3,25 @@ use std::sync::Arc;
 use anyhow::Result;
 use foundationdb::{tuple::Subspace, Database};
 use rdb_analyzer::data::kv::KeyValueStore;
+use rdb_proto::{proto::rdb_control_server::RdbControlServer, tonic::transport::Server};
 use structopt::StructOpt;
 use tokio::runtime::Runtime;
 
 use crate::{
   kv_backend::foundationdb::FdbKvStore,
   opt::Opt,
+  server::ControlServer,
   state::{set_state, DataStoreGenerator, ServerState},
   system::SystemSchema,
 };
+mod exec;
+mod exec_core;
 mod kv_backend;
 mod opt;
+mod server;
 mod state;
-mod sysops;
 mod system;
-
-#[cfg(test)]
-mod sysops_test;
+mod util;
 
 fn main() {
   pretty_env_logger::init_timed();
@@ -68,19 +70,20 @@ async fn run() -> Result<()> {
     panic!("no kv backend selected");
   }
 
-  let system_schema = SystemSchema::new(
-    opt.migration_hash.clone(),
-    &*system_store,
-    &*system_metadata_store,
-  )
-  .await;
+  let system_schema = SystemSchema::new(opt.migration_hash.clone(), &*system_metadata_store).await;
 
   set_state(ServerState {
     data_store_generator,
     system_store,
     system_schema,
   });
+
   log::info!("RefineDB started.");
+
+  Server::builder()
+    .add_service(RdbControlServer::new(ControlServer))
+    .serve(opt.listen.parse()?)
+    .await?;
 
   Ok(())
 }
