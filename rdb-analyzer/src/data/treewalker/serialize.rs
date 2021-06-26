@@ -24,6 +24,12 @@ pub enum SerializeError {
 
   #[error("type mismatch during unwrapping")]
   UnwrapTypeMismatch,
+
+  #[error("unexpected null value")]
+  UnexpectedNullValue,
+
+  #[error("missing required field: `{0}`")]
+  MissingRequiredField(String),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -43,6 +49,37 @@ impl SerializedVmValue {
   pub fn try_unwrap_bool(&self) -> Result<bool> {
     match self {
       Self::Bool(x) => Ok(*x),
+      _ => Err(SerializeError::UnwrapTypeMismatch.into()),
+    }
+  }
+  pub fn try_unwrap_list(&self) -> Result<&Vec<SerializedVmValue>> {
+    match self {
+      Self::List(x) => Ok(x),
+      _ => Err(SerializeError::UnwrapTypeMismatch.into()),
+    }
+  }
+  pub fn check_nonnull(&self) -> Result<()> {
+    match self {
+      Self::Null(_) => Err(SerializeError::UnexpectedNullValue.into()),
+      _ => Ok(()),
+    }
+  }
+  pub fn try_unwrap_map(&self, required_fields: &[&str]) -> Result<&BTreeMap<String, SerializedVmValue>> {
+    match self {
+      Self::Map(x) => {
+        for f in required_fields {
+          if !x.contains_key(*f) {
+            return Err(SerializeError::MissingRequiredField(f.to_string()).into());
+          }
+        }
+        Ok(x)
+      }
+      _ => Err(SerializeError::UnwrapTypeMismatch.into()),
+    }
+  }
+  pub fn try_unwrap_string(&self) -> Result<&String> {
+    match self {
+      Self::String(x) => Ok(x),
       _ => Err(SerializeError::UnwrapTypeMismatch.into()),
     }
   }
