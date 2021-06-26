@@ -102,7 +102,7 @@ async fn basic_exec() {
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 
   let kv = MockKv::new();
-  let executor = Executor::new(&vm, &kv, &type_info);
+  let mut executor = Executor::new(&vm, &kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -143,7 +143,7 @@ async fn basic_exec() {
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let executor = Executor::new(&vm, &kv, &type_info);
+  let mut executor = Executor::new(&vm, &kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -215,7 +215,7 @@ async fn set_queries() {
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 
   let kv = MockKv::new();
-  let executor = Executor::new(&vm, &kv, &type_info);
+  let mut executor = Executor::new(&vm, &kv, &type_info);
   executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -243,7 +243,7 @@ async fn set_queries() {
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let executor = Executor::new(&vm, &kv, &type_info);
+  let mut executor = Executor::new(&vm, &kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -278,7 +278,7 @@ async fn set_queries() {
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let executor = Executor::new(&vm, &kv, &type_info);
+  let mut executor = Executor::new(&vm, &kv, &type_info);
   executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -306,7 +306,7 @@ async fn set_queries() {
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let executor = Executor::new(&vm, &kv, &type_info);
+  let mut executor = Executor::new(&vm, &kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await

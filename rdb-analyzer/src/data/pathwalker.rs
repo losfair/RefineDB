@@ -49,6 +49,14 @@ pub struct PathWalker<'a> {
   ///
   /// True otherwise.
   should_flatten: bool,
+
+  /// Whether this node is an intermediate node that is not actually present in the key-value
+  /// store.
+  ///
+  /// Used when detecting path integrity.
+  is_intermediate: bool,
+
+  path_segment: Option<&'a str>,
 }
 
 #[derive(Clone, Debug)]
@@ -69,9 +77,9 @@ impl<'a> Deref for KeyCow<'a> {
 
 impl<'a> PathWalker<'a> {
   pub fn from_export(plan: &'a StoragePlan, export_name: &str) -> Result<Arc<Self>> {
-    let export = plan
+    let (export_name, export) = plan
       .nodes
-      .get(export_name)
+      .get_key_value(export_name)
       .ok_or_else(|| PathWalkerError::FieldNotFound(export_name.to_string()))?;
 
     Ok(Arc::new(Self {
@@ -80,6 +88,8 @@ impl<'a> PathWalker<'a> {
       link: None,
       depth: 1,
       should_flatten: export.flattened,
+      is_intermediate: false,
+      path_segment: Some(&**export_name),
     }))
   }
 }
@@ -117,6 +127,44 @@ impl<'a> PathWalker<'a> {
     }
   }
 
+  fn collect_non_intermediate_path_segments_on_path_including_self(&self) -> Vec<&'a str> {
+    let mut link = Some(self);
+    let mut result = vec![];
+    while let Some(x) = link {
+      if x.is_intermediate {
+        continue;
+      }
+
+      if let Some(segment) = x.path_segment {
+        result.push(segment);
+      } else {
+        result.push("(selector)");
+      }
+      link = x.link.as_ref().map(|x| &**x);
+    }
+
+    result.reverse();
+
+    result
+  }
+
+  pub fn all_non_intermediate_keys_on_path_excluding_self(&self) -> Vec<(Vec<u8>, Vec<&'a str>)> {
+    let mut link = self.link.as_ref();
+    let mut result = vec![];
+
+    while let Some(x) = link {
+      // Skip intermediate nodes, as they should be transparent.
+      if x.is_intermediate {
+        continue;
+      }
+
+      let path_segments = x.collect_non_intermediate_path_segments_on_path_including_self();
+      result.push((x.generate_key(), path_segments));
+      link = x.link.as_ref();
+    }
+    result
+  }
+
   pub fn node(&self) -> &'a StorageNode {
     self.node
   }
@@ -147,10 +195,10 @@ impl<'a> PathWalker<'a> {
       return Err(PathWalkerError::EnterFieldOnSet.into());
     }
 
-    let node = self
+    let (field_name, node) = self
       .node
       .children
-      .get(field_name)
+      .get_key_value(field_name)
       .ok_or_else(|| PathWalkerError::FieldNotFound(field_name.to_string()))?;
 
     if let Some(subspace_reference) = node.subspace_reference {
@@ -167,6 +215,8 @@ impl<'a> PathWalker<'a> {
             link: Some(self.clone()),
             depth: self.check_and_add_depth()?,
             should_flatten: false,
+            is_intermediate: false,
+            path_segment: Some(&**field_name),
           }));
         }
         me = link.link.as_ref();
@@ -179,6 +229,8 @@ impl<'a> PathWalker<'a> {
         link: Some(self.clone()),
         depth: self.check_and_add_depth()?,
         should_flatten: node.flattened,
+        is_intermediate: false,
+        path_segment: Some(&**field_name),
       }))
     }
   }
@@ -230,6 +282,8 @@ impl<'a> PathWalker<'a> {
       link: Some(self.clone()),
       depth: self.check_and_add_depth()?,
       should_flatten: false,
+      is_intermediate: true,
+      path_segment: None,
     });
 
     // And the table key.
@@ -239,6 +293,8 @@ impl<'a> PathWalker<'a> {
       link: Some(intermediate.clone()),
       depth: intermediate.check_and_add_depth()?,
       should_flatten: true,
+      is_intermediate: false,
+      path_segment: None,
     }))
   }
 

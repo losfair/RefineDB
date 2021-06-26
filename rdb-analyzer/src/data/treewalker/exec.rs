@@ -1,4 +1,9 @@
-use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
+use std::{
+  collections::{BTreeMap, BTreeSet, HashMap},
+  future::Future,
+  pin::Pin,
+  sync::{Arc, Mutex},
+};
 
 use anyhow::Result;
 use async_recursion::async_recursion;
@@ -35,6 +40,7 @@ pub struct Executor<'a, 'b> {
   kv: &'b dyn KeyValueStore,
   type_info: &'b GlobalTypeInfo<'a>,
   fire_rule_tables: Vec<FireRuleTable>,
+  path_integrity_assertions: Mutex<HashMap<Vec<u8>, BTreeSet<Vec<&'a str>>>>,
 }
 
 #[derive(Clone)]
@@ -73,6 +79,9 @@ pub enum ExecError {
 
   #[error("both select candidates are fired - this is not deterministic and not allowed")]
   BothSelectCandidatesFired,
+
+  #[error("path integrity check failed: missing path(s): {0}")]
+  PathIntegrityFailure(String),
 }
 
 const MAX_RECURSION_DEPTH: usize = 128;
@@ -92,18 +101,45 @@ impl<'a, 'b> Executor<'a, 'b> {
       kv,
       type_info,
       fire_rule_tables,
+      path_integrity_assertions: Mutex::new(HashMap::new()),
     }
   }
 
   pub async fn run_graph(
-    &self,
+    &mut self,
     graph_index: usize,
     graph_params: &[Arc<VmValue<'a>>],
   ) -> Result<Option<Arc<VmValue<'a>>>> {
+    self.path_integrity_assertions.get_mut().unwrap().clear();
     let txn = self.kv.begin_transaction().await?;
     let ret = self
       .recursively_run_graph(graph_index, graph_params, 0, &*txn)
       .await?;
+    let assertions = self.path_integrity_assertions.get_mut().unwrap();
+    let checks = assertions.iter().map(|(key, segments)| {
+      let txn = &*txn;
+      async move { txn.get(key).await.map(|x| (x.is_some(), segments)) }
+    });
+    let res = futures::future::join_all(checks)
+      .await
+      .into_iter()
+      .collect::<Result<Vec<_>>>()?;
+    let mut failures = Vec::new();
+    for (exists, segments) in res.iter() {
+      if !*exists {
+        failures.push(format!(
+          "{}",
+          segments
+            .iter()
+            .map(|x| x.join("."))
+            .collect::<Vec<_>>()
+            .join(", ")
+        ));
+      }
+    }
+    if !failures.is_empty() {
+      return Err(ExecError::PathIntegrityFailure(failures.join("; ")).into());
+    }
     txn.commit().await?;
     Ok(ret)
   }
@@ -425,6 +461,7 @@ impl<'a, 'b> Executor<'a, 'b> {
             txn.put(&fast_scan_key, &[]).await?;
 
             let walker = walker.enter_set_raw(&primary_key_value).unwrap();
+            self.assert_path_integrity(&walker);
             self.walk_and_insert(txn, walker, value).await?;
           }
           VmSetValueKind::Fresh(_) => {
@@ -442,6 +479,7 @@ impl<'a, 'b> Executor<'a, 'b> {
         match &table.kind {
           VmTableValueKind::Resident(walker) => {
             let walker = walker.enter_field(key.as_str()).unwrap();
+            self.assert_path_integrity(&walker);
             self.walk_and_insert(txn, walker, value).await?;
           }
           VmTableValueKind::Fresh(_) => {
@@ -701,6 +739,17 @@ impl<'a, 'b> Executor<'a, 'b> {
         }
       }
     })
+  }
+
+  /// Path integrity check (on insertions):
+  ///
+  /// We should not insert anything to a table or set whose path contains non-existent nodes.
+  fn assert_path_integrity(&self, walker: &Arc<PathWalker<'a>>) {
+    let path = walker.all_non_intermediate_keys_on_path_excluding_self();
+    let mut assertions = self.path_integrity_assertions.lock().unwrap();
+    for (key, segments) in path {
+      assertions.entry(key).or_default().insert(segments);
+    }
   }
 
   #[async_recursion]

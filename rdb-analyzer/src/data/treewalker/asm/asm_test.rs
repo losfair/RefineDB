@@ -43,7 +43,7 @@ async fn simple_test<F: FnMut(Option<Arc<VmValue>>)>(schema: &str, scripts: &[&s
     let tyck_end = Instant::now();
     println!("tyck took {:?}", tyck_end.duration_since(start));
 
-    let executor = Executor::new(&vm, &kv, &type_info);
+    let mut executor = Executor::new(&vm, &kv, &type_info);
     let output = executor
       .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
       .await
