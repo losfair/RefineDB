@@ -31,15 +31,69 @@ impl RdbControl for ControlServer {
       )
       .await
       .translate_err()?;
+    res.check_nonnull().translate_err()?;
     let ok = res.try_unwrap_bool().translate_err()?;
     Ok(Response::new(CreateNamespaceReply { created: ok }))
+  }
+
+  async fn list_namespace(
+    &self,
+    _request: Request<ListNamespaceRequest>,
+  ) -> Result<Response<ListNamespaceReply>, Status> {
+    let st = get_state();
+    let res = st
+      .system_schema
+      .exec_ctx
+      .run_exported_graph(
+        &*st.system_store,
+        "list_namespaces",
+        &[SerializedVmValue::Null(None)],
+      )
+      .await
+      .translate_err()?;
+    res.check_nonnull().translate_err()?;
+    let res = res.try_unwrap_list().translate_err()?;
+    let mut namespaces: Vec<NamespaceBasicInfo> = Vec::new();
+    for x in res {
+      let m = x.try_unwrap_map(&["id", "create_time"]).translate_err()?;
+      let id = m.get("id").unwrap().try_unwrap_string().translate_err()?;
+      let create_time: i64 = m
+        .get("create_time")
+        .unwrap()
+        .try_unwrap_string()
+        .translate_err()?
+        .parse::<i64>()
+        .translate_err()?;
+      namespaces.push(NamespaceBasicInfo {
+        id: id.clone(),
+        create_time,
+      });
+    }
+    Ok(Response::new(ListNamespaceReply { namespaces }))
   }
 
   async fn delete_namespace(
     &self,
     request: Request<DeleteNamespaceRequest>,
   ) -> Result<Response<DeleteNamespaceReply>, Status> {
-    todo!()
+    let r = request.get_ref();
+    let st = get_state();
+    let res = st
+      .system_schema
+      .exec_ctx
+      .run_exported_graph(
+        &*st.system_store,
+        "delete_namespace",
+        &[
+          SerializedVmValue::Null(None),
+          SerializedVmValue::String(r.id.clone()),
+        ],
+      )
+      .await
+      .translate_err()?;
+    res.check_nonnull().translate_err()?;
+    let ok = res.try_unwrap_bool().translate_err()?;
+    Ok(Response::new(DeleteNamespaceReply { deleted: ok }))
   }
 
   async fn create_deployment(
@@ -56,11 +110,44 @@ impl RdbControl for ControlServer {
     todo!()
   }
 
-  async fn list_deployments(
+  async fn list_deployment(
     &self,
-    request: Request<ListDeploymentsRequest>,
-  ) -> Result<Response<ListDeploymentsReply>, Status> {
-    todo!()
+    request: Request<ListDeploymentRequest>,
+  ) -> Result<Response<ListDeploymentReply>, Status> {
+    let r = request.get_ref();
+    let st = get_state();
+    let res = st
+      .system_schema
+      .exec_ctx
+      .run_exported_graph(
+        &*st.system_store,
+        "list_deployments",
+        &[
+          SerializedVmValue::Null(None),
+          SerializedVmValue::String(r.namespace_id.clone()),
+        ],
+      )
+      .await
+      .translate_err()?;
+    res.check_nonnull().translate_err()?;
+    let res = res.try_unwrap_list().translate_err()?;
+    let mut deployments: Vec<DeploymentBasicInfo> = Vec::new();
+    for x in res {
+      let m = x.try_unwrap_map(&["id", "create_time"]).translate_err()?;
+      let id = m.get("id").unwrap().try_unwrap_string().translate_err()?;
+      let create_time: i64 = m
+        .get("create_time")
+        .unwrap()
+        .try_unwrap_string()
+        .translate_err()?
+        .parse::<i64>()
+        .translate_err()?;
+      deployments.push(DeploymentBasicInfo {
+        id: id.clone(),
+        create_time,
+      });
+    }
+    Ok(Response::new(ListDeploymentReply { deployments }))
   }
 }
 
@@ -69,11 +156,15 @@ trait ErrorTranslate {
   fn translate_err(self) -> Result<Self::Output, Status>;
 }
 
-impl<T> ErrorTranslate for Result<T, anyhow::Error> {
+impl<T, E> ErrorTranslate for Result<T, E>
+where
+  anyhow::Error: From<E>,
+{
   type Output = T;
 
   fn translate_err(self) -> Result<Self::Output, Status> {
     self.map_err(|x| {
+      let x = anyhow::Error::from(x);
       log::error!("request error: {:?}", x);
       Status::internal(format!("{:?}", x))
     })

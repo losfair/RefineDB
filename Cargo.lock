@@ -1297,6 +1297,10 @@ dependencies = [
 [[package]]
 name = "rdbctl"
 version = "0.1.0"
+dependencies = [
+ "rdb-analyzer",
+ "rdb-proto",
+]
 
 [[package]]
 name = "redox_syscall"

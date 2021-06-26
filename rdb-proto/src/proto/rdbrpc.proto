@@ -3,10 +3,11 @@ package rdbrpc;
 
 service RdbControl {
   rpc createNamespace(CreateNamespaceRequest) returns (CreateNamespaceReply) {}
+  rpc listNamespace(ListNamespaceRequest) returns (ListNamespaceReply) {}
   rpc deleteNamespace(DeleteNamespaceRequest) returns (DeleteNamespaceReply) {}
   rpc createDeployment(CreateDeploymentRequest) returns (CreateDeploymentReply) {}
   rpc getDeployment(GetDeploymentRequest) returns (GetDeploymentReply) {}
-  rpc listDeployments(ListDeploymentsRequest) returns (ListDeploymentsReply) {}
+  rpc listDeployment(ListDeploymentRequest) returns (ListDeploymentReply) {}
 //  rpc createQueryScript(CreateQueryScriptRequest) returns (CreateQueryScriptReply) {}
 }
 
@@ -24,6 +25,18 @@ message CreateNamespaceReply {
 
 message DeleteNamespaceReply {
   bool deleted = 1;
+}
+
+message ListNamespaceRequest {
+}
+
+message ListNamespaceReply {
+  repeated NamespaceBasicInfo namespaces = 1;
+}
+
+message NamespaceBasicInfo {
+  string id = 1;
+  int64 create_time = 2;
 }
 
 message CreateDeploymentRequest {
@@ -46,10 +59,15 @@ message GetDeploymentReply {
   string plan = 2;
 }
 
-message ListDeploymentsRequest {
+message ListDeploymentRequest {
   string namespace_id = 1;
 }
 
-message ListDeploymentsReply {
-  repeated string deployment_id = 1;
+message ListDeploymentReply {
+  repeated DeploymentBasicInfo deployments = 1;
+}
+
+message DeploymentBasicInfo {
+  string id = 1;
+  int64 create_time = 2;
 }

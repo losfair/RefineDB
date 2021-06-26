@@ -1,3 +1,13 @@
+type DeploymentMap = map {
+  id: string,
+  create_time: int64,
+};
+
+type NamespaceMap = map {
+  id: string,
+  create_time: int64,
+};
+
 export graph add_namespace(root: schema, namespace_id: string, create_time: int64): bool {
   ns = root.system.namespaces;
   if is_present $ point_get ns namespace_id {
@@ -12,6 +22,36 @@ export graph add_namespace(root: schema, namespace_id: string, create_time: int6
     r2 = true;
   }
   return select r1 r2;
+}
+
+export graph list_namespaces(root: schema): list<NamespaceMap> {
+  return reduce(fold_namespaces) create_map create_list(NamespaceMap) root.system.namespaces;
+}
+
+graph fold_namespaces(_unused: map{}, current: list<NamespaceMap>, item: Namespace): list<NamespaceMap> {
+  return (
+    m_insert(id) item.id $
+      m_insert(create_time) item.create_time $
+      create_map
+  ) : current;
+}
+
+export graph list_deployments(root: schema, namespace_id: string): list<DeploymentMap> {
+  ns = point_get root.system.namespaces namespace_id;
+  if !is_present ns {
+    r1 = null<list<DeploymentMap>>;
+  } else {
+    r2 = reduce(fold_deployments) create_map create_list(DeploymentMap) ns.deployments;
+  }
+  return select r1 r2;
+}
+
+graph fold_deployments(_unused: map{}, current: list<DeploymentMap>, item: Deployment): list<DeploymentMap> {
+  return (
+    m_insert(id) item.id $
+      m_insert(create_time) item.create_time $
+      create_map
+  ) : current;
 }
 
 export graph delete_namespace(root: schema, namespace_id: string): bool {
