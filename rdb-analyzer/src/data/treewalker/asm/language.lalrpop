@@ -167,6 +167,7 @@ TrailingExprRef: &'input Expr<'input> = {
 
 ExprKindL4: ExprKind<'input> = {
   Token<"build_table"> Token<"("> <x:Type> Token<")"> <y:TrailingExprRef> => ExprKind::BuildTable(x, y),
+  Token<"build_set"> <x:TrailingExprRef> => ExprKind::BuildSet(x),
   Token<"point_get"> <x:ExprL5Ref> <y:TrailingExprRef> => ExprKind::GetSetElement(x, y),
   Token<"m_insert"> Token<"("> <x:Identifier> Token<")"> <y:ExprL5Ref> <z:TrailingExprRef> => ExprKind::InsertIntoMap(x, y, z),
   Token<"t_insert"> Token<"("> <x:Identifier> Token<")"> <y:ExprL5Ref> <z:TrailingExprRef> => ExprKind::InsertIntoTable(x, y, z),

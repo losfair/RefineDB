@@ -385,6 +385,10 @@ impl<'a, 'b> GraphContext<'a, 'b> {
         let x = self.generate_expr(g, None, *x)?;
         self.push_node((TwGraphNode::ListHead, vec![x], precondition), name)?
       }
+      K::BuildSet(x) => {
+        let x = self.generate_expr(g, None, *x)?;
+        self.push_node((TwGraphNode::BuildSet, vec![x], precondition), name)?
+      }
     };
     Ok(ret)
   }
