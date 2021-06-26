@@ -8,6 +8,7 @@ use crate::{
     treewalker::{
       asm::codegen::compile_twscript,
       exec::{generate_root_map, Executor},
+      serialize::SerializedVmValue,
       typeck::GlobalTyckContext,
       vm::TwVm,
       vm_value::VmValue,
@@ -128,7 +129,6 @@ async fn basic_exec() {
         m_insert(start) 1 $
         m_insert(end) 2 $
         create_map;
-      t_insert(id) some_item "test_id";
       t_insert(name) some_item "test_name";
     }
     "#,
@@ -163,10 +163,6 @@ async fn basic_exec() {
           let x = x.unwrap();
           let x = x.unwrap_map();
           assert_eq!(
-            x.elements.get("id").unwrap().unwrap_primitive(),
-            &PrimitiveValue::String("test_id".into())
-          );
-          assert_eq!(
             x.elements.get("name").unwrap().unwrap_primitive(),
             &PrimitiveValue::String("test_name".into())
           );
@@ -194,10 +190,6 @@ async fn basic_exec() {
         3 => {
           let x = x.unwrap();
           let x = x.unwrap_map();
-          assert_eq!(
-            x.elements.get("id").unwrap().unwrap_primitive(),
-            &PrimitiveValue::String("test_id".into())
-          );
           assert_eq!(
             x.elements.get("name").unwrap().unwrap_primitive(),
             &PrimitiveValue::String("test".into())
@@ -346,4 +338,109 @@ async fn set_reduce() {
   .await;
 
   assert_eq!(chkindex, 3);
+}
+
+#[tokio::test]
+async fn list_ops() {
+  let _ = pretty_env_logger::try_init();
+  let mut chkindex = 0usize;
+  simple_test(
+    r#"
+    type Store {
+      collection_a: set<Number>,
+      collection_b: set<Number>,
+    }
+    type Number {
+      @primary
+      value: int64,
+    }
+    export Store store;
+  "#,
+    &[r#"
+    graph main(root: schema): map {
+      list1: list<int64>,
+      sum1: int64,
+      list2: list<int64>,
+      sum2: int64,
+    } {
+      list1 = 5 : 4 : 3 : 2 : 1 : create_list(int64);
+      sum1 = reduce(sum) create_map 0 list1;
+
+      list2 = call(gen_numbers) [20];
+      sum2 = reduce(sum) create_map 0 list2;
+
+      ret = m_insert(list1) list1
+        $ m_insert(sum1) sum1
+        $ m_insert(list2) list2
+        $ m_insert(sum2) sum2
+        $ create_map;
+      t_insert(collection_a) root.store $ build_set $ reduce(transform_numbers) create_map create_list(Number) list1;
+      t_insert(collection_b) root.store $ build_set $ reduce(transform_numbers) create_map create_list(Number) list2;
+      return ret;
+    }
+
+    graph transform_numbers(_unused: map{}, current: list<Number>, v: int64): list<Number> {
+      return (build_table(Number) $ m_insert(value) v create_map) : current;
+    }
+
+    graph gen_numbers(n: int64): list<int64> {
+      if n == 0 {
+        r1 = create_list(int64);
+      } else {
+        r2 = n : call(gen_numbers) [n - 1];
+      }
+      return select r1 r2;
+    }
+
+    graph sum(_unused: map{}, current: int64, that: int64): int64 {
+      return current + that;
+    }
+    "#, r#"
+    graph main(root: schema): map {
+      list1: list<int64>,
+      list2: list<int64>,
+    } {
+      list1 = reduce(decompose_numbers) create_map create_list(int64) root.store.collection_a;
+      list2 = reduce(decompose_numbers) create_map create_list(int64) root.store.collection_b;
+      return m_insert(list1) list1
+        $ m_insert(list2) list2
+        create_map;
+    }
+    graph decompose_numbers(_unused: map{}, current: list<int64>, v: Number): list<int64> {
+      return v.value : current;
+    }
+    "#],
+    |x| {
+      match chkindex {
+        0 => match &**x.as_ref().unwrap() {
+          VmValue::Map(x) => {
+            assert_eq!(**x.elements.get("sum1").unwrap(), VmValue::Primitive(PrimitiveValue::Int64(15)));
+            assert_eq!(**x.elements.get("sum2").unwrap(), VmValue::Primitive(PrimitiveValue::Int64(210)));
+          }
+          _ => unreachable!(),
+        },
+        1 => {
+          let serialized = SerializedVmValue::encode(&**x.as_ref().unwrap()).unwrap();
+          match &serialized {
+            SerializedVmValue::Map(x) => {
+              match x.get("list1").unwrap() {
+                SerializedVmValue::List(x) => assert_eq!(x.len(), 5),
+                _ => unreachable!(),
+              }
+              match x.get("list2").unwrap() {
+                SerializedVmValue::List(x) => assert_eq!(x.len(), 20),
+                _ => unreachable!(),
+              }
+            }
+            _ => unreachable!(),
+          }
+        }
+        _ => unreachable!(),
+      }
+      chkindex += 1;
+    },
+  )
+  .await;
+
+  assert_eq!(chkindex, 2);
 }
