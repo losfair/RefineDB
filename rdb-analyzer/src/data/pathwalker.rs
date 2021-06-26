@@ -20,7 +20,12 @@ pub enum PathWalkerError {
 
   #[error("enter_set called on a non-set node")]
   NotSet,
+
+  #[error("path too deep")]
+  PathTooDeep,
 }
+
+const MAX_DEPTH: usize = 64;
 
 #[derive(Debug)]
 pub struct PathWalker<'a> {
@@ -32,6 +37,9 @@ pub struct PathWalker<'a> {
 
   /// Link to the parent node.
   link: Option<Arc<PathWalker<'a>>>,
+
+  /// Current nesting depth.
+  depth: usize,
 
   /// Whether this node should be flattened.
   ///
@@ -70,6 +78,7 @@ impl<'a> PathWalker<'a> {
       node: export,
       key: KeyCow::Borrowed(&export.key),
       link: None,
+      depth: 1,
       should_flatten: export.flattened,
     }))
   }
@@ -98,6 +107,14 @@ impl<'a> PathWalker<'a> {
     }
     components.reverse();
     components
+  }
+
+  fn check_and_add_depth(&self) -> Result<usize> {
+    if self.depth >= MAX_DEPTH {
+      Err(PathWalkerError::PathTooDeep.into())
+    } else {
+      Ok(self.depth + 1)
+    }
   }
 
   pub fn node(&self) -> &'a StorageNode {
@@ -148,6 +165,7 @@ impl<'a> PathWalker<'a> {
             node: link.node,
             key: KeyCow::Borrowed(&node.key),
             link: Some(self.clone()),
+            depth: self.check_and_add_depth()?,
             should_flatten: false,
           }));
         }
@@ -159,6 +177,7 @@ impl<'a> PathWalker<'a> {
         node,
         key: KeyCow::Borrowed(&node.key),
         link: Some(self.clone()),
+        depth: self.check_and_add_depth()?,
         should_flatten: node.flattened,
       }))
     }
@@ -209,6 +228,7 @@ impl<'a> PathWalker<'a> {
       node: set,
       key: dynamic_key.clone(),
       link: Some(self.clone()),
+      depth: self.check_and_add_depth()?,
       should_flatten: false,
     });
 
@@ -216,7 +236,8 @@ impl<'a> PathWalker<'a> {
     Ok(Arc::new(Self {
       node: set,
       key: KeyCow::Borrowed(&set.key),
-      link: Some(intermediate),
+      link: Some(intermediate.clone()),
+      depth: intermediate.check_and_add_depth()?,
       should_flatten: true,
     }))
   }
