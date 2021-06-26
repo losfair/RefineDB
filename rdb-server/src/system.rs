@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bumpalo::Bump;
 use console::Style;
 use rdb_analyzer::{
-  data::kv::KeyValueStore,
+  data::{fixup::migrate_schema, kv::KeyValueStore},
   schema::{compile::compile, grammar::parse},
   storage_plan::{planner::generate_plan_for_schema, StoragePlan},
 };
@@ -20,7 +20,7 @@ pub const SCHEMA: &str = include_str!("./system_schema.rschema");
 pub const SYS_RQL: &str = include_str!("./sys.rql");
 
 impl SystemSchema {
-  pub async fn new(migration_hash: Option<String>, meta_store: &dyn KeyValueStore) -> Self {
+  pub async fn new(migration_hash: Option<String>, store: &dyn KeyValueStore, meta_store: &dyn KeyValueStore) -> Self {
     let schema = compile(&parse(&Bump::new(), SCHEMA).unwrap()).unwrap();
     let txn = meta_store.begin_transaction().await.unwrap();
     let old_schema_text = txn
@@ -59,6 +59,7 @@ impl SystemSchema {
           std::process::abort();
         }
         log::warn!("Applying schema migration.");
+        migrate_schema(&schema, &new_plan, store).await.unwrap();
         txn.put(b"schema", SCHEMA.as_bytes()).await.unwrap();
         txn
           .put(b"plan", &new_plan.serialize_compressed().unwrap())
@@ -73,6 +74,7 @@ impl SystemSchema {
       let new_plan =
         generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
       log::warn!("Creating system schema.");
+      migrate_schema(&schema, &new_plan, store).await.unwrap();
       txn.put(b"schema", SCHEMA.as_bytes()).await.unwrap();
       txn
         .put(b"plan", &new_plan.serialize_compressed().unwrap())

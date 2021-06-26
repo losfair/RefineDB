@@ -4,6 +4,7 @@ use bumpalo::Bump;
 
 use crate::{
   data::{
+    fixup::migrate_schema,
     mock_kv::MockKv,
     treewalker::{
       asm::codegen::compile_twscript,
@@ -28,6 +29,7 @@ async fn simple_test<F: FnMut(Option<Arc<VmValue>>)>(schema: &str, scripts: &[&s
   let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
 
   let kv = MockKv::new();
+  migrate_schema(&schema, &plan, &kv).await.unwrap();
 
   for &code in scripts {
     let start = Instant::now();
@@ -110,6 +112,7 @@ async fn basic_exec() {
     @primary
     id: string,
     name: string,
+    @default("hello")
     altname: string,
     duration: Duration<int64>,
   }
@@ -166,7 +169,10 @@ async fn basic_exec() {
             x.elements.get("name").unwrap().unwrap_primitive(),
             &PrimitiveValue::String("test_name".into())
           );
-          assert!(x.elements.get("altname").unwrap().is_null());
+          assert_eq!(
+            x.elements.get("altname").unwrap().unwrap_primitive(),
+            &PrimitiveValue::String("hello".into())
+          );
           assert_eq!(
             x.elements.get("value").unwrap().unwrap_primitive(),
             &PrimitiveValue::Int64(2)
