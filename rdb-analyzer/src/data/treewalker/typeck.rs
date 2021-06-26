@@ -123,6 +123,7 @@ pub struct GlobalTypeInfo<'a> {
 
 #[derive(Default, Debug)]
 pub struct GraphTypeInfo<'a> {
+  pub params: Vec<VmType<&'a str>>,
   pub nodes: Vec<Option<VmType<&'a str>>>,
 }
 
@@ -186,7 +187,7 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
         HashMap::new();
       for i in scc {
         log::trace!("typeck: scc {:p}, subgraph {}", scc, i);
-        type_info.graphs[*i as usize].nodes =
+        type_info.graphs[*i as usize] =
           self.typeck_graph(*i as usize, &mut subgraph_expected_param_types_sink)?;
       }
 
@@ -207,7 +208,7 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
     &self,
     graph_index: usize,
     subgraph_expected_param_types_sink: &mut HashMap<u32, Vec<HashSet<VmType<&'a str>>>>,
-  ) -> Result<Vec<Option<VmType<&'a str>>>> {
+  ) -> Result<GraphTypeInfo<'a>> {
     let vm = self.vm;
     let g = &self.vm.script.graphs[graph_index];
     if let Some(x) = g.output {
@@ -758,7 +759,10 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
       }
     }
 
-    Ok(types)
+    Ok(GraphTypeInfo {
+      nodes: types,
+      params,
+    })
   }
 
   fn validate_subgraph_call(

@@ -21,6 +21,9 @@ pub enum SerializeError {
 
   #[error("type mismatch")]
   TypeMismatch,
+
+  #[error("type mismatch during unwrapping")]
+  UnwrapTypeMismatch,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -37,6 +40,13 @@ pub enum SerializedVmValue {
 pub enum Never {}
 
 impl SerializedVmValue {
+  pub fn try_unwrap_bool(&self) -> Result<bool> {
+    match self {
+      Self::Bool(x) => Ok(*x),
+      _ => Err(SerializeError::UnwrapTypeMismatch.into()),
+    }
+  }
+
   pub fn encode(v: &VmValue) -> Result<Self> {
     match v {
       VmValue::Map(x) => Ok(Self::Map(
