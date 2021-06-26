@@ -3,7 +3,10 @@ use std::{collections::BTreeMap, sync::Arc};
 use anyhow::Result;
 
 use crate::{
-  data::{treewalker::vm_value::VmMapValue, value::PrimitiveValue},
+  data::{
+    treewalker::vm_value::{VmListNode, VmListValue, VmMapValue},
+    value::PrimitiveValue,
+  },
   schema::compile::PrimitiveType,
 };
 
@@ -24,6 +27,7 @@ pub enum SerializeError {
 #[serde(untagged)]
 pub enum SerializedVmValue {
   Map(BTreeMap<String, SerializedVmValue>),
+  List(Vec<SerializedVmValue>),
   String(String),
   Bool(bool),
   Null(Option<Never>),
@@ -49,6 +53,15 @@ impl SerializedVmValue {
         PrimitiveValue::Int64(x) => Ok(Self::String(format!("{}", x))),
         PrimitiveValue::String(x) => Ok(Self::String(x.clone())),
       },
+      VmValue::List(x) => {
+        let mut n = x.node.as_ref();
+        let mut out = vec![];
+        while let Some(x) = n {
+          out.push(Self::encode(&*x.value)?);
+          n = x.next.as_ref();
+        }
+        Ok(Self::List(out))
+      }
       _ => {
         log::debug!("encode: unserializable: {:?}", v);
         Err(SerializeError::Unserializable.into())
@@ -73,6 +86,22 @@ impl SerializedVmValue {
           }
         }
         Ok(VmValue::Map(res))
+      }
+      (S::List(x), VmType::List(list_ty)) => {
+        let mut res = VmListValue {
+          member_ty: (*list_ty.ty).clone(),
+          node: None,
+        };
+        let mut current = &mut res.node;
+        for item in x {
+          let v = item.decode(&*list_ty.ty)?;
+          *current = Some(Arc::new(VmListNode {
+            value: Arc::new(v),
+            next: None,
+          }));
+          current = &mut Arc::get_mut(current.as_mut().unwrap()).unwrap().next;
+        }
+        Ok(VmValue::List(res))
       }
       (S::Null(None), _) => Ok(VmValue::Null(ty.clone())),
       (S::Bool(x), VmType::Bool) => Ok(VmValue::Bool(*x)),
