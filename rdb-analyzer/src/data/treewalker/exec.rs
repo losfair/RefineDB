@@ -7,14 +7,14 @@ use std::{
 
 use anyhow::Result;
 use async_recursion::async_recursion;
-use rpds::RedBlackTreeMapSync;
+use rpds::{ListSync, RedBlackTreeMapSync};
 
 use crate::{
   data::{
     kv::{KeyValueStore, KvTransaction},
     pathwalker::PathWalker,
     treewalker::vm_value::{
-      VmListNode, VmListValue, VmMapValue, VmSetType, VmSetValue, VmSetValueKind, VmTableValue,
+      VmListValue, VmMapValue, VmSetType, VmSetValue, VmSetValueKind, VmTableValue,
       VmTableValueKind, VmType, VmValue,
     },
     value::PrimitiveValue,
@@ -274,15 +274,14 @@ impl<'a, 'b> Executor<'a, 'b> {
           VmValue::List(x) => x,
           _ => unreachable!(),
         };
-        let mut node = list.node.as_ref();
         let mut members = BTreeMap::new();
         let (primary_key, _) = VmType::Set(VmSetType {
           ty: Box::new(list.member_ty.clone()),
         })
         .set_primary_key(self.vm.schema)
         .expect("inconsistency: primary key not found");
-        while let Some(n) = node {
-          let primary_key_value = match &n.value.unwrap_table().kind {
+        for n in &list.node {
+          let primary_key_value = match &n.unwrap_table().kind {
             VmTableValueKind::Fresh(x) => x
               .get(primary_key)
               .unwrap()
@@ -292,8 +291,7 @@ impl<'a, 'b> Executor<'a, 'b> {
               return Err(ExecError::NotImplemented("table copy is not implemented".into()).into())
             }
           };
-          members.insert(primary_key_value.to_vec(), n.value.clone());
-          node = n.next.as_ref();
+          members.insert(primary_key_value.to_vec(), n.clone());
         }
         let set = VmSetValue {
           member_ty: list.member_ty.clone(),
@@ -533,7 +531,7 @@ impl<'a, 'b> Executor<'a, 'b> {
         let member_ty = self.vm.types.get(*member_ty as usize).unwrap().clone();
         Some(Arc::new(VmValue::List(VmListValue {
           member_ty,
-          node: None,
+          node: ListSync::new_sync(),
         })))
       }
       TwGraphNode::PrependToList => {
@@ -544,10 +542,7 @@ impl<'a, 'b> Executor<'a, 'b> {
         };
         Some(Arc::new(VmValue::List(VmListValue {
           member_ty: list.member_ty.clone(),
-          node: Some(Arc::new(VmListNode {
-            value,
-            next: list.node.clone(),
-          })),
+          node: list.node.push_front(value),
         })))
       }
       TwGraphNode::PopFromList => {
@@ -555,10 +550,10 @@ impl<'a, 'b> Executor<'a, 'b> {
           VmValue::List(x) => x,
           _ => unreachable!(),
         };
-        Some(Arc::new(match &list.node {
+        Some(Arc::new(match list.node.drop_first() {
           Some(x) => VmValue::List(VmListValue {
             member_ty: list.member_ty.clone(),
-            node: x.next.clone(),
+            node: x,
           }),
           None => VmValue::Null(VmType::from(&*params[0])),
         }))
@@ -568,8 +563,9 @@ impl<'a, 'b> Executor<'a, 'b> {
           VmValue::List(x) => x,
           _ => unreachable!(),
         };
-        Some(match &list.node {
-          Some(x) => x.value.clone(),
+
+        Some(match list.node.first() {
+          Some(x) => x.clone(),
           None => Arc::new(VmValue::Null(list.member_ty.clone())),
         })
       }
@@ -588,9 +584,8 @@ impl<'a, 'b> Executor<'a, 'b> {
         ];
         match &**list_or_set {
           VmValue::List(list) => {
-            let mut node = list.node.as_ref();
-            while let Some(n) = node {
-              subgraph_params[2] = n.value.clone();
+            for n in &list.node {
+              subgraph_params[2] = n.clone();
               let output = self
                 .recursively_run_graph(
                   *subgraph_index as usize,
@@ -601,7 +596,6 @@ impl<'a, 'b> Executor<'a, 'b> {
                 .await?
                 .expect("inconsistency: ReduceList did not get an output from subgraph");
               subgraph_params[1] = output;
-              node = n.next.as_ref();
             }
           }
           VmValue::Set(set) => {

@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::{
   data::{
-    treewalker::vm_value::{VmListNode, VmListValue, VmMapValue},
+    treewalker::vm_value::{VmListValue, VmMapValue},
     value::PrimitiveValue,
   },
   schema::compile::PrimitiveType,
@@ -64,7 +64,10 @@ impl SerializedVmValue {
       _ => Ok(()),
     }
   }
-  pub fn try_unwrap_map(&self, required_fields: &[&str]) -> Result<&BTreeMap<String, SerializedVmValue>> {
+  pub fn try_unwrap_map(
+    &self,
+    required_fields: &[&str],
+  ) -> Result<&BTreeMap<String, SerializedVmValue>> {
     match self {
       Self::Map(x) => {
         for f in required_fields {
@@ -101,12 +104,11 @@ impl SerializedVmValue {
         PrimitiveValue::String(x) => Ok(Self::String(x.clone())),
       },
       VmValue::List(x) => {
-        let mut n = x.node.as_ref();
-        let mut out = vec![];
-        while let Some(x) = n {
-          out.push(Self::encode(&*x.value)?);
-          n = x.next.as_ref();
-        }
+        let out = x
+          .node
+          .iter()
+          .map(|x| Self::encode(&**x))
+          .collect::<Result<_>>()?;
         Ok(Self::List(out))
       }
       _ => {
@@ -135,19 +137,13 @@ impl SerializedVmValue {
         Ok(VmValue::Map(res))
       }
       (S::List(x), VmType::List(list_ty)) => {
-        let mut res = VmListValue {
+        let res = VmListValue {
           member_ty: (*list_ty.ty).clone(),
-          node: None,
+          node: x
+            .iter()
+            .map(|x| x.decode(&*list_ty.ty).map(Arc::new))
+            .collect::<Result<_>>()?,
         };
-        let mut current = &mut res.node;
-        for item in x {
-          let v = item.decode(&*list_ty.ty)?;
-          *current = Some(Arc::new(VmListNode {
-            value: Arc::new(v),
-            next: None,
-          }));
-          current = &mut Arc::get_mut(current.as_mut().unwrap()).unwrap().next;
-        }
         Ok(VmValue::List(res))
       }
       (S::Null(None), _) => Ok(VmValue::Null(ty.clone())),

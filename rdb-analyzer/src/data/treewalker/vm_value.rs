@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rpds::RedBlackTreeMapSync;
+use rpds::{ListSync, RedBlackTreeMapSync};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 use thiserror::Error;
@@ -29,13 +29,7 @@ pub enum VmValue<'a> {
 #[derive(Debug, PartialEq)]
 pub struct VmListValue<'a> {
   pub member_ty: VmType<&'a str>,
-  pub node: Option<Arc<VmListNode<'a>>>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct VmListNode<'a> {
-  pub value: Arc<VmValue<'a>>,
-  pub next: Option<Arc<VmListNode<'a>>>,
+  pub node: ListSync<Arc<VmValue<'a>>>,
 }
 
 #[derive(Debug, PartialEq)]
