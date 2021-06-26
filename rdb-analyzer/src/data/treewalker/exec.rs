@@ -89,9 +89,12 @@ impl<'a, 'b> Executor<'a, 'b> {
     graph_index: usize,
     graph_params: &[Arc<VmValue<'a>>],
   ) -> Result<Option<Arc<VmValue<'a>>>> {
-    self
-      .recursively_run_graph(graph_index, graph_params, 0)
-      .await
+    let txn = self.kv.begin_transaction().await?;
+    let ret = self
+      .recursively_run_graph(graph_index, graph_params, 0, &*txn)
+      .await?;
+    txn.commit().await?;
+    Ok(ret)
   }
 
   async fn recursively_run_graph(
@@ -99,6 +102,7 @@ impl<'a, 'b> Executor<'a, 'b> {
     graph_index: usize,
     graph_params: &[Arc<VmValue<'a>>],
     recursion_depth: usize,
+    txn: &dyn KvTransaction,
   ) -> Result<Option<Arc<VmValue<'a>>>> {
     if recursion_depth >= MAX_RECURSION_DEPTH {
       return Err(ExecError::MaxRecursionDepthExceeded(recursion_depth).into());
@@ -114,7 +118,6 @@ impl<'a, 'b> Executor<'a, 'b> {
       .collect();
     let mut precondition_satisfied: Vec<bool> =
       g.nodes.iter().map(|(_, _, x)| x.is_none()).collect();
-    let txn = self.kv.begin_transaction().await?;
 
     // The initial batch
     let mut futures: Vec<Pin<Box<dyn Future<Output = (u32, Result<Option<Arc<VmValue<'a>>>>)>>>> =
@@ -236,9 +239,6 @@ impl<'a, 'b> Executor<'a, 'b> {
         }
       }
     }
-
-    drop(futures);
-    txn.commit().await?;
     Ok(ret)
   }
 
@@ -493,7 +493,7 @@ impl<'a, 'b> Executor<'a, 'b> {
       TwGraphNode::Nop => Some(params[0].clone()),
       TwGraphNode::Call(subgraph_index) => {
         let output = self
-          .recursively_run_graph(*subgraph_index as usize, &params, recursion_depth)
+          .recursively_run_graph(*subgraph_index as usize, &params, recursion_depth, txn)
           .await?;
         output
       }
@@ -590,7 +590,12 @@ impl<'a, 'b> Executor<'a, 'b> {
             while let Some(n) = node {
               subgraph_params[2] = n.value.clone();
               let output = self
-                .recursively_run_graph(*subgraph_index as usize, &subgraph_params, recursion_depth)
+                .recursively_run_graph(
+                  *subgraph_index as usize,
+                  &subgraph_params,
+                  recursion_depth,
+                  txn,
+                )
                 .await?
                 .expect("inconsistency: ReduceList did not get an output from subgraph");
               subgraph_params[1] = output;
@@ -626,7 +631,12 @@ impl<'a, 'b> Executor<'a, 'b> {
                 kind: VmTableValueKind::Resident(walker),
               }));
               let output = self
-                .recursively_run_graph(*subgraph_index as usize, &subgraph_params, recursion_depth)
+                .recursively_run_graph(
+                  *subgraph_index as usize,
+                  &subgraph_params,
+                  recursion_depth,
+                  txn,
+                )
                 .await?
                 .expect("inconsistency: ReduceList did not get an output from subgraph");
               subgraph_params[1] = output;
