@@ -39,7 +39,7 @@ impl ExecContext {
     if param_types.len() != params.len() {
       return Err(ExecError::ParamCountMismatch(param_types.len(), params.len()).into());
     }
-    let executor = Executor::new(self.vm(), kv, self.type_info());
+    let mut executor = Executor::new(self.vm(), kv, self.type_info());
     let params = params
       .iter()
       .zip(param_types)

@@ -20,7 +20,11 @@ pub const SCHEMA: &str = include_str!("./system_schema.rschema");
 pub const SYS_RQL: &str = include_str!("./sys.rql");
 
 impl SystemSchema {
-  pub async fn new(migration_hash: Option<String>, store: &dyn KeyValueStore, meta_store: &dyn KeyValueStore) -> Self {
+  pub async fn new(
+    migration_hash: Option<String>,
+    store: &dyn KeyValueStore,
+    meta_store: &dyn KeyValueStore,
+  ) -> Self {
     let schema = compile(&parse(&Bump::new(), SCHEMA).unwrap()).unwrap();
     let txn = meta_store.begin_transaction().await.unwrap();
     let old_schema_text = txn

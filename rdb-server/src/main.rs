@@ -70,7 +70,12 @@ async fn run() -> Result<()> {
     panic!("no kv backend selected");
   }
 
-  let system_schema = SystemSchema::new(opt.migration_hash.clone(), &*system_metadata_store).await;
+  let system_schema = SystemSchema::new(
+    opt.migration_hash.clone(),
+    &*system_store,
+    &*system_metadata_store,
+  )
+  .await;
 
   set_state(ServerState {
     data_store_generator,

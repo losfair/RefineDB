@@ -79,7 +79,7 @@ pub fn run_vm_query<'a>(
   type_info: &GlobalTypeInfo<'a>,
   query: &VmGraphQuery,
 ) -> Result<Option<SerializedVmValue>> {
-  let executor = Executor::new(vm, kv, type_info);
+  let mut executor = Executor::new(vm, kv, type_info);
   let (i, g) = vm
     .script
     .graphs
