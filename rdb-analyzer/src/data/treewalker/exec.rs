@@ -3,16 +3,18 @@ use std::{
   future::Future,
   pin::Pin,
   sync::{Arc, Mutex},
+  time::Duration,
 };
 
 use anyhow::Result;
 use async_recursion::async_recursion;
+use rand::Rng;
 use rpds::{ListSync, RedBlackTreeMapSync};
 use smallvec::{smallvec, SmallVec};
 
 use crate::{
   data::{
-    kv::{KeyValueStore, KvTransaction},
+    kv::{KeyValueStore, KvError, KvTransaction},
     pathwalker::PathWalker,
     treewalker::vm_value::{
       VmListValue, VmMapValue, VmSetType, VmSetValue, VmSetValueKind, VmTableValue,
@@ -42,6 +44,7 @@ pub struct Executor<'a, 'b> {
   fire_rule_tables: Vec<FireRuleTable>,
   path_integrity_assertions: Mutex<HashMap<Vec<u8>, BTreeSet<Vec<&'a str>>>>,
   yield_fn: Option<fn() -> Pin<Box<dyn Future<Output = ()> + Send>>>,
+  sleep_fn: Option<fn(Duration) -> Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
 
 #[derive(Clone)]
@@ -83,6 +86,9 @@ pub enum ExecError {
 
   #[error("path integrity check failed: missing path(s): {0}")]
   PathIntegrityFailure(String),
+
+  #[error("conflict after retries")]
+  ConflictAfterRetries,
 }
 
 const MAX_RECURSION_DEPTH: usize = 128;
@@ -104,6 +110,7 @@ impl<'a, 'b> Executor<'a, 'b> {
       fire_rule_tables,
       path_integrity_assertions: Mutex::new(HashMap::new()),
       yield_fn: None,
+      sleep_fn: None,
     }
   }
 
@@ -111,43 +118,61 @@ impl<'a, 'b> Executor<'a, 'b> {
     self.yield_fn = Some(f);
   }
 
+  pub fn set_sleep_fn(&mut self, f: fn(Duration) -> Pin<Box<dyn Future<Output = ()> + Send>>) {
+    self.sleep_fn = Some(f);
+  }
+
   pub async fn run_graph(
     &mut self,
     graph_index: usize,
     graph_params: &[Arc<VmValue<'a>>],
   ) -> Result<Option<Arc<VmValue<'a>>>> {
-    self.path_integrity_assertions.get_mut().unwrap().clear();
-    let txn = self.kv.begin_transaction().await?;
-    let ret = self
-      .recursively_run_graph(graph_index, graph_params, 0, &*txn)
-      .await?;
-    let assertions = self.path_integrity_assertions.get_mut().unwrap();
-    let checks = assertions.iter().map(|(key, segments)| {
-      let txn = &*txn;
-      async move { txn.get(key).await.map(|x| (x.is_some(), segments)) }
-    });
-    let res = futures::future::join_all(checks)
-      .await
-      .into_iter()
-      .collect::<Result<Vec<_>>>()?;
-    let mut failures = Vec::new();
-    for (exists, segments) in res.iter() {
-      if !*exists {
-        failures.push(format!(
-          "{}",
-          segments
-            .iter()
-            .map(|x| x.join("."))
-            .collect::<Vec<_>>()
-            .join(", ")
-        ));
+    for _ in 0..10 {
+      self.path_integrity_assertions.get_mut().unwrap().clear();
+      let txn = self.kv.begin_transaction().await?;
+      let ret = self
+        .recursively_run_graph(graph_index, graph_params, 0, &*txn)
+        .await?;
+      let assertions = self.path_integrity_assertions.get_mut().unwrap();
+      let checks = assertions.iter().map(|(key, segments)| {
+        let txn = &*txn;
+        async move { txn.get(key).await.map(|x| (x.is_some(), segments)) }
+      });
+      let res = futures::future::join_all(checks)
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?;
+      let mut failures = Vec::new();
+      for (exists, segments) in res.iter() {
+        if !*exists {
+          failures.push(format!(
+            "{}",
+            segments
+              .iter()
+              .map(|x| x.join("."))
+              .collect::<Vec<_>>()
+              .join(", ")
+          ));
+        }
+      }
+      if !failures.is_empty() {
+        return Err(ExecError::PathIntegrityFailure(failures.join("; ")).into());
+      }
+
+      match txn.commit().await {
+        Ok(()) => {
+          return Ok(ret);
+        }
+        Err(KvError::Conflict) => {
+          if let Some(f) = self.sleep_fn {
+            let delay_ms = rand::thread_rng().gen_range(1..20);
+            f(Duration::from_millis(delay_ms as u64)).await;
+          }
+        }
+        Err(x) => return Err(x.into()),
       }
     }
-    if !failures.is_empty() {
-      return Err(ExecError::PathIntegrityFailure(failures.join("; ")).into());
-    }
-    txn.commit().await?;
-    Ok(ret)
+    Err(ExecError::ConflictAfterRetries.into())
   }
 
   #[async_recursion]
