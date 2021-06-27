@@ -7,8 +7,8 @@ type DeploymentBasicInfoMap = map {
 type DeploymentFullMap = map {
   id: string,
   description: string,
-  schema: string,
-  plan: string,
+  `schema`: string,
+  plan: bytes,
   create_time: int64,
 };
 
@@ -39,7 +39,7 @@ export graph add_or_update_deployment(root: schema, namespace_id: string, deploy
   if !is_present ns {
     r1 = false;
   } else {
-    s_insert ns.deployments deployment;
+    s_insert ns.deployments $ build_table(Deployment) deployment;
     r2 = true;
   }
   return select r1 r2;
@@ -48,17 +48,17 @@ export graph add_or_update_deployment(root: schema, namespace_id: string, deploy
 export graph get_deployment(root: schema, namespace_id: string, deployment_id: string): DeploymentFullMap {
   ns = point_get root.system.namespaces namespace_id;
   if !is_present ns {
-    r1 = null<list<DeploymentFullMap>>;
+    r1 = null<DeploymentFullMap>;
   } else {
     depl = point_get ns.deployments deployment_id;
     if !is_present depl {
-      r2 = null<list<DeploymentFullMap>>;
+      r2 = null<DeploymentFullMap>;
     } else {
-      r3 = m_insert(id) item.id $
-        m_insert(create_time) item.create_time $
-        m_insert(description) item.description $
-        m_insert(schema) item.schema $
-        m_insert(plan) item.plan $
+      r3 = m_insert(id) depl.id $
+        m_insert(create_time) depl.create_time $
+        m_insert(description) depl.description $
+        m_insert(`schema`) depl.`schema` $
+        m_insert(plan) depl.plan $
         create_map;
     }
   }
