@@ -20,6 +20,7 @@ mod kv_backend;
 mod opt;
 mod server;
 mod state;
+mod sysquery;
 mod system;
 mod util;
 

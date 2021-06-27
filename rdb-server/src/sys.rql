@@ -14,10 +14,15 @@ type DeploymentFullMap = map {
 
 type NamespaceMap = map {
   id: string,
+  kv_prefix: bytes,
   create_time: int64,
 };
 
-export graph add_namespace(root: schema, namespace_id: string, create_time: int64): bool {
+export graph ns_to_kv_prefix(root: schema, namespace_id: string): bytes {
+  return (point_get root.system.namespaces namespace_id).kv_prefix;
+}
+
+export graph add_namespace(root: schema, namespace_id: string, kv_prefix: bytes, create_time: int64): bool {
   ns = root.system.namespaces;
   if is_present $ point_get ns namespace_id {
     r1 = false;
@@ -25,6 +30,7 @@ export graph add_namespace(root: schema, namespace_id: string, create_time: int6
     s_insert root.system.namespaces $
       build_table(Namespace) $
       m_insert(id) namespace_id $
+      m_insert(kv_prefix) kv_prefix $
       m_insert(deployments) empty_set<Deployment> $
       m_insert(query_scripts) empty_set<QueryScript> $
       m_insert(create_time) create_time $
@@ -73,6 +79,7 @@ graph fold_namespaces(_unused: map{}, current: list<NamespaceMap>, item: Namespa
   return (
     m_insert(id) item.id $
       m_insert(create_time) item.create_time $
+      m_insert(kv_prefix) item.kv_prefix $
       create_map
   ) : current;
 }

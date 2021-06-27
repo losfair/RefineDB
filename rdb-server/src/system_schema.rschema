@@ -5,6 +5,7 @@ type System {
 type Namespace {
   @primary
   id: string,
+  kv_prefix: bytes,
   deployments: set<Deployment>,
   query_scripts: set<QueryScript>,
   create_time: int64,

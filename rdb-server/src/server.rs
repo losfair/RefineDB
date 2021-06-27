@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use async_trait::async_trait;
 use bumpalo::Bump;
 use maplit::btreemap;
+use rand::RngCore;
 use rdb_analyzer::data::fixup::migrate_schema;
 use rdb_analyzer::data::treewalker::serialize::SerializedVmValue;
 use rdb_analyzer::schema::compile::compile;
@@ -15,6 +16,7 @@ use rdb_proto::tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 use crate::state::get_state;
+use crate::sysquery::ns_to_kv_prefix;
 use crate::util::current_millis;
 use thiserror::Error;
 
@@ -22,6 +24,9 @@ use thiserror::Error;
 pub enum ServerError {
   #[error("invalid storage plan")]
   InvalidStoragePlan,
+
+  #[error("namespace does not exist")]
+  NonExistingNamespace,
 }
 
 pub struct ControlServer;
@@ -34,6 +39,10 @@ impl RdbControl for ControlServer {
   ) -> Result<Response<CreateNamespaceReply>, Status> {
     let r = request.get_ref();
     let st = get_state();
+
+    let mut kv_prefix: [u8; 16] = [0u8; 16];
+    rand::thread_rng().fill_bytes(&mut kv_prefix);
+
     let res = st
       .system_schema
       .exec_ctx
@@ -43,6 +52,7 @@ impl RdbControl for ControlServer {
         &[
           SerializedVmValue::Null(None),
           SerializedVmValue::String(r.id.clone()),
+          SerializedVmValue::String(base64::encode(&kv_prefix)),
           SerializedVmValue::String(format!("{}", current_millis())),
         ],
       )
@@ -137,7 +147,8 @@ impl RdbControl for ControlServer {
     }
 
     // Try migration
-    let kv = (st.data_store_generator)(&r.namespace_id);
+    let kv_prefix = ns_to_kv_prefix(&r.namespace_id).await.translate_err()?;
+    let kv = (st.data_store_generator)(&kv_prefix);
     migrate_schema(&new_schema, &generated_plan, &*kv)
       .await
       .translate_err()?;

@@ -3,7 +3,7 @@ use rdb_analyzer::data::kv::KeyValueStore;
 
 use crate::system::SystemSchema;
 
-pub type DataStoreGenerator = Box<dyn Fn(&str) -> Box<dyn KeyValueStore> + Send + Sync>;
+pub type DataStoreGenerator = Box<dyn Fn(&[u8]) -> Box<dyn KeyValueStore> + Send + Sync>;
 
 pub struct ServerState {
   pub data_store_generator: DataStoreGenerator,
