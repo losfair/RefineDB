@@ -10,7 +10,7 @@ pub enum SysQueryError {
   NamespaceNotFound,
 }
 
-pub async fn ns_to_kv_prefix(ns_id: &str) -> Result<Vec<u8>> {
+pub async fn ns_to_kv_prefix_with_appended_zero(ns_id: &str) -> Result<Vec<u8>> {
   let st = get_state();
   let res = st
     .system_schema
@@ -26,6 +26,10 @@ pub async fn ns_to_kv_prefix(ns_id: &str) -> Result<Vec<u8>> {
     .await?;
   match res {
     SerializedVmValue::Null(_) => Err(SysQueryError::NamespaceNotFound.into()),
-    _ => Ok(base64::decode(res.try_unwrap_string()?)?),
+    _ => Ok({
+      let mut x = base64::decode(res.try_unwrap_string()?)?;
+      x.push(0);
+      x
+    }),
   }
 }

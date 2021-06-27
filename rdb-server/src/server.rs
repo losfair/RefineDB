@@ -16,7 +16,7 @@ use rdb_proto::tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 use crate::state::get_state;
-use crate::sysquery::ns_to_kv_prefix;
+use crate::sysquery::ns_to_kv_prefix_with_appended_zero;
 use crate::util::current_millis;
 use thiserror::Error;
 
@@ -105,6 +105,19 @@ impl RdbControl for ControlServer {
   ) -> Result<Response<DeleteNamespaceReply>, Status> {
     let r = request.get_ref();
     let st = get_state();
+
+    // Delete all data in this namespace
+    if let Ok(mut kv_prefix) = ns_to_kv_prefix_with_appended_zero(&r.id).await {
+      // Remove trailing zero
+      let popped = kv_prefix.pop().unwrap();
+      assert_eq!(popped, 0);
+
+      let full_range = (st.data_store_generator)(&kv_prefix);
+      let txn = full_range.begin_transaction().await.translate_err()?;
+      txn.delete_range(&[0x00], &[0x01]).await.translate_err()?;
+      txn.commit().await.translate_err()?;
+    }
+
     let res = st
       .system_schema
       .exec_ctx
@@ -147,7 +160,9 @@ impl RdbControl for ControlServer {
     }
 
     // Try migration
-    let kv_prefix = ns_to_kv_prefix(&r.namespace_id).await.translate_err()?;
+    let kv_prefix = ns_to_kv_prefix_with_appended_zero(&r.namespace_id)
+      .await
+      .translate_err()?;
     let kv = (st.data_store_generator)(&kv_prefix);
     migrate_schema(&new_schema, &generated_plan, &*kv)
       .await

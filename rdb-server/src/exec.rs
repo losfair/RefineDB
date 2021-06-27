@@ -63,6 +63,7 @@ impl ExecContext {
     }
     let mut executor = Executor::new(self.vm(), kv, self.type_info());
     executor.set_yield_fn(|| Box::pin(yield_now()));
+    executor.set_sleep_fn(|x| Box::pin(sleep(x)));
     let params = params
       .iter()
       .zip(param_types)
