@@ -18,6 +18,19 @@ type NamespaceMap = map {
   create_time: int64,
 };
 
+type QueryScriptFullMap = map {
+  id: string,
+  associated_deployment: string,
+  script: string,
+  create_time: int64,
+};
+
+type QueryScriptBasicInfoMap = map {
+  id: string,
+  associated_deployment: string,
+  create_time: int64,
+};
+
 export graph ns_to_kv_prefix(root: schema, namespace_id: string): bytes {
   return (point_get root.system.namespaces namespace_id).kv_prefix;
 }
@@ -112,4 +125,53 @@ export graph delete_namespace(root: schema, namespace_id: string): bool {
     r2 = false;
   }
   return select r1 r2;
+}
+
+export graph add_or_update_query_script(root: schema, namespace_id: string, qs: QueryScriptFullMap): bool {
+  ns = point_get root.system.namespaces namespace_id;
+  if !is_present ns {
+    r1 = false;
+  } else {
+    s_insert ns.query_scripts $ build_table(QueryScript) qs;
+    r2 = true;
+  }
+  return select r1 r2;
+}
+
+export graph get_query_script(root: schema, namespace_id: string, qs_id: string): QueryScriptFullMap {
+  ns = point_get root.system.namespaces namespace_id;
+  if !is_present ns {
+    r1 = null<QueryScriptFullMap>;
+  } else {
+    qs = point_get ns.query_scripts qs_id;
+    if !is_present qs {
+      r2 = null<QueryScriptFullMap>;
+    } else {
+      r3 = m_insert(id) qs.id $
+        m_insert(create_time) qs.create_time $
+        m_insert(associated_deployment) qs.associated_deployment $
+        m_insert(script) qs.script $
+        create_map;
+    }
+  }
+  return select r1 $ select r2 r3;
+}
+
+export graph list_query_scripts(root: schema, namespace_id: string): list<QueryScriptBasicInfoMap> {
+  ns = point_get root.system.namespaces namespace_id;
+  if !is_present ns {
+    r1 = null<list<QueryScriptBasicInfoMap>>;
+  } else {
+    r2 = reduce(fold_query_scripts) create_map create_list(QueryScriptBasicInfoMap) ns.query_scripts;
+  }
+  return select r1 r2;
+}
+
+graph fold_query_scripts(_unused: map{}, current: list<QueryScriptBasicInfoMap>, item: QueryScript): list<QueryScriptBasicInfoMap> {
+  return (
+    m_insert(id) item.id $
+      m_insert(associated_deployment) item.associated_deployment $
+      m_insert(create_time) item.create_time $
+      create_map
+  ) : current;
 }
