@@ -108,7 +108,12 @@ async fn main() -> Result<()> {
         id: x.namespace_id.clone(),
       });
       let res = client.create_namespace(req).await?;
-      println!("{:?}", res);
+      println!(
+        "{}",
+        serde_json::to_string(&serde_json::json!({
+          "created": res.get_ref().created,
+        }))?
+      );
     }
     SubCommand::ListNamespace(_) => {
       let req = Request::new(ListNamespaceRequest {});
@@ -133,7 +138,12 @@ async fn main() -> Result<()> {
         id: x.namespace_id.clone(),
       });
       let res = client.delete_namespace(req).await?;
-      println!("{:?}", res);
+      println!(
+        "{}",
+        serde_json::to_string(&serde_json::json!({
+          "deleted": res.get_ref().deleted,
+        }))?
+      );
     }
     SubCommand::CreateDeployment(subopts) => {
       let schema_text = std::fs::read_to_string(&subopts.schema)?;
@@ -174,7 +184,12 @@ async fn main() -> Result<()> {
         .deployment_id
         .as_ref()
         .ok_or_else(|| CliError::DeploymentNotCreated)?;
-      println!("{}", deployment_id.id);
+      println!(
+        "{}",
+        serde_json::to_string(&serde_json::json!({
+          "id": deployment_id.id,
+        }))?
+      );
     }
     SubCommand::ListDeployment(subopts) => {
       let req = Request::new(ListDeploymentRequest {
