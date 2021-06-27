@@ -22,36 +22,36 @@ pub fn print_diff(plan1: &StoragePlan, plan2: &StoragePlan) -> (usize, usize) {
   let diff = TextDiff::from_lines(&plan1, &plan2);
   for (idx, group) in diff.grouped_ops(3).iter().enumerate() {
     if idx > 0 {
-      println!("{:-^1$}", "-", 80);
+      eprintln!("{:-^1$}", "-", 80);
     }
     for op in group {
       for change in diff.iter_inline_changes(op) {
         let (sign, s) = match change.tag() {
           ChangeTag::Delete => {
             num_delete += 1;
-            ("-", Style::new().red())
+            ("-", Style::new().for_stderr().red())
           }
           ChangeTag::Insert => {
             num_insert += 1;
-            ("+", Style::new().green())
+            ("+", Style::new().for_stderr().green())
           }
-          ChangeTag::Equal => (" ", Style::new().dim()),
+          ChangeTag::Equal => (" ", Style::new().for_stderr().dim()),
         };
-        print!(
+        eprint!(
           "{}{} |{}",
-          console::style(Line(change.old_index())).dim(),
-          console::style(Line(change.new_index())).dim(),
+          console::style(Line(change.old_index())).for_stderr().dim(),
+          console::style(Line(change.new_index())).for_stderr().dim(),
           s.apply_to(sign).bold(),
         );
         for (emphasized, value) in change.iter_strings_lossy() {
           if emphasized {
-            print!("{}", s.apply_to(value).underlined().on_black());
+            eprint!("{}", s.apply_to(value).underlined().on_black());
           } else {
-            print!("{}", s.apply_to(value));
+            eprint!("{}", s.apply_to(value));
           }
         }
         if change.missing_newline() {
-          println!();
+          eprintln!();
         }
       }
     }
