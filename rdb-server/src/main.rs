@@ -64,7 +64,13 @@ async fn run() -> Result<()> {
     data_store_generator = Box::new(move |namespace| {
       Box::new(FdbKvStore::new(
         db.clone(),
-        keyspace.subspace(&"D").subspace(&namespace).bytes(),
+        &keyspace
+          .subspace(&"D")
+          .bytes()
+          .iter()
+          .copied()
+          .chain(namespace.iter().copied())
+          .collect::<Vec<u8>>(),
       ))
     });
   } else {
