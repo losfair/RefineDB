@@ -29,3 +29,6 @@ rmp-serde = "0.15"
 hex = "0.4"
 sha2 = "0.9"
 base64 = "0.13"
+maplit = "1"
+uuid = { version = "0.8", features = ["v4"] }
+

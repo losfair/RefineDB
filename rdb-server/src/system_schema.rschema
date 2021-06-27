@@ -13,14 +13,16 @@ type Namespace {
 type Deployment {
   @primary
   id: string,
+  description: string,
   schema: string,
-  plan: string,
+  plan: bytes,
   create_time: int64,
 }
 
 type QueryScript {
   @primary
   id: string,
+  associated_deployment: string,
   script: string,
   create_time: int64,
 }

@@ -788,6 +788,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "maplit"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
+
+[[package]]
 name = "memchr"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1317,6 +1323,7 @@ dependencies = [
  "futures",
  "hex",
  "log",
+ "maplit",
  "once_cell",
  "pretty_env_logger",
  "rand 0.8.4",
@@ -1331,6 +1338,7 @@ dependencies = [
  "structopt",
  "thiserror",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -1937,6 +1945,9 @@ name = "uuid"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+dependencies = [
+ "getrandom 0.2.3",
+]
 
 [[package]]
 name = "vec_map"

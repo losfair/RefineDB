@@ -1,5 +1,14 @@
-type DeploymentMap = map {
+type DeploymentBasicInfoMap = map {
   id: string,
+  create_time: int64,
+  description: string,
+};
+
+type DeploymentFullMap = map {
+  id: string,
+  description: string,
+  schema: string,
+  plan: string,
   create_time: int64,
 };
 
@@ -25,6 +34,37 @@ export graph add_namespace(root: schema, namespace_id: string, create_time: int6
   return select r1 r2;
 }
 
+export graph add_or_update_deployment(root: schema, namespace_id: string, deployment: DeploymentFullMap): bool {
+  ns = point_get root.system.namespaces namespace_id;
+  if !is_present ns {
+    r1 = false;
+  } else {
+    s_insert ns.deployments deployment;
+    r2 = true;
+  }
+  return select r1 r2;
+}
+
+export graph get_deployment(root: schema, namespace_id: string, deployment_id: string): DeploymentFullMap {
+  ns = point_get root.system.namespaces namespace_id;
+  if !is_present ns {
+    r1 = null<list<DeploymentFullMap>>;
+  } else {
+    depl = point_get ns.deployments deployment_id;
+    if !is_present depl {
+      r2 = null<list<DeploymentFullMap>>;
+    } else {
+      r3 = m_insert(id) item.id $
+        m_insert(create_time) item.create_time $
+        m_insert(description) item.description $
+        m_insert(schema) item.schema $
+        m_insert(plan) item.plan $
+        create_map;
+    }
+  }
+  return select r1 $ select r2 r3;
+}
+
 export graph list_namespaces(root: schema): list<NamespaceMap> {
   return reduce(fold_namespaces) create_map create_list(NamespaceMap) root.system.namespaces;
 }
@@ -37,20 +77,21 @@ graph fold_namespaces(_unused: map{}, current: list<NamespaceMap>, item: Namespa
   ) : current;
 }
 
-export graph list_deployments(root: schema, namespace_id: string): list<DeploymentMap> {
+export graph list_deployment(root: schema, namespace_id: string): list<DeploymentBasicInfoMap> {
   ns = point_get root.system.namespaces namespace_id;
   if !is_present ns {
-    r1 = null<list<DeploymentMap>>;
+    r1 = null<list<DeploymentBasicInfoMap>>;
   } else {
-    r2 = reduce(fold_deployments) create_map create_list(DeploymentMap) ns.deployments;
+    r2 = reduce(fold_deployments) create_map create_list(DeploymentBasicInfoMap) ns.deployments;
   }
   return select r1 r2;
 }
 
-graph fold_deployments(_unused: map{}, current: list<DeploymentMap>, item: Deployment): list<DeploymentMap> {
+graph fold_deployments(_unused: map{}, current: list<DeploymentBasicInfoMap>, item: Deployment): list<DeploymentBasicInfoMap> {
   return (
     m_insert(id) item.id $
       m_insert(create_time) item.create_time $
+      m_insert(description) item.description $
       create_map
   ) : current;
 }

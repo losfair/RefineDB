@@ -8,7 +8,8 @@ service RdbControl {
   rpc createDeployment(CreateDeploymentRequest) returns (CreateDeploymentReply) {}
   rpc getDeployment(GetDeploymentRequest) returns (GetDeploymentReply) {}
   rpc listDeployment(ListDeploymentRequest) returns (ListDeploymentReply) {}
-//  rpc createQueryScript(CreateQueryScriptRequest) returns (CreateQueryScriptReply) {}
+  rpc createQueryScript(CreateQueryScriptRequest) returns (CreateQueryScriptReply) {}
+  rpc deleteQueryScript(DeleteQueryScriptRequest) returns (DeleteQueryScriptReply) {}
 }
 
 message CreateNamespaceRequest {
@@ -43,10 +44,15 @@ message CreateDeploymentRequest {
   string namespace_id = 1;
   string schema = 2;
   string plan = 3;
+  string description = 4;
 }
 
 message CreateDeploymentReply {
-  string deployment_id = 1;
+  DeploymentId deployment_id = 1;
+}
+
+message DeploymentId {
+  string id = 1;
 }
 
 message GetDeploymentRequest {
@@ -55,8 +61,7 @@ message GetDeploymentRequest {
 }
 
 message GetDeploymentReply {
-  string schema = 1;
-  string plan = 2;
+  DeploymentFullInfo info = 1;
 }
 
 message ListDeploymentRequest {
@@ -70,4 +75,33 @@ message ListDeploymentReply {
 message DeploymentBasicInfo {
   string id = 1;
   int64 create_time = 2;
+  string description = 3;
+}
+
+message DeploymentFullInfo {
+  string id = 1;
+  int64 create_time = 2;
+  string description = 3;
+  string schema = 4;
+  string plan = 5;
+}
+
+message CreateQueryScriptRequest {
+  string namespace_id = 1;
+  string id = 2;
+  string associated_deployment = 3;
+  string script = 4;
+}
+
+message CreateQueryScriptReply {
+  bool created = 1;
+}
+
+message DeleteQueryScriptRequest {
+  string namespace_id = 1;
+  string id = 2;
+}
+
+message DeleteQueryScriptReply {
+  bool deleted = 1;
 }
