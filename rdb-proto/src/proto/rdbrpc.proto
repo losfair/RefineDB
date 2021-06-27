@@ -10,6 +10,8 @@ service RdbControl {
   rpc listDeployment(ListDeploymentRequest) returns (ListDeploymentReply) {}
   rpc deleteDeployment(DeleteDeploymentRequest) returns (DeleteDeploymentReply) {}
   rpc createQueryScript(CreateQueryScriptRequest) returns (CreateQueryScriptReply) {}
+  rpc getQueryScript(GetQueryScriptRequest) returns (GetQueryScriptReply) {}
+  rpc listQueryScript(ListQueryScriptRequest) returns (ListQueryScriptReply) {}
   rpc deleteQueryScript(DeleteQueryScriptRequest) returns (DeleteQueryScriptReply) {}
 }
 
@@ -114,4 +116,34 @@ message DeleteDeploymentRequest {
 
 message DeleteDeploymentReply {
   bool deleted = 1;
+}
+
+message ListQueryScriptRequest {
+  string namespace_id = 1;
+}
+
+message ListQueryScriptReply {
+  repeated QueryScriptBasicInfo query_scripts = 1;
+}
+
+message GetQueryScriptRequest {
+  string namespace_id = 1;
+  string query_script_id = 2;
+}
+
+message GetQueryScriptReply {
+  QueryScriptFullInfo info = 1;
+}
+
+message QueryScriptBasicInfo {
+  string id = 1;
+  string associated_deployment = 2;
+  int64 create_time = 3;
+}
+
+message QueryScriptFullInfo {
+  string id = 1;
+  string associated_deployment = 2;
+  string script = 3;
+  int64 create_time = 4;
 }

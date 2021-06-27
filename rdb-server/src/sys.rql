@@ -187,7 +187,7 @@ export graph delete_query_script(root: schema, namespace_id: string, qs_id: stri
   return select r1 $ select r2 r3;
 }
 
-export graph list_query_scripts(root: schema, namespace_id: string): list<QueryScriptBasicInfoMap> {
+export graph list_query_script(root: schema, namespace_id: string): list<QueryScriptBasicInfoMap> {
   ns = point_get root.system.namespaces namespace_id;
   if !is_present ns {
     r1 = null<list<QueryScriptBasicInfoMap>>;

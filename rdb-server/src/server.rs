@@ -16,7 +16,7 @@ use rdb_proto::tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 use crate::state::get_state;
-use crate::sysquery::ns_to_kv_prefix_with_appended_zero;
+use crate::sysquery::{lookup_query_script, ns_to_kv_prefix_with_appended_zero};
 use crate::util::current_millis;
 use thiserror::Error;
 
@@ -24,9 +24,6 @@ use thiserror::Error;
 pub enum ServerError {
   #[error("invalid storage plan")]
   InvalidStoragePlan,
-
-  #[error("namespace does not exist")]
-  NonExistingNamespace,
 }
 
 pub struct ControlServer;
@@ -396,6 +393,72 @@ impl RdbControl for ControlServer {
     res.check_nonnull().translate_err()?;
     let deleted = res.try_unwrap_bool().translate_err()?;
     Ok(Response::new(DeleteQueryScriptReply { deleted }))
+  }
+
+  async fn get_query_script(
+    &self,
+    request: Request<GetQueryScriptRequest>,
+  ) -> Result<Response<GetQueryScriptReply>, Status> {
+    let r = request.get_ref();
+    let qs = lookup_query_script(&r.namespace_id, &r.query_script_id)
+      .await
+      .translate_err()?;
+    Ok(Response::new(GetQueryScriptReply {
+      info: Some(QueryScriptFullInfo {
+        id: qs.id,
+        associated_deployment: qs.associated_deployment,
+        script: qs.script,
+        create_time: qs.create_time,
+      }),
+    }))
+  }
+
+  async fn list_query_script(
+    &self,
+    request: Request<ListQueryScriptRequest>,
+  ) -> Result<Response<ListQueryScriptReply>, Status> {
+    let r = request.get_ref();
+    let st = get_state();
+    let res = st
+      .system_schema
+      .exec_ctx
+      .run_exported_graph(
+        &*st.system_store,
+        "list_query_script",
+        &[
+          SerializedVmValue::Null(None),
+          SerializedVmValue::String(r.namespace_id.clone()),
+        ],
+      )
+      .await
+      .translate_err()?;
+    res.check_nonnull().translate_err()?;
+    let res = res.try_unwrap_list().translate_err()?;
+    let mut query_scripts: Vec<QueryScriptBasicInfo> = Vec::new();
+    for x in res {
+      let m = x
+        .try_unwrap_map(&["id", "associated_deployment", "create_time"])
+        .translate_err()?;
+      let id = m.get("id").unwrap().try_unwrap_string().translate_err()?;
+      let associated_deployment = m
+        .get("associated_deployment")
+        .unwrap()
+        .try_unwrap_string()
+        .translate_err()?;
+      let create_time: i64 = m
+        .get("create_time")
+        .unwrap()
+        .try_unwrap_string()
+        .translate_err()?
+        .parse::<i64>()
+        .translate_err()?;
+      query_scripts.push(QueryScriptBasicInfo {
+        id: id.clone(),
+        associated_deployment: associated_deployment.clone(),
+        create_time,
+      });
+    }
+    Ok(Response::new(ListQueryScriptReply { query_scripts }))
   }
 }
 
