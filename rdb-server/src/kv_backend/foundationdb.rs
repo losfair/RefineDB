@@ -1,10 +1,11 @@
-use std::{collections::BTreeMap, ops::Range, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use foundationdb::{future::FdbValues, Database, KeySelector, RangeOption, Transaction};
+use foundationdb::{
+  future::FdbValues, options::TransactionOption, Database, KeySelector, RangeOption, Transaction,
+};
 use rdb_analyzer::data::kv::{KeyValueStore, KvError, KvKeyIterator, KvTransaction};
-use tokio::sync::Mutex;
 
 pub struct FdbKvStore {
   db: Arc<Database>,
@@ -14,8 +15,6 @@ pub struct FdbKvStore {
 pub struct FdbTxn {
   inner: Arc<Transaction>,
   prefix: Arc<[u8]>,
-  write_buffer: Mutex<BTreeMap<Vec<u8>, Option<Vec<u8>>>>,
-  range_deletion_buffer: Mutex<Vec<Range<Vec<u8>>>>,
 }
 
 impl FdbKvStore {
@@ -31,11 +30,13 @@ impl FdbKvStore {
 impl KeyValueStore for FdbKvStore {
   async fn begin_transaction(&self) -> Result<Box<dyn KvTransaction>> {
     let txn = self.db.create_trx()?;
+
+    // Required for RefineDB execution semantics
+    txn.set_option(TransactionOption::ReadYourWritesDisable)?;
+
     Ok(Box::new(FdbTxn {
       inner: Arc::new(txn),
       prefix: self.prefix.clone(),
-      write_buffer: Mutex::new(BTreeMap::new()),
-      range_deletion_buffer: Mutex::new(Vec::new()),
     }))
   }
 }
@@ -54,18 +55,27 @@ impl KvTransaction for FdbTxn {
     Ok(res.map(|x| x.to_vec()))
   }
 
-  async fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
-    // Defer writes to commit
-    self
-      .write_buffer
-      .lock()
-      .await
-      .insert(key.to_vec(), Some(value.to_vec()));
+  async fn put(&self, k: &[u8], v: &[u8]) -> Result<()> {
+    let k = self
+      .prefix
+      .iter()
+      .chain(k.iter())
+      .copied()
+      .collect::<Vec<_>>();
+    log::trace!("put {} {}", base64::encode(&k), base64::encode(&v));
+    self.inner.set(&k, &v);
     Ok(())
   }
 
-  async fn delete(&self, key: &[u8]) -> Result<()> {
-    self.write_buffer.lock().await.insert(key.to_vec(), None);
+  async fn delete(&self, k: &[u8]) -> Result<()> {
+    let k = self
+      .prefix
+      .iter()
+      .chain(k.iter())
+      .copied()
+      .collect::<Vec<_>>();
+    log::trace!("clear {}", base64::encode(&k));
+    self.inner.clear(&k);
     Ok(())
   }
 
@@ -93,42 +103,29 @@ impl KvTransaction for FdbTxn {
     }))
   }
 
+  async fn delete_range(&self, start: &[u8], end: &[u8]) -> Result<()> {
+    let start = self
+      .prefix
+      .iter()
+      .chain(start.iter())
+      .copied()
+      .collect::<Vec<_>>();
+    let end = self
+      .prefix
+      .iter()
+      .chain(end.iter())
+      .copied()
+      .collect::<Vec<_>>();
+    log::trace!(
+      "clear_range {} {}",
+      base64::encode(&start),
+      base64::encode(&end)
+    );
+    self.inner.clear_range(&start, &end);
+    Ok(())
+  }
+
   async fn commit(self: Box<Self>) -> Result<(), KvError> {
-    for (k, v) in self.write_buffer.into_inner() {
-      let k = self
-        .prefix
-        .iter()
-        .chain(k.iter())
-        .copied()
-        .collect::<Vec<_>>();
-      if let Some(v) = v {
-        log::trace!("set {} {}", base64::encode(&k), base64::encode(&v));
-        self.inner.set(&k, &v);
-      } else {
-        log::trace!("clear {}", base64::encode(&k));
-        self.inner.clear(&k);
-      }
-    }
-    for x in self.range_deletion_buffer.into_inner() {
-      let start = self
-        .prefix
-        .iter()
-        .chain(x.start.iter())
-        .copied()
-        .collect::<Vec<_>>();
-      let end = self
-        .prefix
-        .iter()
-        .chain(x.end.iter())
-        .copied()
-        .collect::<Vec<_>>();
-      log::trace!(
-        "clear_range {} {}",
-        base64::encode(&start),
-        base64::encode(&end)
-      );
-      self.inner.clear_range(&start, &end);
-    }
     Arc::try_unwrap(self.inner)
       .map_err(|_| {
         log::error!("some iterators are not dropped at commit time");
@@ -145,15 +142,6 @@ impl KvTransaction for FdbTxn {
         }
       })
       .map(|_| ())
-  }
-
-  async fn delete_range(&self, start: &[u8], end: &[u8]) -> Result<()> {
-    self
-      .range_deletion_buffer
-      .lock()
-      .await
-      .push(start.to_vec()..end.to_vec());
-    Ok(())
   }
 }
 
