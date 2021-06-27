@@ -6,6 +6,7 @@ type Namespace {
   @primary
   id: string,
   deployments: set<Deployment>,
+  query_scripts: set<QueryScript>,
   create_time: int64,
 }
 
@@ -14,6 +15,13 @@ type Deployment {
   id: string,
   schema: string,
   plan: string,
+  create_time: int64,
+}
+
+type QueryScript {
+  @primary
+  id: string,
+  script: string,
   create_time: int64,
 }
 

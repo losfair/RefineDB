@@ -17,6 +17,7 @@ export graph add_namespace(root: schema, namespace_id: string, create_time: int6
       build_table(Namespace) $
       m_insert(id) namespace_id $
       m_insert(deployments) empty_set<Deployment> $
+      m_insert(query_scripts) empty_set<QueryScript> $
       m_insert(create_time) create_time $
       create_map;
     r2 = true;
