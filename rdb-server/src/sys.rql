@@ -53,15 +53,19 @@ export graph add_namespace(root: schema, namespace_id: string, kv_prefix: bytes,
   return select r1 r2;
 }
 
-export graph add_or_update_deployment(root: schema, namespace_id: string, deployment: DeploymentFullMap): bool {
+export graph add_deployment(root: schema, namespace_id: string, deployment: DeploymentFullMap): bool {
   ns = point_get root.system.namespaces namespace_id;
   if !is_present ns {
     r1 = false;
   } else {
-    s_insert ns.deployments $ build_table(Deployment) deployment;
-    r2 = true;
+    if is_present $ point_get ns.deployments deployment.id {
+      r2 = false;
+    } else {
+      s_insert ns.deployments $ build_table(Deployment) deployment;
+      r3 = true;
+    }
   }
-  return select r1 r2;
+  return select r1 $ select r2 r3;
 }
 
 export graph get_deployment(root: schema, namespace_id: string, deployment_id: string): DeploymentFullMap {

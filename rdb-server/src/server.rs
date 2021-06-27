@@ -173,7 +173,7 @@ impl RdbControl for ControlServer {
       .exec_ctx
       .run_exported_graph(
         &*st.system_store,
-        "add_or_update_deployment",
+        "add_deployment",
         &[
           SerializedVmValue::Null(None),
           SerializedVmValue::String(r.namespace_id.clone()),
