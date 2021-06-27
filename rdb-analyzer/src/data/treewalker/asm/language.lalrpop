@@ -207,6 +207,9 @@ ExprKindL5: ExprKind<'input> = {
 
 Identifier: &'input str = {
   <s:Token<r"[a-zA-Z_][0-9a-zA-Z_]*">> => state.resolve_str(s),
+
+  // Workaround for identifiers that conflict with keywords
+  <s:Token<r"`[a-zA-Z_][0-9a-zA-Z_]*`">> => state.resolve_str(s.strip_prefix("`").unwrap().strip_suffix("`").unwrap()),
 }
 
 Literal: Literal<'input> = {
