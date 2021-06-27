@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use bumpalo::Bump;
@@ -15,8 +16,9 @@ use rdb_proto::proto::*;
 use rdb_proto::tonic::{Request, Response, Status};
 use uuid::Uuid;
 
+use crate::exec_core::{ExecContext, SchemaContext};
 use crate::state::get_state;
-use crate::sysquery::{lookup_query_script, ns_to_kv_prefix_with_appended_zero};
+use crate::sysquery::{lookup_deployment, lookup_query_script, ns_to_kv_prefix_with_appended_zero};
 use crate::util::current_millis;
 use thiserror::Error;
 
@@ -346,6 +348,17 @@ impl RdbControl for ControlServer {
   ) -> Result<Response<CreateQueryScriptReply>, Status> {
     let r = request.get_ref();
     let st = get_state();
+
+    let depl = lookup_deployment(&r.namespace_id, &r.associated_deployment)
+      .await
+      .translate_err()?;
+
+    // Validation
+    let schema = compile(&parse(&Bump::new(), &depl.schema).translate_err()?).translate_err()?;
+    let plan = StoragePlan::deserialize_compressed(&depl.plan).translate_err()?;
+    let schema_ctx = Arc::new(SchemaContext { schema, plan });
+    ExecContext::load(schema_ctx, &r.script).translate_err()?;
+
     let res = st
       .system_schema
       .exec_ctx

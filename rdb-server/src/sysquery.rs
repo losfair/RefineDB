@@ -20,6 +20,14 @@ pub struct QueryScript {
   pub script: String,
 }
 
+pub struct Deployment {
+  pub id: String,
+  pub description: String,
+  pub schema: String,
+  pub plan: Vec<u8>,
+  pub create_time: i64,
+}
+
 pub async fn ns_to_kv_prefix_with_appended_zero(ns_id: &str) -> Result<Vec<u8>> {
   let st = get_state();
   let res = st
@@ -75,4 +83,34 @@ pub async fn lookup_query_script(ns_id: &str, qs_id: &str) -> Result<QueryScript
       })
     }
   }
+}
+
+pub async fn lookup_deployment(namespace_id: &str, deployment_id: &str) -> Result<Deployment> {
+  let st = get_state();
+  let res = st
+    .system_schema
+    .exec_ctx
+    .run_exported_graph(
+      &*st.system_store,
+      "get_deployment",
+      &[
+        SerializedVmValue::Null(None),
+        SerializedVmValue::String(namespace_id.into()),
+        SerializedVmValue::String(deployment_id.into()),
+      ],
+    )
+    .await?;
+  let res = res.try_unwrap_map(&["id", "create_time", "description", "schema", "plan"])?;
+  let depl = Deployment {
+    id: res.get("id").unwrap().try_unwrap_string()?.clone(),
+    description: res.get("description").unwrap().try_unwrap_string()?.clone(),
+    schema: res.get("schema").unwrap().try_unwrap_string()?.clone(),
+    plan: base64::decode(res.get("plan").unwrap().try_unwrap_string()?)?,
+    create_time: res
+      .get("create_time")
+      .unwrap()
+      .try_unwrap_string()?
+      .parse()?,
+  };
+  Ok(depl)
 }

@@ -8,16 +8,20 @@ use structopt::StructOpt;
 use tokio::runtime::Runtime;
 
 use crate::{
+  httpapi::run_http_server,
   kv_backend::foundationdb::FdbKvStore,
   opt::Opt,
+  query_cache::{QueryCache, QueryCacheParams},
   server::ControlServer,
   state::{set_state, DataStoreGenerator, ServerState},
   system::SystemSchema,
 };
 mod exec;
 mod exec_core;
+mod httpapi;
 mod kv_backend;
 mod opt;
+mod query_cache;
 mod server;
 mod state;
 mod sysquery;
@@ -83,18 +87,25 @@ async fn run() -> Result<()> {
     &*system_metadata_store,
   )
   .await;
+  let query_cache = QueryCache::new(QueryCacheParams {
+    process_memory_threshold_kb: opt.process_memory_threshold_kb,
+  });
 
   set_state(ServerState {
     data_store_generator,
     system_store,
     system_schema,
+    query_cache,
   });
 
   log::info!("RefineDB started.");
 
+  let http_listen = opt.http_listen.clone();
+  tokio::spawn(async move { run_http_server(http_listen).await });
+
   Server::builder()
     .add_service(RdbControlServer::new(ControlServer))
-    .serve(opt.listen.parse()?)
+    .serve(opt.grpc_listen.parse()?)
     .await?;
 
   Ok(())

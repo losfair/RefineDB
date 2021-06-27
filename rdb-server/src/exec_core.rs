@@ -20,8 +20,8 @@ pub struct SchemaContext {
 }
 
 pub struct ExecContext {
-  schema_ctx: Arc<SchemaContext>,
-  script: Box<TwScript>,
+  _schema_ctx: Arc<SchemaContext>,
+  _script: Box<TwScript>,
   dangerous: ManuallyDrop<DangerousExecContext<'static>>,
 }
 
@@ -46,8 +46,8 @@ impl ExecContext {
       std::mem::transmute::<DangerousExecContext<'_>, DangerousExecContext<'static>>(dangerous_ctx)
     });
     Ok(Self {
-      schema_ctx,
-      script,
+      _schema_ctx: schema_ctx,
+      _script: script,
       dangerous: dangerous_ctx,
     })
   }
@@ -58,10 +58,6 @@ impl ExecContext {
 
   pub fn type_info<'a>(&'a self) -> &'a GlobalTypeInfo<'a> {
     &self.dangerous.type_info
-  }
-
-  pub fn schema_ctx(&self) -> &Arc<SchemaContext> {
-    &self.schema_ctx
   }
 
   pub fn root_map<'a>(&'a self) -> &Arc<VmValue<'a>> {
