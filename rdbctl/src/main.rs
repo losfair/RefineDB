@@ -1,9 +1,12 @@
+mod diff;
+
 use std::convert::TryFrom;
 
 use anyhow::Result;
 
 use bumpalo::Bump;
 use clap::{AppSettings, Clap};
+use dialoguer::{theme::ColorfulTheme, Confirm};
 use rdb_analyzer::{
   schema::{compile::compile, grammar::parse},
   storage_plan::{planner::generate_plan_for_schema, StorageKey, StoragePlan},
@@ -16,6 +19,9 @@ use rdb_proto::{
   tonic::Request,
 };
 use thiserror::Error;
+use tokio::task::block_in_place;
+
+use crate::diff::print_diff;
 
 /// RefineDB CLI.
 #[derive(Clap)]
@@ -91,6 +97,9 @@ enum CliError {
 
   #[error("deployment not created")]
   DeploymentNotCreated,
+
+  #[error("aborted by user")]
+  AbortedByUser,
 }
 
 #[tokio::main]
@@ -100,6 +109,14 @@ async fn main() -> Result<()> {
   }
   pretty_env_logger::init_timed();
   let opts: Opts = Opts::parse();
+
+  // Reset the terminal on ctrl-c (in case we are in a prompt)
+  ctrlc::set_handler(move || {
+    let term = console::Term::stdout();
+    let _ = term.show_cursor();
+    std::process::exit(1);
+  })?;
+
   let mut client = RdbControlClient::connect(opts.server.clone()).await?;
 
   match &opts.subcmd {
@@ -165,7 +182,21 @@ async fn main() -> Result<()> {
         let reference_plan: StoragePlan<String> = serde_yaml::from_str(&info.plan)?;
         let reference_plan = StoragePlan::<StorageKey>::try_from(&reference_plan)?;
         let new_plan = generate_plan_for_schema(&reference_plan, &reference_schema, &new_schema)?;
-        log::info!("Storage plan migrated from reference deployment.");
+
+        let (n_insert, n_delete) = print_diff(&reference_plan, &new_plan);
+        if n_insert != 0 || n_delete != 0 {
+          let proceed = block_in_place(|| {
+            Confirm::with_theme(&ColorfulTheme::default())
+              .with_prompt("Do you wish to apply the new storage plan?")
+              .interact()
+          })?;
+          if !proceed {
+            return Err(CliError::AbortedByUser.into());
+          }
+          log::info!("Storage plan migrated from reference deployment.");
+        } else {
+          log::info!("Storage plan unchanged.");
+        }
         new_plan
       } else {
         generate_plan_for_schema(&Default::default(), &Default::default(), &new_schema)?
