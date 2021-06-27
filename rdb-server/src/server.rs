@@ -318,18 +318,84 @@ impl RdbControl for ControlServer {
     Ok(Response::new(ListDeploymentReply { deployments }))
   }
 
+  async fn delete_deployment(
+    &self,
+    request: Request<DeleteDeploymentRequest>,
+  ) -> Result<Response<DeleteDeploymentReply>, Status> {
+    let r = request.get_ref();
+    let st = get_state();
+    let res = st
+      .system_schema
+      .exec_ctx
+      .run_exported_graph(
+        &*st.system_store,
+        "delete_deployment",
+        &[
+          SerializedVmValue::Null(None),
+          SerializedVmValue::String(r.namespace_id.clone()),
+          SerializedVmValue::String(r.id.clone()),
+        ],
+      )
+      .await
+      .translate_err()?;
+    res.check_nonnull().translate_err()?;
+    let deleted = res.try_unwrap_bool().translate_err()?;
+    Ok(Response::new(DeleteDeploymentReply { deleted }))
+  }
+
   async fn create_query_script(
     &self,
     request: Request<CreateQueryScriptRequest>,
   ) -> Result<Response<CreateQueryScriptReply>, Status> {
-    todo!()
+    let r = request.get_ref();
+    let st = get_state();
+    let res = st
+      .system_schema
+      .exec_ctx
+      .run_exported_graph(
+        &*st.system_store,
+        "add_or_update_query_script",
+        &[
+          SerializedVmValue::Null(None),
+          SerializedVmValue::String(r.namespace_id.clone()),
+          SerializedVmValue::Map(btreemap! {
+            "id".to_string() => SerializedVmValue::String(r.id.clone()),
+            "associated_deployment".to_string() => SerializedVmValue::String(r.associated_deployment.clone()),
+            "script".to_string() => SerializedVmValue::String(r.script.clone()),
+            "create_time".to_string() => SerializedVmValue::String(format!("{}", current_millis())),
+          }),
+        ],
+      )
+      .await
+      .translate_err()?;
+    res.check_nonnull().translate_err()?;
+    let created = res.try_unwrap_bool().translate_err()?;
+    Ok(Response::new(CreateQueryScriptReply { created }))
   }
 
   async fn delete_query_script(
     &self,
     request: Request<DeleteQueryScriptRequest>,
   ) -> Result<Response<DeleteQueryScriptReply>, Status> {
-    todo!()
+    let r = request.get_ref();
+    let st = get_state();
+    let res = st
+      .system_schema
+      .exec_ctx
+      .run_exported_graph(
+        &*st.system_store,
+        "delete_query_script",
+        &[
+          SerializedVmValue::Null(None),
+          SerializedVmValue::String(r.namespace_id.clone()),
+          SerializedVmValue::String(r.id.clone()),
+        ],
+      )
+      .await
+      .translate_err()?;
+    res.check_nonnull().translate_err()?;
+    let deleted = res.try_unwrap_bool().translate_err()?;
+    Ok(Response::new(DeleteQueryScriptReply { deleted }))
   }
 }
 

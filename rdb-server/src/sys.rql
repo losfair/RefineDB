@@ -107,6 +107,21 @@ export graph list_deployment(root: schema, namespace_id: string): list<Deploymen
   return select r1 r2;
 }
 
+export graph delete_deployment(root: schema, namespace_id: string, deployment_id: string): bool {
+  ns = point_get root.system.namespaces namespace_id;
+  if !is_present ns {
+    r1 = false;
+  } else {
+    if is_present $ point_get ns.deployments deployment_id {
+      s_delete ns.deployments deployment_id;
+      r2 = true;
+    } else {
+      r3 = false;
+    }
+  }
+  return select r1 $ select r2 r3;
+}
+
 graph fold_deployments(_unused: map{}, current: list<DeploymentBasicInfoMap>, item: Deployment): list<DeploymentBasicInfoMap> {
   return (
     m_insert(id) item.id $
@@ -152,6 +167,21 @@ export graph get_query_script(root: schema, namespace_id: string, qs_id: string)
         m_insert(associated_deployment) qs.associated_deployment $
         m_insert(script) qs.script $
         create_map;
+    }
+  }
+  return select r1 $ select r2 r3;
+}
+
+export graph delete_query_script(root: schema, namespace_id: string, qs_id: string): bool {
+  ns = point_get root.system.namespaces namespace_id;
+  if !is_present ns {
+    r1 = false;
+  } else {
+    if is_present $ point_get ns.query_scripts qs_id {
+      s_delete ns.query_scripts qs_id;
+      r2 = true;
+    } else {
+      r3 = false;
     }
   }
   return select r1 $ select r2 r3;
