@@ -49,6 +49,7 @@ impl KvTransaction for FdbTxn {
       .chain(k.iter())
       .copied()
       .collect::<Vec<_>>();
+    log::trace!("get {}", base64::encode(&k));
     let res = self.inner.get(&k, false).await?;
     Ok(res.map(|x| x.to_vec()))
   }
@@ -101,13 +102,32 @@ impl KvTransaction for FdbTxn {
         .copied()
         .collect::<Vec<_>>();
       if let Some(v) = v {
+        log::trace!("set {} {}", base64::encode(&k), base64::encode(&v));
         self.inner.set(&k, &v);
       } else {
+        log::trace!("clear {}", base64::encode(&k));
         self.inner.clear(&k);
       }
     }
     for x in self.range_deletion_buffer.into_inner() {
-      self.inner.clear_range(&x.start, &x.end);
+      let start = self
+        .prefix
+        .iter()
+        .chain(x.start.iter())
+        .copied()
+        .collect::<Vec<_>>();
+      let end = self
+        .prefix
+        .iter()
+        .chain(x.end.iter())
+        .copied()
+        .collect::<Vec<_>>();
+      log::trace!(
+        "clear_range {} {}",
+        base64::encode(&start),
+        base64::encode(&end)
+      );
+      self.inner.clear_range(&start, &end);
     }
     Arc::try_unwrap(self.inner)
       .map_err(|_| {
