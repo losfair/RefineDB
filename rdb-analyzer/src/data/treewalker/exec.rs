@@ -276,6 +276,7 @@ impl<'a, 'b> Executor<'a, 'b> {
             precondition_satisfied[item.target_node as usize] = match result.as_ref().map(|x| &**x)
             {
               Some(VmValue::Bool(x)) => *x,
+              Some(VmValue::Null(_)) => false,
               None => true,
               _ => panic!("inconsistency detected: invalid precondition: {:?}", result),
             };
