@@ -63,7 +63,6 @@ impl SystemSchema {
           std::process::abort();
         }
         log::warn!("Applying schema migration.");
-        migrate_schema(&schema, &new_plan, store).await.unwrap();
         txn.put(b"schema", SCHEMA.as_bytes()).await.unwrap();
         txn
           .put(b"plan", &new_plan.serialize_compressed().unwrap())
@@ -72,13 +71,13 @@ impl SystemSchema {
         txn.commit().await.unwrap();
       } else {
         log::info!("Schema unchanged.");
+        drop(txn);
       }
       new_plan
     } else {
       let new_plan =
         generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
       log::warn!("Creating system schema.");
-      migrate_schema(&schema, &new_plan, store).await.unwrap();
       txn.put(b"schema", SCHEMA.as_bytes()).await.unwrap();
       txn
         .put(b"plan", &new_plan.serialize_compressed().unwrap())
@@ -87,6 +86,8 @@ impl SystemSchema {
       txn.commit().await.unwrap();
       new_plan
     };
+
+    migrate_schema(&schema, &plan, store).await.unwrap();
 
     let exec_ctx = ExecContext::load(Arc::new(SchemaContext { schema, plan }), SYS_RQL).unwrap();
 
