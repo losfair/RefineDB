@@ -697,6 +697,9 @@ impl<'a, 'b> Executor<'a, 'b> {
                 )
                 .await?
                 .expect("inconsistency: ReduceList did not get an output from subgraph");
+              if output.is_null() {
+                break;
+              }
               subgraph_params[1] = output;
             }
           }
@@ -755,6 +758,9 @@ impl<'a, 'b> Executor<'a, 'b> {
                 )
                 .await?
                 .expect("inconsistency: ReduceList did not get an output from subgraph");
+              if output.is_null() {
+                break;
+              }
               subgraph_params[1] = output;
             }
           }
