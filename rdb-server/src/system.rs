@@ -17,7 +17,7 @@ pub struct SystemSchema {
 }
 
 pub const SCHEMA: &str = include_str!("./system_schema.rschema");
-pub const SYS_RQL: &str = include_str!("./sys.rql");
+pub const SYS_RASM: &str = include_str!("./sys.rasm");
 
 impl SystemSchema {
   pub async fn new(
@@ -89,7 +89,7 @@ impl SystemSchema {
 
     migrate_schema(&schema, &plan, store).await.unwrap();
 
-    let exec_ctx = ExecContext::load(Arc::new(SchemaContext { schema, plan }), SYS_RQL).unwrap();
+    let exec_ctx = ExecContext::load(Arc::new(SchemaContext { schema, plan }), SYS_RASM).unwrap();
 
     Self { exec_ctx }
   }
