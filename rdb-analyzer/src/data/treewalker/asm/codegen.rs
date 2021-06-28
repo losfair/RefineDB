@@ -370,7 +370,38 @@ impl<'a, 'b> GraphContext<'a, 'b> {
           self.generate_expr(g, None, *reduce_init)?,
           self.generate_expr(g, None, *list_or_set)?,
         ];
-        self.push_node((TwGraphNode::Reduce(i as u32), params, precondition), name)?
+        self.push_node(
+          (TwGraphNode::Reduce(i as u32, false), params, precondition),
+          name,
+        )?
+      }
+      K::RangeReduce(
+        target_graph,
+        range_start,
+        range_end,
+        subgraph_param,
+        reduce_init,
+        list_or_set,
+      ) => {
+        let (i, _) = self
+          .builder
+          .root
+          .graphs
+          .iter()
+          .enumerate()
+          .find(|(_, x)| x.name == *target_graph)
+          .ok_or_else(|| TwAsmError::GraphNotFound(target_graph.to_string()))?;
+        let params = vec![
+          self.generate_expr(g, None, *subgraph_param)?,
+          self.generate_expr(g, None, *reduce_init)?,
+          self.generate_expr(g, None, *list_or_set)?,
+          self.generate_expr(g, None, *range_start)?,
+          self.generate_expr(g, None, *range_end)?,
+        ];
+        self.push_node(
+          (TwGraphNode::Reduce(i as u32, true), params, precondition),
+          name,
+        )?
       }
       K::Prepend(l, r) => {
         let l = self.generate_expr(g, None, *l)?;

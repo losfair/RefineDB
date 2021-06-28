@@ -108,6 +108,8 @@ pub enum TypeckError {
   MissingOutputFromReduce,
   #[error("cannot insert primary key into a table")]
   CannotInsertPrimaryKey,
+  #[error("range reduce used on a non-set type")]
+  RangeReduceOnNonSet,
 }
 
 pub struct GlobalTyckContext<'a, 'b> {
@@ -707,9 +709,30 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
             }
           }
         }
-        TwGraphNode::Reduce(subgraph_index) => {
-          let [subgraph_param, reduce_init, list_or_set_ty] =
-            validate_in_edges::<3>(node, in_edges, &types)?;
+        TwGraphNode::Reduce(subgraph_index, has_range) => {
+          let subgraph_param;
+          let reduce_init;
+          let list_or_set_ty;
+          if *has_range {
+            let [subgraph_param_, reduce_init_, list_or_set_ty_, start_key, end_key] =
+              validate_in_edges::<5>(node, in_edges, &types)?;
+            subgraph_param = subgraph_param_;
+            reduce_init = reduce_init_;
+            list_or_set_ty = list_or_set_ty_;
+
+            let (_, primary_key_ty) = list_or_set_ty
+              .set_primary_key(vm.schema)
+              .ok_or_else(|| TypeckError::RangeReduceOnNonSet)?;
+            let primary_key_ty = VmType::from(primary_key_ty);
+            ensure_type_eq(&primary_key_ty, start_key)?;
+            ensure_type_eq(&primary_key_ty, end_key)?;
+          } else {
+            let [subgraph_param_, reduce_init_, list_or_set_ty_] =
+              validate_in_edges::<3>(node, in_edges, &types)?;
+            subgraph_param = subgraph_param_;
+            reduce_init = reduce_init_;
+            list_or_set_ty = list_or_set_ty_;
+          }
           let member_ty = match list_or_set_ty {
             VmType::List(x) => &*x.ty,
             VmType::Set(x) => &*x.ty,

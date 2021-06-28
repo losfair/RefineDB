@@ -72,12 +72,13 @@ pub enum TwGraphNode {
   /// List<T> -> T
   ListHead,
 
-  /// U -> P -> (List<T> | Set<T>) -> P
+  /// If has_range: U -> P -> T::PrimaryKeyValue (start_inclusive) -> T::PrimaryKeyValue (end_exclusive) -> (List<T> | Set<T>) -> P
+  /// Otherwise: U -> P -> (List<T> | Set<T>) -> P
   ///
   /// Subgraph: (U, P, T) -> P
   ///
-  /// Const param: subgraph_index
-  Reduce(u32),
+  /// Const param: (subgraph_index, has_range)
+  Reduce(u32, bool),
 
   /// (Map | Table<T>) -> T
   ///
@@ -193,7 +194,7 @@ impl TwGraphNode {
     match self {
       Self::FilterSet(x) => smallvec![*x],
       Self::Call(x) => smallvec![*x],
-      Self::Reduce(x) => smallvec![*x],
+      Self::Reduce(x, _) => smallvec![*x],
       _ => smallvec![],
     }
   }
@@ -203,7 +204,8 @@ impl TwGraphNode {
       TwGraphNode::IsNull
       | TwGraphNode::Nop
       | TwGraphNode::InsertIntoMap(_)
-      | TwGraphNode::DeleteFromMap(_) => false,
+      | TwGraphNode::DeleteFromMap(_)
+      | TwGraphNode::Reduce(_, _) => false,
       _ => true,
     }
   }

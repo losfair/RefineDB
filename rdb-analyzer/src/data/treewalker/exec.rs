@@ -667,10 +667,18 @@ impl<'a, 'b> Executor<'a, 'b> {
       TwGraphNode::FilterSet(_) => {
         return Err(ExecError::NotImplemented(format!("{:?}", n)).into())
       }
-      TwGraphNode::Reduce(subgraph_index) => {
+      TwGraphNode::Reduce(subgraph_index, has_range) => {
         let subgraph_param = &params[0];
         let reduce_init = &params[1];
         let list_or_set = &params[2];
+
+        // We disabled the default optional chaining behavior so we need to handle it manually here
+        // Check list_or_set only
+        if list_or_set.is_null() {
+          log::trace!("optional chaining a `reduce` node because the provided list_or_set is null",);
+          return Ok(type_info.map(|x| Arc::new(VmValue::Null(x.clone()))));
+        }
+
         let mut subgraph_params = vec![
           subgraph_param.clone(),
           reduce_init.clone(),
@@ -701,10 +709,28 @@ impl<'a, 'b> Executor<'a, 'b> {
               VmType::Table(x) => self.vm.schema.types.get(x.name).unwrap(),
               _ => unreachable!(),
             };
-            let range_start = walker.set_fast_scan_prefix().unwrap();
+            let range_prefix = walker.set_fast_scan_prefix().unwrap();
+            let mut range_start = range_prefix.clone();
             let mut range_end = range_start.clone();
             *range_end.last_mut().unwrap() += 1;
-            let range_end = range_end;
+
+            // If we've got a range, update our scan ranges with it...
+            if *has_range {
+              let maybe_start = &params[3];
+              let maybe_end = &params[4];
+
+              if !maybe_start.is_null() {
+                range_start
+                  .extend_from_slice(&maybe_start.unwrap_primitive().serialize_for_key_component());
+              }
+
+              if !maybe_end.is_null() {
+                // Revert the "all entries" assumption
+                *range_end.last_mut().unwrap() -= 1;
+                range_end
+                  .extend_from_slice(&maybe_end.unwrap_primitive().serialize_for_key_component());
+              }
+            }
 
             log::trace!(
               "reduce set: scan keys: {} {}",
@@ -714,7 +740,7 @@ impl<'a, 'b> Executor<'a, 'b> {
 
             let mut it = txn.scan_keys(&range_start, &range_end).await?;
             while let Some(k) = it.next().await? {
-              let k = k.strip_prefix(range_start.as_slice()).unwrap();
+              let k = k.strip_prefix(range_prefix.as_slice()).unwrap();
               let walker = walker.enter_set_raw(k).unwrap();
               subgraph_params[2] = Arc::new(VmValue::Table(VmTableValue {
                 ty: &*specialized_ty.name,

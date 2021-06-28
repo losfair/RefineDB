@@ -325,9 +325,37 @@ async fn set_reduce() {
           $ m_insert(id) "id1" create_map;
         s_insert root.items $ build_table(Item)
           $ m_insert(id) "id2" create_map;
+        s_insert root.items $ build_table(Item)
+          $ m_insert(id) "id3" create_map;
+        s_insert root.items $ build_table(Item)
+          $ m_insert(id) "id4" create_map;
       }
       "#,
       READER,
+      r#"
+      graph main(root: schema): string {
+        return (reduce(f) from "id2" to "id4" create_map (
+          m_insert(first) true $
+          m_insert(result) "" create_map
+        ) root.items).result;
+      }
+      graph f(ctx: map{}, current: map {
+        first: bool,
+        result: string,
+      }, item: Item): map {
+        first: bool,
+        result: string,
+      } {
+        if !current.first {
+          r1 = current.result + " " + item.id;
+        } else {
+          r2 = item.id;
+        }
+        return m_insert(first) false
+          $ m_insert(result) (select r1 r2)
+          create_map;
+      }
+      "#,
     ],
     |x| {
       match chkindex {
@@ -341,7 +369,13 @@ async fn set_reduce() {
         2 => {
           assert_eq!(
             **x.as_ref().unwrap(),
-            VmValue::Primitive(PrimitiveValue::String("id1 id2".into()))
+            VmValue::Primitive(PrimitiveValue::String("id1 id2 id3 id4".into()))
+          );
+        }
+        3 => {
+          assert_eq!(
+            **x.as_ref().unwrap(),
+            VmValue::Primitive(PrimitiveValue::String("id2 id3".into()))
           );
         }
         _ => unreachable!(),
@@ -351,7 +385,7 @@ async fn set_reduce() {
   )
   .await;
 
-  assert_eq!(chkindex, 3);
+  assert_eq!(chkindex, 4);
 }
 
 #[tokio::test]
