@@ -147,8 +147,6 @@ struct DeleteQueryScript {
 
 #[derive(Clap)]
 struct ListQueryScript {
-  /// Namespace id.
-  #[clap(long)]
   namespace: String,
 }
 
