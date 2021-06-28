@@ -11,6 +11,10 @@ pub struct Opt {
   #[structopt(long)]
   pub fdb_keyspace: Option<String>,
 
+  /// Path to the SQLite database.
+  #[structopt(long)]
+  pub sqlite_db: Option<String>,
+
   /// GRPC listen address.
   #[structopt(long)]
   pub grpc_listen: String,

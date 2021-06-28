@@ -9,7 +9,10 @@ use tokio::runtime::Runtime;
 
 use crate::{
   httpapi::run_http_server,
-  kv_backend::foundationdb::FdbKvStore,
+  kv_backend::{
+    foundationdb::FdbKvStore,
+    sqlite::{GlobalSqliteStore, SqliteKvStore},
+  },
   opt::Opt,
   query_cache::{QueryCache, QueryCacheParams},
   server::ControlServer,
@@ -48,6 +51,9 @@ async fn run() -> Result<()> {
   let system_store: Box<dyn KeyValueStore>;
   let system_metadata_store: Box<dyn KeyValueStore>;
   if let Some(x) = &opt.fdb_cluster {
+    if opt.sqlite_db.is_some() {
+      panic!("cannot select multiple kv backends");
+    }
     let db = Arc::new(Database::new(Some(x))?);
     let keyspace = Subspace::from_bytes(
       opt
@@ -76,6 +82,16 @@ async fn run() -> Result<()> {
           .chain(namespace.iter().copied())
           .collect::<Vec<u8>>(),
       ))
+    });
+  } else if let Some(x) = &opt.sqlite_db {
+    if opt.fdb_cluster.is_some() || opt.fdb_keyspace.is_some() {
+      panic!("cannot select multiple kv backends");
+    }
+    let backend = GlobalSqliteStore::open_leaky(x)?;
+    system_store = Box::new(SqliteKvStore::new(backend.clone(), "system", b""));
+    system_metadata_store = Box::new(SqliteKvStore::new(backend.clone(), "system_meta", b""));
+    data_store_generator = Box::new(move |namespace| {
+      Box::new(SqliteKvStore::new(backend.clone(), "user_data", namespace))
     });
   } else {
     panic!("no kv backend selected");

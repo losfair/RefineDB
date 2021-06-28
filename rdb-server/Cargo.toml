@@ -34,3 +34,4 @@ uuid = { version = "0.8", features = ["v4"] }
 warp = "0.3"
 lru = "0.6"
 sysinfo = "0.18"
+rusqlite = "0.25"
