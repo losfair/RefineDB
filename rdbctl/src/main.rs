@@ -14,7 +14,9 @@ use rdb_analyzer::{
 use rdb_proto::{
   proto::{
     rdb_control_client::RdbControlClient, CreateDeploymentRequest, CreateNamespaceRequest,
-    DeleteNamespaceRequest, GetDeploymentRequest, ListDeploymentRequest, ListNamespaceRequest,
+    CreateQueryScriptRequest, DeleteNamespaceRequest, DeleteQueryScriptRequest,
+    GetDeploymentRequest, GetQueryScriptRequest, ListDeploymentRequest, ListNamespaceRequest,
+    ListQueryScriptRequest,
   },
   tonic::Request,
 };
@@ -51,6 +53,18 @@ enum SubCommand {
 
   /// List deployments.
   ListDeployment(ListDeployment),
+
+  /// Create query script.
+  CreateQueryScript(CreateQueryScript),
+
+  /// Get query script.
+  GetQueryScript(GetQueryScript),
+
+  /// Delete query script.
+  DeleteQueryScript(DeleteQueryScript),
+
+  /// List query scripts.
+  ListQueryScript(ListQueryScript),
 }
 
 #[derive(Clap)]
@@ -69,25 +83,73 @@ struct DeleteNamespace {
 #[derive(Clap)]
 struct CreateDeployment {
   /// The source deployment to migrate from.
-  #[clap(short, long)]
+  #[clap(long)]
   migrate_from: Option<String>,
 
   /// Path to the new schema.
-  #[clap(short, long)]
+  #[clap(long)]
   schema: String,
 
   /// Deployment description.
-  #[clap(short, long)]
+  #[clap(long)]
   description: Option<String>,
 
   /// Namespace id.
-  #[clap(short, long)]
+  #[clap(long)]
   namespace: String,
 }
 
 #[derive(Clap)]
 struct ListDeployment {
   namespace_id: String,
+}
+
+#[derive(Clap)]
+struct CreateQueryScript {
+  /// Namespace id.
+  #[clap(long)]
+  namespace: String,
+
+  /// Query script id.
+  #[clap(long)]
+  id: String,
+
+  /// The associated deployment id.
+  #[clap(long)]
+  deployment: String,
+
+  /// Path to the script.
+  #[clap(short, long)]
+  script: String,
+}
+
+#[derive(Clap)]
+struct GetQueryScript {
+  /// Namespace id.
+  #[clap(long)]
+  namespace: String,
+
+  /// Query script id.
+  #[clap(long)]
+  id: String,
+}
+
+#[derive(Clap)]
+struct DeleteQueryScript {
+  /// Namespace id.
+  #[clap(long)]
+  namespace: String,
+
+  /// Query script id.
+  #[clap(long)]
+  id: String,
+}
+
+#[derive(Clap)]
+struct ListQueryScript {
+  /// Namespace id.
+  #[clap(long)]
+  namespace: String,
 }
 
 #[derive(Error, Debug)]
@@ -100,6 +162,9 @@ enum CliError {
 
   #[error("aborted by user")]
   AbortedByUser,
+
+  #[error("query script not found")]
+  QueryScriptNotFound,
 }
 
 #[tokio::main]
@@ -241,6 +306,77 @@ async fn main() -> Result<()> {
             }))
             .collect::<Vec<_>>()
         )?
+      );
+    }
+    SubCommand::CreateQueryScript(subopts) => {
+      let script = std::fs::read_to_string(&subopts.script)?;
+      let req = Request::new(CreateQueryScriptRequest {
+        namespace_id: subopts.namespace.clone(),
+        id: subopts.id.clone(),
+        associated_deployment: subopts.deployment.clone(),
+        script,
+      });
+      let res = client.create_query_script(req).await?;
+      println!(
+        "{}",
+        serde_json::to_string(&serde_json::json!({
+          "created": res.get_ref().created,
+        }))?
+      );
+    }
+    SubCommand::ListQueryScript(subopts) => {
+      let req = Request::new(ListQueryScriptRequest {
+        namespace_id: subopts.namespace.clone(),
+      });
+      let res = client.list_query_script(req).await?;
+      println!(
+        "{}",
+        serde_json::to_string(
+          &res
+            .get_ref()
+            .query_scripts
+            .iter()
+            .map(|x| serde_json::json!({
+              "id": x.id,
+              "associated_deployment": x.associated_deployment,
+              "create_time": x.create_time,
+            }))
+            .collect::<Vec<_>>()
+        )?
+      );
+    }
+    SubCommand::DeleteQueryScript(subopts) => {
+      let req = Request::new(DeleteQueryScriptRequest {
+        namespace_id: subopts.namespace.clone(),
+        id: subopts.id.clone(),
+      });
+      let res = client.delete_query_script(req).await?;
+      println!(
+        "{}",
+        serde_json::to_string(&serde_json::json!({
+          "deleted": res.get_ref().deleted,
+        }))?
+      );
+    }
+    SubCommand::GetQueryScript(subopts) => {
+      let req = Request::new(GetQueryScriptRequest {
+        namespace_id: subopts.namespace.clone(),
+        query_script_id: subopts.id.clone(),
+      });
+      let res = client.get_query_script(req).await?;
+      let info = res
+        .get_ref()
+        .info
+        .as_ref()
+        .ok_or_else(|| CliError::QueryScriptNotFound)?;
+      println!(
+        "{}",
+        serde_json::to_string(&serde_json::json!({
+          "id": info.id,
+          "script": info.script,
+          "associated_deployment": info.associated_deployment,
+          "create_time": info.create_time,
+        }))?
       );
     }
   }
