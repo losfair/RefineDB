@@ -73,7 +73,7 @@ pub async fn lookup_query_script(ns_id: &str, qs_id: &str) -> Result<QueryScript
       let m = res.try_unwrap_map(&["id", "create_time", "associated_deployment", "script"])?;
       Ok(QueryScript {
         id: m.get("id").unwrap().try_unwrap_string()?.clone(),
-        create_time: m.get("id").unwrap().try_unwrap_string()?.parse()?,
+        create_time: m.get("create_time").unwrap().try_unwrap_string()?.parse()?,
         associated_deployment: m
           .get("associated_deployment")
           .unwrap()
