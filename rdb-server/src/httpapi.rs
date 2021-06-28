@@ -18,6 +18,13 @@ use crate::{
 
 struct ApiReject(anyhow::Error);
 
+impl ApiReject {
+  fn new(x: anyhow::Error) -> Self {
+    log::error!("api reject: {:?}", x);
+    Self(x)
+  }
+}
+
 impl Debug for ApiReject {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}", self.0)
@@ -52,7 +59,7 @@ async fn invoke_query(
 ) -> Result<Json, Rejection> {
   do_invoke_query(namespace_id, query_script_id, graph_name, graph_params)
     .await
-    .map_err(|e| warp::reject::custom(ApiReject(e)))
+    .map_err(|e| warp::reject::custom(ApiReject::new(e)))
 }
 
 async fn do_invoke_query(
@@ -82,6 +89,7 @@ async fn do_invoke_query(
     let plan = StoragePlan::deserialize_compressed(&deployment.plan)?;
     let schema_ctx = Arc::new(SchemaContext { schema, plan });
     exec_ctx = Arc::new(ExecContext::load(schema_ctx, &query_script.script)?);
+    log::info!("Loaded query script {:?}.", qc_key);
     st.query_cache.put(qc_key, exec_ctx.clone()).await;
   }
 

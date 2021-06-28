@@ -6,3 +6,6 @@ members = [
   "rdb-proto",
   "rdb-pgsvc",
 ]
+
+[profile.release]
+debug = true

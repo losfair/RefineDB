@@ -134,8 +134,6 @@ impl KvTransaction for FdbTxn {
       .commit()
       .await
       .map_err(|e| {
-        log::error!("txn commit error: {:?}", e);
-
         // XXX: Is this correct?
         if e.is_retryable_not_committed() {
           KvError::Conflict

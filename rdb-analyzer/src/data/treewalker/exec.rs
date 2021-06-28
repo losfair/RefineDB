@@ -127,7 +127,7 @@ impl<'a, 'b> Executor<'a, 'b> {
     graph_index: usize,
     graph_params: &[Arc<VmValue<'a>>],
   ) -> Result<Option<Arc<VmValue<'a>>>> {
-    for _ in 0..10 {
+    for i in 0..10 {
       self.path_integrity_assertions.get_mut().unwrap().clear();
       let txn = self.kv.begin_transaction().await?;
       let ret = self
@@ -166,7 +166,17 @@ impl<'a, 'b> Executor<'a, 'b> {
         Err(KvError::Conflict) => {
           if let Some(f) = self.sleep_fn {
             let delay_ms = rand::thread_rng().gen_range(1..20);
+            log::warn!(
+              "Conflict detected when committing transaction (attempt {}). Waiting for {} ms.",
+              i,
+              delay_ms
+            );
             f(Duration::from_millis(delay_ms as u64)).await;
+          } else {
+            log::warn!(
+              "Conflict detected when committing transaction (attempt {}).",
+              i
+            );
           }
         }
         Err(x) => return Err(x.into()),
