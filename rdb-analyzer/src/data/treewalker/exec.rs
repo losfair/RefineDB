@@ -89,6 +89,12 @@ pub enum ExecError {
 
   #[error("conflict after retries")]
   ConflictAfterRetries,
+
+  #[error("script thrown error: `{0}`")]
+  ScriptThrownError(String),
+
+  #[error("script thrown null")]
+  ScriptThrownNull,
 }
 
 const MAX_RECURSION_DEPTH: usize = 128;
@@ -767,6 +773,16 @@ impl<'a, 'b> Executor<'a, 'b> {
           _ => unreachable!(),
         }
         Some(subgraph_params[1].clone())
+      }
+      TwGraphNode::Throw => {
+        let msg = &params[0];
+        if msg.is_null() {
+          return Err(ExecError::ScriptThrownNull.into());
+        } else {
+          return Err(
+            ExecError::ScriptThrownError(msg.unwrap_primitive().unwrap_string().clone()).into(),
+          );
+        }
       }
     })
   }

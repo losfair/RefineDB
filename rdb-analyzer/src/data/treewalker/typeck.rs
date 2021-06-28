@@ -755,6 +755,11 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
           ensure_covariant(reduce_init, &output)?;
           Some(output.clone())
         }
+        TwGraphNode::Throw => {
+          let [msg] = validate_in_edges::<1>(node, in_edges, &types)?;
+          ensure_type_eq(&VmType::Primitive(PrimitiveType::String), msg)?;
+          None
+        }
       };
       types.push(ty);
     }

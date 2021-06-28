@@ -181,6 +181,9 @@ pub enum TwGraphNode {
 
   /// (int64 -> int64 -> int64) | (double -> double -> double)
   Sub,
+
+  /// string -> !
+  Throw,
 }
 
 impl TwGraphNode {
@@ -205,7 +208,8 @@ impl TwGraphNode {
       | TwGraphNode::Nop
       | TwGraphNode::InsertIntoMap(_)
       | TwGraphNode::DeleteFromMap(_)
-      | TwGraphNode::Reduce(_, _) => false,
+      | TwGraphNode::Reduce(_, _)
+      | TwGraphNode::Throw => false,
       _ => true,
     }
   }

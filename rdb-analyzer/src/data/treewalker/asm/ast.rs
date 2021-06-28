@@ -43,6 +43,9 @@ pub enum StmtKind<'a> {
     if_body: Vec<'a, Stmt<'a>>,
     else_body: Option<Vec<'a, Stmt<'a>>>,
   },
+  Throw {
+    value: Expr<'a>,
+  },
 }
 
 pub struct Expr<'a> {

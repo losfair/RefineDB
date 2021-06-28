@@ -142,6 +142,17 @@ impl<'a, 'b> GraphContext<'a, 'b> {
       ast::StmtKind::Node { name, value } => {
         self.generate_expr(g, *name, value)?;
       }
+      ast::StmtKind::Throw { value } => {
+        let x = self.generate_expr(g, None, value)?;
+        self.push_node(
+          (
+            TwGraphNode::Throw,
+            vec![x],
+            self.condition_stack.last().copied(),
+          ),
+          None,
+        )?;
+      }
     }
     Ok(())
   }

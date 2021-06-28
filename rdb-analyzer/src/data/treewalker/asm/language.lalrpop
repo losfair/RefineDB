@@ -75,6 +75,9 @@ Stmt: StmtKind<'input> = {
   Token<"return"> <value:Expr> Token<";"> => StmtKind::Return {
     value,
   },
+  Token<"throw"> <value:Expr> Token<";"> => StmtKind::Throw {
+    value,
+  },
   <value:Expr> Token<";"> => StmtKind::Node {
     name: None,
     value,

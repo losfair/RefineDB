@@ -50,6 +50,13 @@ impl PrimitiveValue {
     }
   }
 
+  pub fn unwrap_string(&self) -> &String {
+    match self {
+      PrimitiveValue::String(x) => x,
+      _ => panic!("PrimitiveValue::unwrap_string: not a string: {:?}", self),
+    }
+  }
+
   /// https://activesphere.com/blog/2018/08/17/order-preserving-serialization
   pub fn serialize_for_key_component(&self) -> SmallVec<[u8; 9]> {
     match self {

@@ -522,3 +522,50 @@ async fn path_integrity() {
 
   assert!(ok);
 }
+
+#[tokio::test]
+async fn throw_string() {
+  let _ = pretty_env_logger::try_init();
+  let mut ok = false;
+  simple_test_with_error(
+    r#"
+  "#,
+    &[r#"
+    graph main(root: schema) {
+      throw "test error";
+    }
+    "#],
+    |x| {
+      assert_eq!(
+        x.unwrap_err().to_string(),
+        "script thrown error: `test error`"
+      );
+      ok = true;
+    },
+  )
+  .await;
+
+  assert!(ok);
+}
+
+#[tokio::test]
+async fn throw_null() {
+  let _ = pretty_env_logger::try_init();
+  let mut ok = false;
+  simple_test_with_error(
+    r#"
+  "#,
+    &[r#"
+    graph main(root: schema) {
+      throw null<string>;
+    }
+    "#],
+    |x| {
+      assert_eq!(x.unwrap_err().to_string(), "script thrown null");
+      ok = true;
+    },
+  )
+  .await;
+
+  assert!(ok);
+}
