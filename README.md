@@ -1,5 +1,7 @@
 # RefineDB
 
+![Build status](https://github.com/losfair/RefineDB/actions/workflows/ci.yml/badge.svg)
+
 A strongly-typed document database that runs on any transactional key-value store.
 
 Currently supported backends are:
