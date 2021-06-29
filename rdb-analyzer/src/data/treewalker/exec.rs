@@ -440,10 +440,6 @@ impl<'a, 'b> Executor<'a, 'b> {
         elements.remove_mut(key.as_str());
         Some(Arc::new(VmValue::Map(VmMapValue { elements })))
       }
-      TwGraphNode::DeleteFromTable(_key_index) => {
-        // Effect node
-        None
-      }
       TwGraphNode::GetField(key_index) => {
         let key = self.vm.script.idents.get(*key_index as usize).unwrap();
         match &*params[0] {

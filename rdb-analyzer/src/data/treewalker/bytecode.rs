@@ -127,13 +127,6 @@ pub enum TwGraphNode {
   /// Const param: ident
   DeleteFromMap(u32),
 
-  /// Table<T> -> ()
-  ///
-  /// This is an effect node.
-  ///
-  /// Const param: ident
-  DeleteFromTable(u32),
-
   /// T -> T -> Bool
   Eq,
 

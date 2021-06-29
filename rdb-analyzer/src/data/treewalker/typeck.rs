@@ -409,34 +409,6 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
             _ => return Err(TypeckError::NotMap(format!("{:?}", map_ty)).into()),
           }
         }
-        TwGraphNode::DeleteFromTable(key_index) => {
-          let [table_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
-          let key = vm
-            .script
-            .idents
-            .get(*key_index as usize)
-            .ok_or_else(|| TypeckError::IdentIndexOob)?;
-          match table_ty {
-            VmType::Table(x) => {
-              let table_ty = vm
-                .schema
-                .types
-                .get(x.name)
-                .ok_or_else(|| TypeckError::TableTypeNotFound(x.name.to_string()))?;
-              let (field, _) = table_ty.fields.get(key.as_str()).ok_or_else(|| {
-                TypeckError::FieldNotPresentInTable(key.clone(), table_ty.name.clone())
-              })?;
-              if !field.is_optional() {
-                return Err(
-                  TypeckError::DeletingNonOptionalTableField(key.clone(), table_ty.name.clone())
-                    .into(),
-                );
-              }
-              None
-            }
-            _ => return Err(TypeckError::NotTable(format!("{:?}", table_ty)).into()),
-          }
-        }
         TwGraphNode::GetField(key_index) => {
           let [map_or_table_ty] = validate_in_edges::<1>(node, in_edges, &types)?;
           let key = vm

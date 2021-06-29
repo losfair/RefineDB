@@ -79,7 +79,6 @@ pub enum ExprKind<'a> {
   InsertIntoSet(&'a Expr<'a>, &'a Expr<'a>),
   DeleteFromSet(&'a Expr<'a>, &'a Expr<'a>),
   DeleteFromMap(&'a str, &'a Expr<'a>),
-  DeleteFromTable(&'a str, &'a Expr<'a>),
   Eq(&'a Expr<'a>, &'a Expr<'a>),
   Ne(&'a Expr<'a>, &'a Expr<'a>),
   And(&'a Expr<'a>, &'a Expr<'a>),

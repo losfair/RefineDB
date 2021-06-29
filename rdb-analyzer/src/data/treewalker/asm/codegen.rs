@@ -209,18 +209,6 @@ impl<'a, 'b> GraphContext<'a, 'b> {
           name,
         )?
       }
-      K::DeleteFromTable(field, table) => {
-        let field = self.builder.alloc_ident(*field);
-        let table = self.generate_expr(g, None, *table)?;
-        self.push_node(
-          (
-            TwGraphNode::DeleteFromTable(field),
-            vec![table],
-            precondition,
-          ),
-          name,
-        )?
-      }
       K::Eq(l, r) => {
         let l = self.generate_expr(g, None, *l)?;
         let r = self.generate_expr(g, None, *r)?;

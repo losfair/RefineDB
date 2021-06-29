@@ -176,7 +176,6 @@ ExprKindL4: ExprKind<'input> = {
   Token<"t_insert"> Token<"("> <x:Identifier> Token<")"> <y:ExprL5Ref> <z:TrailingExprRef> => ExprKind::InsertIntoTable(x, y, z),
   Token<"s_insert"> <y:ExprL5Ref> <z:TrailingExprRef> => ExprKind::InsertIntoSet(y, z),
   Token<"m_delete"> Token<"("> <x:Identifier> Token<")"> <y:TrailingExprRef> => ExprKind::DeleteFromMap(x, y),
-  Token<"t_delete"> Token<"("> <x:Identifier> Token<")"> <y:TrailingExprRef> => ExprKind::DeleteFromTable(x, y),
   Token<"s_delete"> <y:ExprL5Ref> <z:TrailingExprRef> => ExprKind::DeleteFromSet(y, z),
   Token<"select"> <x:ExprL5Ref> <y:TrailingExprRef> => ExprKind::Select(x, y),
   Token<"!"> <x:ExprL4Ref> => ExprKind::Not(x),
