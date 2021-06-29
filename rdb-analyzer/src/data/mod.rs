@@ -1,5 +1,6 @@
 pub mod fixup;
 pub mod kv;
+pub mod kvutil;
 pub mod pathwalker;
 pub mod treewalker;
 pub mod value;

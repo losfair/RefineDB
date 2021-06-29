@@ -15,6 +15,7 @@ use smallvec::{smallvec, SmallVec};
 use crate::{
   data::{
     kv::{KeyValueStore, KvError, KvTransaction},
+    kvutil::global_k8_deduplicated,
     pathwalker::PathWalker,
     treewalker::vm_value::{
       VmListValue, VmMapValue, VmSetType, VmSetValue, VmSetValueKind, VmTableValue,
@@ -86,6 +87,9 @@ pub enum ExecError {
 
   #[error("path integrity check failed: missing path(s): {0}")]
   PathIntegrityFailure(String),
+
+  #[error("set does not exist")]
+  SetDoesNotExist,
 
   #[error("conflict after retries")]
   ConflictAfterRetries,
@@ -469,7 +473,11 @@ impl<'a, 'b> Executor<'a, 'b> {
         };
         match &set.kind {
           VmSetValueKind::Resident(walker) => {
-            let walker = walker.enter_set(primary_key_value).unwrap();
+            let set_token = txn
+              .get(&walker.generate_key())
+              .await?
+              .ok_or_else(|| ExecError::SetDoesNotExist)?;
+            let walker = walker.enter_set(&set_token, primary_key_value).unwrap();
             Some(Arc::new(VmValue::Table(VmTableValue {
               ty: member_ty,
               kind: VmTableValueKind::Resident(walker),
@@ -505,11 +513,17 @@ impl<'a, 'b> Executor<'a, 'b> {
 
         match &set.kind {
           VmSetValueKind::Resident(walker) => {
-            let mut fast_scan_key = walker.set_fast_scan_prefix().unwrap();
+            let set_token = txn
+              .get(&walker.generate_key())
+              .await?
+              .ok_or_else(|| ExecError::SetDoesNotExist)?;
+            let mut fast_scan_key = walker.set_fast_scan_prefix(&set_token).unwrap();
             fast_scan_key.extend_from_slice(&primary_key_value);
             txn.put(&fast_scan_key, &[]).await?;
 
-            let walker = walker.enter_set_raw(&primary_key_value).unwrap();
+            let walker = walker
+              .enter_set_raw(&set_token, &primary_key_value)
+              .unwrap();
             self.assert_path_integrity(&walker);
             self.walk_and_insert(txn, walker, value).await?;
           }
@@ -715,7 +729,11 @@ impl<'a, 'b> Executor<'a, 'b> {
               VmType::Table(x) => self.vm.schema.types.get(x.name).unwrap(),
               _ => unreachable!(),
             };
-            let range_prefix = walker.set_fast_scan_prefix().unwrap();
+            let set_token = txn
+              .get(&walker.generate_key())
+              .await?
+              .ok_or_else(|| ExecError::SetDoesNotExist)?;
+            let range_prefix = walker.set_fast_scan_prefix(&set_token).unwrap();
             let mut range_start = range_prefix.clone();
             let mut range_end = range_start.clone();
             *range_end.last_mut().unwrap() += 1;
@@ -747,7 +765,7 @@ impl<'a, 'b> Executor<'a, 'b> {
             let mut it = txn.scan_keys(&range_start, &range_end).await?;
             while let Some(k) = it.next().await? {
               let k = k.strip_prefix(range_prefix.as_slice()).unwrap();
-              let walker = walker.enter_set_raw(k).unwrap();
+              let walker = walker.enter_set_raw(&set_token, k).unwrap();
               subgraph_params[2] = Arc::new(VmValue::Table(VmTableValue {
                 ty: &*specialized_ty.name,
                 kind: VmTableValueKind::Resident(walker),
@@ -859,7 +877,10 @@ impl<'a, 'b> Executor<'a, 'b> {
         txn.put(&walker.generate_key(), &value).await?;
       }
       VmValue::Set(x) => {
-        txn.put(&walker.generate_key(), &[]).await?;
+        // Generate a random set token.
+        let set_token = global_k8_deduplicated(txn).await?;
+        txn.put(&walker.generate_key(), &set_token).await?;
+
         match &x.kind {
           VmSetValueKind::Fresh(members) => {
             // Clear set
@@ -868,11 +889,13 @@ impl<'a, 'b> Executor<'a, 'b> {
             // Need to clone this. Otherwise `async_recursion` errors
             let members = members.clone();
             for (primary_key_value, member) in members {
-              let mut fast_scan_key = walker.set_fast_scan_prefix().unwrap();
+              let mut fast_scan_key = walker.set_fast_scan_prefix(&set_token).unwrap();
               fast_scan_key.extend_from_slice(&primary_key_value);
               txn.put(&fast_scan_key, &[]).await?;
 
-              let walker = walker.enter_set_raw(&primary_key_value).unwrap();
+              let walker = walker
+                .enter_set_raw(&set_token, &primary_key_value)
+                .unwrap();
               self.walk_and_insert(txn, walker, member).await?;
             }
           }
@@ -909,11 +932,15 @@ impl<'a, 'b> Executor<'a, 'b> {
   }
 
   async fn delete_set(&self, txn: &dyn KvTransaction, walker: &Arc<PathWalker<'a>>) -> Result<()> {
-    let fast_scan_start_key = walker.set_fast_scan_prefix().unwrap();
+    let set_token = txn
+      .get(&walker.generate_key())
+      .await?
+      .ok_or_else(|| ExecError::SetDoesNotExist)?;
+    let fast_scan_start_key = walker.set_fast_scan_prefix(&set_token).unwrap();
     let mut fast_scan_end_key = fast_scan_start_key.clone();
     *fast_scan_end_key.last_mut().unwrap() += 1;
 
-    let data_start_key = walker.set_data_prefix().unwrap();
+    let data_start_key = walker.set_data_prefix(&set_token).unwrap();
     let mut data_end_key = data_start_key.clone();
     *data_end_key.last_mut().unwrap() += 1;
 
@@ -930,11 +957,15 @@ impl<'a, 'b> Executor<'a, 'b> {
     walker: &Arc<PathWalker<'a>>,
     primary_key_value: &PrimitiveValue,
   ) -> Result<()> {
+    let set_token = txn
+      .get(&walker.generate_key())
+      .await?
+      .ok_or_else(|| ExecError::SetDoesNotExist)?;
     let primary_key_value_raw = primary_key_value.serialize_for_key_component();
-    let mut fast_scan_key = walker.set_fast_scan_prefix().unwrap();
+    let mut fast_scan_key = walker.set_fast_scan_prefix(&set_token).unwrap();
     fast_scan_key.extend_from_slice(&primary_key_value_raw);
 
-    let mut data_start_key = walker.set_data_prefix().unwrap();
+    let mut data_start_key = walker.set_data_prefix(&set_token).unwrap();
     data_start_key.extend_from_slice(&primary_key_value_raw);
     data_start_key.push(0x00);
 

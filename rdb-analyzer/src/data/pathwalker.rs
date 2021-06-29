@@ -230,7 +230,7 @@ impl<'a> PathWalker<'a> {
     }
   }
 
-  pub fn set_fast_scan_prefix(&self) -> Result<Vec<u8>> {
+  pub fn set_fast_scan_prefix(&self, set_token: &[u8]) -> Result<Vec<u8>> {
     self
       .node
       .set
@@ -238,11 +238,12 @@ impl<'a> PathWalker<'a> {
       .ok_or_else(|| PathWalkerError::NotSet)?;
 
     let mut key = self.generate_key();
+    key.extend_from_slice(set_token);
     key.push(0x01u8);
     Ok(key)
   }
 
-  pub fn set_data_prefix(&self) -> Result<Vec<u8>> {
+  pub fn set_data_prefix(&self, set_token: &[u8]) -> Result<Vec<u8>> {
     self
       .node
       .set
@@ -250,11 +251,16 @@ impl<'a> PathWalker<'a> {
       .ok_or_else(|| PathWalkerError::NotSet)?;
 
     let mut key = self.generate_key();
+    key.extend_from_slice(set_token);
     key.push(0x00u8);
     Ok(key)
   }
 
-  pub fn enter_set_raw(self: &Arc<Self>, primary_key: &[u8]) -> Result<Arc<Self>> {
+  pub fn enter_set_raw(
+    self: &Arc<Self>,
+    set_token: &[u8],
+    primary_key: &[u8],
+  ) -> Result<Arc<Self>> {
     let set = &**self
       .node
       .set
@@ -264,7 +270,8 @@ impl<'a> PathWalker<'a> {
     // 0x00 - data
     // 0x01 - key only
     // 0x02 - index
-    let mut dynamic_key_bytes = vec![0x00u8];
+    let mut dynamic_key_bytes = set_token.to_vec();
+    dynamic_key_bytes.push(0x00u8);
     dynamic_key_bytes.extend_from_slice(primary_key);
     dynamic_key_bytes.push(0x00u8);
 
@@ -293,7 +300,11 @@ impl<'a> PathWalker<'a> {
     }))
   }
 
-  pub fn enter_set(self: &Arc<Self>, primary_key: &PrimitiveValue) -> Result<Arc<Self>> {
-    self.enter_set_raw(&primary_key.serialize_for_key_component())
+  pub fn enter_set(
+    self: &Arc<Self>,
+    set_token: &[u8],
+    primary_key: &PrimitiveValue,
+  ) -> Result<Arc<Self>> {
+    self.enter_set_raw(set_token, &primary_key.serialize_for_key_component())
   }
 }

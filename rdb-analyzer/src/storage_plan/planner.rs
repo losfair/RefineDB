@@ -1,14 +1,14 @@
 use std::{
   collections::{BTreeMap, HashMap, HashSet},
   sync::Arc,
-  time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
-use byteorder::{BigEndian, ByteOrder};
-use rand::RngCore;
 
-use crate::schema::compile::{CompiledSchema, FieldAnnotation, FieldAnnotationList, FieldType};
+use crate::{
+  schema::compile::{CompiledSchema, FieldAnnotation, FieldAnnotationList, FieldType},
+  util::rand_kn_stateless,
+};
 
 use super::{StorageKey, StorageNode, StoragePlan};
 use thiserror::Error;
@@ -430,20 +430,7 @@ fn generate_field(
 
 fn rand_storage_key(st: &mut PlanState) -> StorageKey {
   loop {
-    let now = SystemTime::now()
-      .duration_since(UNIX_EPOCH)
-      .unwrap()
-      .as_millis() as u64;
-    let mut timebuf = [0u8; 8];
-    BigEndian::write_u64(&mut timebuf, now);
-
-    assert_eq!(timebuf[0], 0);
-    assert_eq!(timebuf[1], 0);
-
-    let mut ret = [0u8; 12];
-    ret[..6].copy_from_slice(&timebuf[2..]);
-    rand::thread_rng().fill_bytes(&mut ret[6..]);
-
+    let ret = rand_kn_stateless::<12>();
     if st.used_storage_keys.insert(ret) {
       break ret;
     }

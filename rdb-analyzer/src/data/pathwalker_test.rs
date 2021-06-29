@@ -52,7 +52,7 @@ fn print_path_examples(
         FieldType::Primitive(x) => PrimitiveValue::example_value_for_type(*x),
         _ => unreachable!(),
       };
-      let walker = walker.enter_set(&primary_key_example).unwrap();
+      let walker = walker.enter_set(&[], &primary_key_example).unwrap();
       let path = format!(
         "{}[{} == {:?}]",
         path, primary_key_name, primary_key_example
@@ -105,7 +105,7 @@ fn basic() {
   assert_eq!(
     PathWalker::from_export(&plan, "items")
       .unwrap()
-      .enter_set(&PrimitiveValue::String("test".into()))
+      .enter_set(&[], &PrimitiveValue::String("test".into()))
       .unwrap()
       .generate_key()
       .len(),
@@ -114,7 +114,7 @@ fn basic() {
   assert_eq!(
     PathWalker::from_export(&plan, "items")
       .unwrap()
-      .enter_set(&PrimitiveValue::String("test".into()))
+      .enter_set(&[], &PrimitiveValue::String("test".into()))
       .unwrap()
       .enter_field("id")
       .unwrap()
@@ -125,7 +125,7 @@ fn basic() {
   assert_eq!(
     PathWalker::from_export(&plan, "recursive_items")
       .unwrap()
-      .enter_set(&PrimitiveValue::String("test".into()))
+      .enter_set(&[], &PrimitiveValue::String("test".into()))
       .unwrap()
       .enter_field("value")
       .unwrap()
@@ -136,7 +136,7 @@ fn basic() {
   assert_eq!(
     PathWalker::from_export(&plan, "recursive_items")
       .unwrap()
-      .enter_set(&PrimitiveValue::String("test".into()))
+      .enter_set(&[], &PrimitiveValue::String("test".into()))
       .unwrap()
       .enter_field("recursive")
       .unwrap()
@@ -147,7 +147,7 @@ fn basic() {
   assert_eq!(
     PathWalker::from_export(&plan, "recursive_items")
       .unwrap()
-      .enter_set(&PrimitiveValue::String("test".into()))
+      .enter_set(&[], &PrimitiveValue::String("test".into()))
       .unwrap()
       .enter_field("recursive")
       .unwrap()
@@ -160,7 +160,7 @@ fn basic() {
   assert_eq!(
     PathWalker::from_export(&plan, "recursive_items")
       .unwrap()
-      .enter_set(&PrimitiveValue::String("test".into()))
+      .enter_set(&[], &PrimitiveValue::String("test".into()))
       .unwrap()
       .enter_field("recursive")
       .unwrap()
@@ -175,7 +175,7 @@ fn basic() {
   assert_eq!(
     PathWalker::from_export(&plan, "recursive_items")
       .unwrap()
-      .enter_set(&PrimitiveValue::String("test".into()))
+      .enter_set(&[], &PrimitiveValue::String("test".into()))
       .unwrap()
       .enter_field("recursive")
       .unwrap()
