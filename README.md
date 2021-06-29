@@ -1,27 +1,59 @@
 # RefineDB
 
-A strongly-typed schema layer for any transactional key-value database.
+A strongly-typed document database that runs on any transactional key-value store.
 
-Currently supported backends: [FoundationDB](https://github.com/apple/foundationdb/), [TiKV](https://github.com/tikv/tikv). 
+Currently supported backends are:
 
-*Warning: not ready for production*
+- [FoundationDB](https://github.com/apple/foundationdb) for distributed deployment.
+- [SQLite](https://www.sqlite.org/index.html) for single-machine deployment.
+- A simple in-memory key-value store for the web playground.
+
+Try RefineDB on the [Web Playground](https://playground.rdb.univalence.me/)!
+
+**Warning: Not ready for production.**
 
 ## Motivation
 
-I built RefineDB for my personal projects that need a database.
+Databases should be more scalable than popular SQL databases, more structured than popular NoSQL databases, and support stronger
+static type checking than any of the current databases. So I decided to build RefineDB as "the kind of database that I want to use myself".
 
-Many applications don't have a complex enough data model to need a fully-featured SQL database, but a key-value database is
-difficult to maintain if your data has *some* structure: it has no types or schemas, manually constructing and interpreting
-keys is error-prone, and version upgrades require non-trivial handling in application code.
+RefineDB will be used as the database service of [rusty-workers](https://github.com/losfair/rusty-workers).
 
-RefineDB allows to keep your database schema in the same repository as your application, type-checks the schema, and handles
-version upgrades automatically and safely.
+## Architecture
 
-## The type system
+![Architecture](https://univalence.me/i/d32378a2042ef32d15bef3dd6dc1b73c_5100183c11cb7b6aa2a8049c00d80ffc.svg)
 
-In RefineDB, schemas are defined with types:
+## Getting started
+
+Examples are a TODO but rdb-analyzer's [tests](https://github.com/losfair/RefineDB/blob/main/rdb-analyzer/src/data/treewalker/asm/asm_test.rs) and `rdb-server` (which uses RefineDB itself to store metadata) should give some basic insight on how the system works.
+
+## Schemas and the type system
+
+In RefineDB, schemas are defined with types. For example, a part of a schema for a simple blog would look like:
 
 ```
+type SiteConfig {
+  site_name: string,
+  registration_open: int64,
+}
+
+type BlogPost {
+  @primary
+  id: string,
+  author_email: string,
+  author_name: string,
+  title: string,
+  content: string,
+  access_time: AccessTime,
+}
+
+type AccessTime {
+  create_time: int64,
+  update_time: int64,
+}
+
+export SiteConfig site_config;
+export set<BlogPost> posts;
 ```
 
 The primitive types are:
@@ -32,39 +64,51 @@ The primitive types are:
 - `bytes`: Byte array.
 - `set<T>`: A set with element type `T`.
 
-*Recursive types* are allowed and you can actually construct something like a binary tree:
-
-```
-type BinaryTree<T> {
-  left: BinaryTree<T>?,
-  right: BinaryTree<T>?,
-  value: T?,
-}
-export BinaryTree<int64> data;
-```
-
-Note that recursive types are represented using key subspaces, and the performance might be suboptimal if your query path includes
-a lot of recursive types (RefineDB only flattens the query path for non-recursive types).
-
 Sum types are nice to have too, but I haven't implemented it yet.
 
-## Queries: the TreeWalker DFG VM
+## Queries: the TreeWalker VM and RefineAsm
 
-Queries on RefineDB are encoded in a custom bytecode format called the *TreeWalker DFG*.
+Queries in RefineDB are encoded as *data flow graphs*, and query execution is graph reduction.
+
+The TreeWalker VM is a massively concurrent data flow virtual machine for running the queries, but I haven't written documentation
+on its internals.
+
+RefineAsm is the textual representation of the query graph, with some syntactic sugar to make writing it easier.
+
+An example RefineAsm script for adding a post to the above blog schema:
+
+```
+type PostMap = map {
+  id: string,
+  author_email: string,
+  author_name: string,
+  title: string,
+  content: string,
+  access_time: map {
+    create_time: int64,
+    update_time: int64,
+  },
+};
+export graph add_post(root: schema, post: PostMap) {
+  s_insert root.posts $ call(build_post) [post];
+}
+graph build_post(post: PostMap): BlogPost {
+  return build_table(BlogPost)
+    $ m_insert(access_time) (build_table(AccessTime) post.access_time) post;
+}
+```
 
 ## Storage plan and schema migration
 
 A storage plan is how a schema maps to entries in the key-value store. By separating schemas and storage plans, RefineDB's
-schemas are just "views" of the underlying data structure and schema changes are fast.
+schemas are just "views" of the underlying keyspace and schema changes are fast.
 
 During a migration, added fields are automatically assigned new storage keys, and removed fields will not be auto-deleted from
-the storage (garbage collection is not yet implemented). This allows multiple schema versions to co-exist and the client can
-choose which schema version to use.
+the storage. This allows multiple schema versions to co-exist, enables the client to choose which schema version to use, and
+prevents unintended data deletion.
 
-## Design docs
+[Storage design doc](design/storage.md)
 
-[Storage](design/storage.md)
+## License
 
-[TreeWalker](design/treewalker.md)
-
-[RefineQL](design/refineql.md)
+MIT
