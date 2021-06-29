@@ -2,16 +2,19 @@ use std::{pin::Pin, sync::Arc};
 
 use anyhow::Result;
 use async_trait::async_trait;
+use r2d2::{Pool, PooledConnection};
+use r2d2_sqlite::SqliteConnectionManager;
 use rdb_analyzer::data::kv::{KeyValueStore, KvError, KvKeyIterator, KvTransaction};
-use rusqlite::{named_params, Connection, OptionalExtension, Transaction};
+use rusqlite::{named_params, OptionalExtension, Transaction};
 use std::future::Future;
+use thiserror::Error;
 use tokio::{
   runtime::Builder,
   sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     oneshot, Mutex,
   },
-  task::{spawn_local, LocalSet},
+  task::{block_in_place, spawn_local, LocalSet},
 };
 
 pub struct SqliteKvStore {
@@ -20,8 +23,14 @@ pub struct SqliteKvStore {
   prefix: Arc<[u8]>,
 }
 
+#[derive(Error, Debug)]
+pub enum SqliteKvError {
+  #[error("interrupted")]
+  Interrupted,
+}
+
 pub struct GlobalSqliteStore {
-  conn: Mutex<Connection>,
+  conn_pool: Pool<SqliteConnectionManager>,
   task_tx: UnboundedSender<Task>,
 }
 
@@ -29,24 +38,26 @@ type Task = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()>>> + Send>;
 
 impl GlobalSqliteStore {
   pub fn open_leaky(path: &str) -> Result<Arc<Self>> {
-    let conn = Mutex::new(Connection::open(path)?);
-    conn.try_lock().unwrap().execute(
-      "create table if not exists system (k blob primary key, v blob)",
-      [],
-    )?;
-    conn.try_lock().unwrap().execute(
-      "create table if not exists system_meta (k blob primary key, v blob)",
-      [],
-    )?;
-    conn.try_lock().unwrap().execute(
-      "create table if not exists user_data (k blob primary key, v blob)",
-      [],
-    )?;
+    let manager = SqliteConnectionManager::file(path).with_init(|c| {
+      c.execute_batch(
+        r#"
+      PRAGMA journal_mode=WAL;
+      create table if not exists system (k blob primary key, v blob);
+      create table if not exists system_meta (k blob primary key, v blob);
+      create table if not exists user_data (k blob primary key, v blob);
+      "#,
+      )
+    });
 
     let (task_tx, task_rx) = unbounded_channel();
-    let me = Arc::new(Self { conn, task_tx });
+    let me = Arc::new(Self {
+      conn_pool: Pool::new(manager)?,
+      task_tx,
+    });
 
     let me2 = me.clone();
+
+    // Isolate SQLite work onto its own thread
     std::thread::spawn(move || {
       let rt = Builder::new_current_thread().enable_all().build().unwrap();
       LocalSet::new().block_on(&rt, me2.run_worker(task_rx))
@@ -75,13 +86,14 @@ impl SqliteKvStore {
 #[async_trait]
 impl KeyValueStore for SqliteKvStore {
   async fn begin_transaction(&self) -> Result<Box<dyn KvTransaction>> {
+    let conn = block_in_place(|| self.global.conn_pool.get())?;
+
     let (work_tx, work_rx) = unbounded_channel();
-    let global = self.global.clone();
     self
       .global
       .task_tx
       .send(Box::new(|| {
-        Box::pin(async move { txn_worker(global, work_rx).await })
+        Box::pin(async move { txn_worker(conn, work_rx).await })
       }))
       .unwrap_or_else(|_| unreachable!());
     Ok(Box::new(SqliteKvTxn {
@@ -110,11 +122,17 @@ enum ModOp {
   DeleteRange(Vec<u8>, Vec<u8>),
 }
 
-async fn txn_worker(global: Arc<GlobalSqliteStore>, mut work_rx: UnboundedReceiver<Work>) {
-  let mut conn = global.conn.lock().await;
-
-  // XXX: Should we handle the error here?
-  let mut txn = Some(conn.transaction().unwrap());
+async fn txn_worker(
+  mut conn: PooledConnection<SqliteConnectionManager>,
+  mut work_rx: UnboundedReceiver<Work>,
+) {
+  let mut txn = Some(match conn.transaction() {
+    Ok(x) => x,
+    Err(e) => {
+      log::error!("txn_worker: transaction creation error: {:?}", e);
+      return;
+    }
+  });
 
   loop {
     let work = match work_rx.recv().await {
@@ -129,21 +147,25 @@ async fn txn_worker(global: Arc<GlobalSqliteStore>, mut work_rx: UnboundedReceiv
 }
 
 impl SqliteKvTxn {
-  async fn run<G: FnOnce(&mut Option<Transaction>) -> R + Send + 'static, R: Send + 'static>(
+  async fn run<
+    G: FnOnce(&mut Option<Transaction>) -> Result<R> + Send + 'static,
+    R: Send + 'static,
+  >(
     &self,
     f: G,
-  ) -> R {
+  ) -> Result<R> {
     let (tx, rx) = oneshot::channel();
-    self
-      .work_tx
-      .send(Box::new(move |txn| {
-        Box::pin(async move {
-          // Don't check the error here in case of asynchronous cancellation on `rx`.
-          let _ = tx.send(f(txn));
-        })
-      }))
-      .unwrap_or_else(|_| unreachable!());
-    rx.await.unwrap()
+    let res = self.work_tx.send(Box::new(move |txn| {
+      Box::pin(async move {
+        // Don't check the error here in case of asynchronous cancellation on `rx`.
+        let _ = tx.send(f(txn));
+      })
+    }));
+    let res = match res {
+      Ok(_) => rx.await.unwrap_or_else(|e| Err(anyhow::Error::from(e))),
+      Err(_) => Err(anyhow::Error::from(SqliteKvError::Interrupted)),
+    };
+    res
   }
 }
 
@@ -250,38 +272,43 @@ impl KvTransaction for SqliteKvTxn {
         for op in log {
           match op {
             ModOp::Put(key, value) => {
-              let mut stmt = txn
-                .prepare_cached(&format!(
-                  "insert into {} (k, v) values(:k, :v) on conflict(k) do update set v = :v",
-                  table
-                ))
-                .map_err(|_| KvError::CommitStateUnknown)?;
-              stmt
-                .execute(named_params! { ":k": &key, ":v": &value })
-                .map_err(|_| KvError::CommitStateUnknown)?;
+              let mut stmt = txn.prepare_cached(&format!(
+                "insert into {} (k, v) values(:k, :v) on conflict(k) do update set v = :v",
+                table
+              ))?;
+              stmt.execute(named_params! { ":k": &key, ":v": &value })?;
             }
             ModOp::Delete(key) => {
-              let mut stmt = txn
-                .prepare_cached(&format!("delete from {} where k = ?", table))
-                .map_err(|_| KvError::CommitStateUnknown)?;
-              stmt
-                .execute(&[&key])
-                .map_err(|_| KvError::CommitStateUnknown)?;
+              let mut stmt = txn.prepare_cached(&format!("delete from {} where k = ?", table))?;
+              stmt.execute(&[&key])?;
             }
             ModOp::DeleteRange(start, end) => {
-              let mut stmt = txn
-                .prepare_cached(&format!("delete from {} where k >= ? and k < ?", table))
-                .map_err(|_| KvError::CommitStateUnknown)?;
-              stmt
-                .execute(&[&start, &end])
-                .map_err(|_| KvError::CommitStateUnknown)?;
+              let mut stmt =
+                txn.prepare_cached(&format!("delete from {} where k >= ? and k < ?", table))?;
+              stmt.execute(&[&start, &end])?;
             }
           }
         }
-        txn.commit().map_err(|_| KvError::CommitStateUnknown)?;
+        txn.commit()?;
         Ok(())
       })
       .await
+      .map_err(|e| {
+        if let Some(x) = e.downcast_ref::<rusqlite::Error>() {
+          match x {
+            rusqlite::Error::SqliteFailure(_, reason) => {
+              if let Some(reason) = reason {
+                if reason == "database is locked" {
+                  return KvError::Conflict;
+                }
+              }
+            }
+            _ => {}
+          }
+        }
+        log::error!("sqlite commit error: {:?}", e);
+        KvError::CommitStateUnknown
+      })
   }
 }
 
