@@ -71,26 +71,35 @@ async fn do_invoke_query(
   let st = get_state();
   let kv_prefix = ns_to_kv_prefix_with_appended_zero(&namespace_id).await?;
   let kv = (st.data_store_generator)(&kv_prefix);
-  let query_script = lookup_query_script(&namespace_id, &query_script_id).await?;
-
-  let qc_key = QueryCacheKey {
-    namespace_id: namespace_id.clone(),
-    query_script_id: query_script_id,
-    deployment_id: query_script.associated_deployment.clone(),
-    query_script_create_time: query_script.create_time,
-  };
 
   let exec_ctx;
-  if let Some(x) = st.query_cache.get(&qc_key).await {
+  if let Some(x) = st
+    .query_cache
+    .get_hot(&namespace_id, &query_script_id)
+    .await
+  {
     exec_ctx = x;
   } else {
-    let deployment = lookup_deployment(&namespace_id, &query_script.associated_deployment).await?;
-    let schema = compile(&parse(&Bump::new(), &deployment.schema)?)?;
-    let plan = StoragePlan::deserialize_compressed(&deployment.plan)?;
-    let schema_ctx = Arc::new(SchemaContext { schema, plan });
-    exec_ctx = Arc::new(ExecContext::load(schema_ctx, &query_script.script)?);
-    log::info!("Loaded query script {:?}.", qc_key);
-    st.query_cache.put(qc_key, exec_ctx.clone()).await;
+    let query_script = lookup_query_script(&namespace_id, &query_script_id).await?;
+
+    let qc_key = QueryCacheKey {
+      namespace_id: namespace_id.clone(),
+      query_script_id: query_script_id.clone(),
+      deployment_id: query_script.associated_deployment.clone(),
+      query_script_create_time: query_script.create_time,
+    };
+    if let Some(x) = st.query_cache.get(&qc_key).await {
+      exec_ctx = x;
+    } else {
+      let deployment =
+        lookup_deployment(&namespace_id, &query_script.associated_deployment).await?;
+      let schema = compile(&parse(&Bump::new(), &deployment.schema)?)?;
+      let plan = StoragePlan::deserialize_compressed(&deployment.plan)?;
+      let schema_ctx = Arc::new(SchemaContext { schema, plan });
+      exec_ctx = Arc::new(ExecContext::load(schema_ctx, &query_script.script)?);
+      log::info!("Loaded query script {:?}.", qc_key);
+      st.query_cache.put(qc_key, exec_ctx.clone()).await;
+    }
   }
 
   let output = exec_ctx
