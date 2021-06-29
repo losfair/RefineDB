@@ -132,7 +132,7 @@ impl QueryCache {
         }
 
         if pop_count > 0 {
-          log::info!("gc: Removed {} hot item(s) from cache.", pop_count);
+          log::debug!("gc: Removed {} hot item(s) from cache.", pop_count);
         }
       }
 
