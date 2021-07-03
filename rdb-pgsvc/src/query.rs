@@ -8,7 +8,7 @@ use rdb_analyzer::{
     treewalker::{
       bytecode::TwGraph,
       exec::{generate_root_map, Executor},
-      serialize::SerializedVmValue,
+      serialize::{SerializedVmValue, TaggedVmValue},
       typeck::GlobalTypeInfo,
       vm::TwVm,
       vm_value::VmType,
@@ -107,7 +107,11 @@ pub fn run_vm_query<'a>(
     })
     .collect::<Result<Vec<_>>>()?;
   let res = futures::executor::block_on(executor.run_graph(i, &params))?;
-  Ok(res.map(|x| SerializedVmValue::encode(&*x)).transpose()?)
+  Ok(
+    res
+      .map(|x| SerializedVmValue::encode(&*x, &Default::default()))
+      .transpose()?,
+  )
 }
 
 fn generate_example_query(vm: &TwVm, g: &TwGraph) -> Result<VmGraphQuery> {
@@ -126,11 +130,11 @@ fn generate_example_query(vm: &TwVm, g: &TwGraph) -> Result<VmGraphQuery> {
 fn generate_example_param(ty: &VmType<&str>) -> Result<SerializedVmValue> {
   Ok(match ty {
     VmType::Bool => SerializedVmValue::Bool(false),
-    VmType::Map(x) => SerializedVmValue::Map(
+    VmType::Map(x) => SerializedVmValue::Tagged(TaggedVmValue::M(
       x.iter()
         .map(|(k, v)| generate_example_param(v).map(|x| (k.to_string(), x)))
         .collect::<Result<_>>()?,
-    ),
+    )),
     VmType::Primitive(x) => match x {
       PrimitiveType::Bytes => SerializedVmValue::String("".into()),
       PrimitiveType::String => SerializedVmValue::String("".into()),

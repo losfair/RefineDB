@@ -10,7 +10,7 @@ use crate::{
     treewalker::{
       asm::codegen::compile_twscript,
       exec::{generate_root_map, Executor},
-      serialize::SerializedVmValue,
+      serialize::{SerializedVmValue, TaggedVmValue},
       typeck::GlobalTyckContext,
       vm::TwVm,
       vm_value::VmValue,
@@ -468,15 +468,15 @@ async fn list_ops() {
           _ => unreachable!(),
         },
         1 => {
-          let serialized = SerializedVmValue::encode(&**x.as_ref().unwrap()).unwrap();
+          let serialized = SerializedVmValue::encode(&**x.as_ref().unwrap(), &Default::default()).unwrap();
           match &serialized {
-            SerializedVmValue::Map(x) => {
+            SerializedVmValue::Tagged(TaggedVmValue::M(x)) => {
               match x.get("list1").unwrap() {
-                SerializedVmValue::List(x) => assert_eq!(x.len(), 5),
+                SerializedVmValue::Tagged(TaggedVmValue::L(x)) => assert_eq!(x.len(), 5),
                 _ => unreachable!(),
               }
               match x.get("list2").unwrap() {
-                SerializedVmValue::List(x) => assert_eq!(x.len(), 20),
+                SerializedVmValue::Tagged(TaggedVmValue::L(x)) => assert_eq!(x.len(), 20),
                 _ => unreachable!(),
               }
             }

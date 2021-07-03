@@ -35,11 +35,26 @@ pub enum SerializeError {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum SerializedVmValue {
-  Map(BTreeMap<String, SerializedVmValue>),
-  List(Vec<SerializedVmValue>),
   String(String),
   Bool(bool),
+  Bytes(Vec<u8>),
+  Int64(i64),
+  Double(f64),
   Null(Option<Never>),
+  Tagged(TaggedVmValue),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum TaggedVmValue {
+  M(BTreeMap<String, SerializedVmValue>),
+  L(Vec<SerializedVmValue>),
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct VmValueEncodeConfig {
+  pub enable_bytes: bool,
+  pub enable_int64: bool,
+  pub enable_double: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -54,7 +69,7 @@ impl SerializedVmValue {
   }
   pub fn try_unwrap_list(&self) -> Result<&Vec<SerializedVmValue>> {
     match self {
-      Self::List(x) => Ok(x),
+      Self::Tagged(TaggedVmValue::L(x)) => Ok(x),
       _ => Err(SerializeError::UnwrapTypeMismatch.into()),
     }
   }
@@ -69,7 +84,7 @@ impl SerializedVmValue {
     required_fields: &[&str],
   ) -> Result<&BTreeMap<String, SerializedVmValue>> {
     match self {
-      Self::Map(x) => {
+      Self::Tagged(TaggedVmValue::M(x)) => {
         for f in required_fields {
           if !x.contains_key(*f) {
             return Err(SerializeError::MissingRequiredField(f.to_string()).into());
@@ -87,29 +102,47 @@ impl SerializedVmValue {
     }
   }
 
-  pub fn encode(v: &VmValue) -> Result<Self> {
+  pub fn encode(v: &VmValue, config: &VmValueEncodeConfig) -> Result<Self> {
     match v {
-      VmValue::Map(x) => Ok(Self::Map(
+      VmValue::Map(x) => Ok(Self::Tagged(TaggedVmValue::M(
         x.elements
           .iter()
-          .map(|(k, v)| Self::encode(&**v).map(|x| (k.to_string(), x)))
+          .map(|(k, v)| Self::encode(&**v, config).map(|x| (k.to_string(), x)))
           .collect::<Result<_>>()?,
-      )),
+      ))),
       VmValue::Null(_) => Ok(Self::Null(None)),
       VmValue::Bool(x) => Ok(Self::Bool(*x)),
       VmValue::Primitive(x) => match x {
-        PrimitiveValue::Bytes(x) => Ok(Self::String(base64::encode(x))),
-        PrimitiveValue::Double(x) => Ok(Self::String(format!("{}", f64::from_bits(*x)))),
-        PrimitiveValue::Int64(x) => Ok(Self::String(format!("{}", x))),
+        PrimitiveValue::Bytes(x) => {
+          if config.enable_bytes {
+            Ok(Self::Bytes(x.clone()))
+          } else {
+            Ok(Self::String(base64::encode(x)))
+          }
+        }
+        PrimitiveValue::Double(x) => {
+          if config.enable_double {
+            Ok(Self::Double(f64::from_bits(*x)))
+          } else {
+            Ok(Self::String(format!("{}", f64::from_bits(*x))))
+          }
+        }
+        PrimitiveValue::Int64(x) => {
+          if config.enable_int64 {
+            Ok(Self::Int64(*x))
+          } else {
+            Ok(Self::String(format!("{}", x)))
+          }
+        }
         PrimitiveValue::String(x) => Ok(Self::String(x.clone())),
       },
       VmValue::List(x) => {
         let out = x
           .node
           .iter()
-          .map(|x| Self::encode(&**x))
+          .map(|x| Self::encode(&**x, config))
           .collect::<Result<_>>()?;
-        Ok(Self::List(out))
+        Ok(Self::Tagged(TaggedVmValue::L(out)))
       }
       _ => {
         log::debug!("encode: unserializable: {:?}", v);
@@ -121,7 +154,7 @@ impl SerializedVmValue {
   pub fn decode<'a>(&self, ty: &VmType<&'a str>) -> Result<VmValue<'a>> {
     use SerializedVmValue as S;
     match (self, ty) {
-      (S::Map(x), VmType::Map(map_ty)) => {
+      (S::Tagged(TaggedVmValue::M(x)), VmType::Map(map_ty)) => {
         let mut res = VmMapValue {
           elements: Default::default(),
         };
@@ -136,7 +169,7 @@ impl SerializedVmValue {
         }
         Ok(VmValue::Map(res))
       }
-      (S::List(x), VmType::List(list_ty)) => {
+      (S::Tagged(TaggedVmValue::L(x)), VmType::List(list_ty)) => {
         let res = VmListValue {
           member_ty: (*list_ty.ty).clone(),
           node: x
@@ -151,15 +184,33 @@ impl SerializedVmValue {
       (S::String(x), VmType::Primitive(PrimitiveType::String)) => {
         Ok(VmValue::Primitive(PrimitiveValue::String(x.clone())))
       }
+      (S::Bytes(x), VmType::Primitive(PrimitiveType::String)) => Ok(VmValue::Primitive(
+        PrimitiveValue::String(String::from_utf8_lossy(x).to_string()),
+      )),
       (S::String(x), VmType::Primitive(PrimitiveType::Int64)) => {
         Ok(VmValue::Primitive(PrimitiveValue::Int64(x.parse()?)))
+      }
+      (S::Int64(x), VmType::Primitive(PrimitiveType::Int64)) => {
+        Ok(VmValue::Primitive(PrimitiveValue::Int64(*x)))
+      }
+      (S::Double(x), VmType::Primitive(PrimitiveType::Int64)) => {
+        Ok(VmValue::Primitive(PrimitiveValue::Int64(*x as i64)))
       }
       (S::String(x), VmType::Primitive(PrimitiveType::Double)) => {
         Ok(VmValue::Primitive(PrimitiveValue::Double(x.parse()?)))
       }
+      (S::Int64(x), VmType::Primitive(PrimitiveType::Double)) => Ok(VmValue::Primitive(
+        PrimitiveValue::Double((*x as f64).to_bits()),
+      )),
+      (S::Double(x), VmType::Primitive(PrimitiveType::Double)) => {
+        Ok(VmValue::Primitive(PrimitiveValue::Double(x.to_bits())))
+      }
       (S::String(x), VmType::Primitive(PrimitiveType::Bytes)) => Ok(VmValue::Primitive(
         PrimitiveValue::Bytes(base64::decode(x)?),
       )),
+      (S::Bytes(x), VmType::Primitive(PrimitiveType::Bytes)) => {
+        Ok(VmValue::Primitive(PrimitiveValue::Bytes(x.clone())))
+      }
       _ => {
         log::debug!("decode: type mismatch: `{:?}`, `{}`", self, ty);
         Err(SerializeError::TypeMismatch.into())

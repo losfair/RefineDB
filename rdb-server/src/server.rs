@@ -6,7 +6,7 @@ use bumpalo::Bump;
 use maplit::btreemap;
 use rand::RngCore;
 use rdb_analyzer::data::fixup::migrate_schema;
-use rdb_analyzer::data::treewalker::serialize::SerializedVmValue;
+use rdb_analyzer::data::treewalker::serialize::{SerializedVmValue, TaggedVmValue};
 use rdb_analyzer::schema::compile::compile;
 use rdb_analyzer::schema::grammar::parse;
 use rdb_analyzer::storage_plan::planner::generate_plan_for_schema;
@@ -177,13 +177,13 @@ impl RdbControl for ControlServer {
         &[
           SerializedVmValue::Null(None),
           SerializedVmValue::String(r.namespace_id.clone()),
-          SerializedVmValue::Map(btreemap! {
+          SerializedVmValue::Tagged(TaggedVmValue::M(btreemap! {
             "id".to_string() => SerializedVmValue::String(id.clone()),
             "description".to_string() => SerializedVmValue::String(r.description.clone()),
             "schema".to_string() => SerializedVmValue::String(r.schema.clone()),
             "plan".to_string() => SerializedVmValue::String(base64::encode(&generated_plan.serialize_compressed().translate_err()?)),
             "create_time".to_string() => SerializedVmValue::String(format!("{}", now)),
-          }),
+          })),
         ],
       )
       .await
@@ -368,12 +368,12 @@ impl RdbControl for ControlServer {
         &[
           SerializedVmValue::Null(None),
           SerializedVmValue::String(r.namespace_id.clone()),
-          SerializedVmValue::Map(btreemap! {
+          SerializedVmValue::Tagged(TaggedVmValue::M(btreemap! {
             "id".to_string() => SerializedVmValue::String(r.id.clone()),
             "associated_deployment".to_string() => SerializedVmValue::String(r.associated_deployment.clone()),
             "script".to_string() => SerializedVmValue::String(r.script.clone()),
             "create_time".to_string() => SerializedVmValue::String(format!("{}", current_millis())),
-          }),
+          })),
         ],
       )
       .await

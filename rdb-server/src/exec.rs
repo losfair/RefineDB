@@ -76,7 +76,7 @@ impl ExecContext {
     let output = executor
       .run_graph(graph_index, &params)
       .await?
-      .map(|x| SerializedVmValue::encode(&*x))
+      .map(|x| SerializedVmValue::encode(&*x, &Default::default()))
       .transpose()?;
     Ok(output.unwrap_or_else(|| SerializedVmValue::Null(None)))
   }
