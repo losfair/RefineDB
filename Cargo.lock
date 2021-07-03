@@ -1649,6 +1649,7 @@ dependencies = [
  "async-trait",
  "base64",
  "bumpalo",
+ "bytes",
  "console",
  "foundationdb",
  "futures",

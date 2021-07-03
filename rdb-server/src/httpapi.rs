@@ -2,6 +2,7 @@ use std::{fmt::Debug, net::ToSocketAddrs, sync::Arc};
 
 use anyhow::Result;
 use bumpalo::Bump;
+use bytes::Bytes;
 use rdb_analyzer::{
   data::treewalker::serialize::SerializedVmValue,
   schema::{compile::compile, grammar::parse},
@@ -34,14 +35,29 @@ impl Debug for ApiReject {
 impl Reject for ApiReject {}
 
 pub async fn run_http_server(addr: impl ToSocketAddrs) -> ! {
-  let query_route = warp::path("query")
+  let query_route_json = warp::path("query")
     .and(warp::path::param()) // namespace
     .and(warp::path::param()) // query script id
     .and(warp::path::param()) // name of the graph
+    .and(warp::filters::header::exact(
+      "Content-Type",
+      "application/json",
+    ))
     .and(warp::body::content_length_limit(1024 * 256))
     .and(warp::body::json())
     .and_then(invoke_query);
-  let routes = warp::post().and(query_route);
+  let query_route_msgpack = warp::path("query")
+    .and(warp::path::param()) // namespace
+    .and(warp::path::param()) // query script id
+    .and(warp::path::param()) // name of the graph
+    .and(warp::filters::header::exact(
+      "Content-Type",
+      "application/x-msgpack",
+    ))
+    .and(warp::body::content_length_limit(1024 * 256))
+    .and(warp::body::bytes())
+    .and_then(invoke_query_msgpack);
+  let routes = warp::post().and(query_route_json.or(query_route_msgpack));
   let addr = addr
     .to_socket_addrs()
     .unwrap()
@@ -57,6 +73,19 @@ async fn invoke_query(
   graph_name: String,
   graph_params: Vec<SerializedVmValue>,
 ) -> Result<Json, Rejection> {
+  do_invoke_query(namespace_id, query_script_id, graph_name, graph_params)
+    .await
+    .map_err(|e| warp::reject::custom(ApiReject::new(e)))
+}
+
+async fn invoke_query_msgpack(
+  namespace_id: String,
+  query_script_id: String,
+  graph_name: String,
+  graph_params: Bytes,
+) -> Result<Json, Rejection> {
+  let graph_params: Vec<SerializedVmValue> = rmp_serde::from_slice(&graph_params)
+    .map_err(|e| warp::reject::custom(ApiReject::new(anyhow::Error::from(e))))?;
   do_invoke_query(namespace_id, query_script_id, graph_name, graph_params)
     .await
     .map_err(|e| warp::reject::custom(ApiReject::new(e)))
