@@ -6,7 +6,9 @@ use bumpalo::Bump;
 use maplit::btreemap;
 use rand::RngCore;
 use rdb_analyzer::data::fixup::migrate_schema;
-use rdb_analyzer::data::treewalker::serialize::{SerializedVmValue, TaggedVmValue};
+use rdb_analyzer::data::treewalker::serialize::{
+  SerializedVmValue, TaggedVmValue, VmValueEncodeConfig,
+};
 use rdb_analyzer::schema::compile::compile;
 use rdb_analyzer::schema::grammar::parse;
 use rdb_analyzer::storage_plan::planner::generate_plan_for_schema;
@@ -54,6 +56,7 @@ impl RdbControl for ControlServer {
           SerializedVmValue::String(base64::encode(&kv_prefix)),
           SerializedVmValue::String(format!("{}", current_millis())),
         ],
+        &Default::default(),
       )
       .await
       .translate_err()?;
@@ -74,6 +77,11 @@ impl RdbControl for ControlServer {
         &*st.system_store,
         "list_namespaces",
         &[SerializedVmValue::Null(None)],
+        &VmValueEncodeConfig {
+          enable_bytes: true,
+          enable_double: true,
+          enable_int64: true,
+        },
       )
       .await
       .translate_err()?;
@@ -86,9 +94,7 @@ impl RdbControl for ControlServer {
       let create_time: i64 = m
         .get("create_time")
         .unwrap()
-        .try_unwrap_string()
-        .translate_err()?
-        .parse::<i64>()
+        .try_unwrap_int64()
         .translate_err()?;
       namespaces.push(NamespaceBasicInfo {
         id: id.clone(),
@@ -127,6 +133,7 @@ impl RdbControl for ControlServer {
           SerializedVmValue::Null(None),
           SerializedVmValue::String(r.id.clone()),
         ],
+        &Default::default(),
       )
       .await
       .translate_err()?;
@@ -185,6 +192,7 @@ impl RdbControl for ControlServer {
             "create_time".to_string() => SerializedVmValue::String(format!("{}", now)),
           })),
         ],
+        &Default::default(),
       )
       .await
       .translate_err()?;
@@ -212,6 +220,11 @@ impl RdbControl for ControlServer {
           SerializedVmValue::String(r.namespace_id.clone()),
           SerializedVmValue::String(r.deployment_id.clone()),
         ],
+        &VmValueEncodeConfig {
+          enable_bytes: true,
+          enable_double: true,
+          enable_int64: true,
+        },
       )
       .await
       .translate_err()?;
@@ -232,9 +245,7 @@ impl RdbControl for ControlServer {
             create_time: res
               .get("create_time")
               .unwrap()
-              .try_unwrap_string()
-              .translate_err()?
-              .parse()
+              .try_unwrap_int64()
               .translate_err()?,
             description: res
               .get("description")
@@ -250,14 +261,11 @@ impl RdbControl for ControlServer {
               .clone(),
             plan: serde_yaml::to_string(&StoragePlan::<String>::from(
               &StoragePlan::deserialize_compressed(
-                &base64::decode(
-                  res
-                    .get("plan")
-                    .unwrap()
-                    .try_unwrap_string()
-                    .translate_err()?,
-                )
-                .translate_err()?,
+                res
+                  .get("plan")
+                  .unwrap()
+                  .try_unwrap_bytes()
+                  .translate_err()?,
               )
               .translate_err()?,
             ))
@@ -285,6 +293,11 @@ impl RdbControl for ControlServer {
           SerializedVmValue::Null(None),
           SerializedVmValue::String(r.namespace_id.clone()),
         ],
+        &VmValueEncodeConfig {
+          enable_bytes: true,
+          enable_double: true,
+          enable_int64: true,
+        },
       )
       .await
       .translate_err()?;
@@ -299,9 +312,7 @@ impl RdbControl for ControlServer {
       let create_time: i64 = m
         .get("create_time")
         .unwrap()
-        .try_unwrap_string()
-        .translate_err()?
-        .parse::<i64>()
+        .try_unwrap_int64()
         .translate_err()?;
       let description = m
         .get("description")
@@ -334,6 +345,7 @@ impl RdbControl for ControlServer {
           SerializedVmValue::String(r.namespace_id.clone()),
           SerializedVmValue::String(r.id.clone()),
         ],
+        &Default::default(),
       )
       .await
       .translate_err()?;
@@ -375,6 +387,7 @@ impl RdbControl for ControlServer {
             "create_time".to_string() => SerializedVmValue::String(format!("{}", current_millis())),
           })),
         ],
+        &Default::default(),
       )
       .await
       .translate_err()?;
@@ -400,6 +413,7 @@ impl RdbControl for ControlServer {
           SerializedVmValue::String(r.namespace_id.clone()),
           SerializedVmValue::String(r.id.clone()),
         ],
+        &Default::default(),
       )
       .await
       .translate_err()?;
@@ -442,6 +456,11 @@ impl RdbControl for ControlServer {
           SerializedVmValue::Null(None),
           SerializedVmValue::String(r.namespace_id.clone()),
         ],
+        &VmValueEncodeConfig {
+          enable_bytes: true,
+          enable_double: true,
+          enable_int64: true,
+        },
       )
       .await
       .translate_err()?;
@@ -461,9 +480,7 @@ impl RdbControl for ControlServer {
       let create_time: i64 = m
         .get("create_time")
         .unwrap()
-        .try_unwrap_string()
-        .translate_err()?
-        .parse::<i64>()
+        .try_unwrap_int64()
         .translate_err()?;
       query_scripts.push(QueryScriptBasicInfo {
         id: id.clone(),

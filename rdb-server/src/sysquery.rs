@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rdb_analyzer::data::treewalker::serialize::SerializedVmValue;
+use rdb_analyzer::data::treewalker::serialize::{SerializedVmValue, VmValueEncodeConfig};
 
 use crate::state::get_state;
 use thiserror::Error;
@@ -40,12 +40,17 @@ pub async fn ns_to_kv_prefix_with_appended_zero(ns_id: &str) -> Result<Vec<u8>> 
         SerializedVmValue::Null(None),
         SerializedVmValue::String(ns_id.into()),
       ],
+      &VmValueEncodeConfig {
+        enable_bytes: true,
+        enable_double: true,
+        enable_int64: true,
+      },
     )
     .await?;
   match res {
     SerializedVmValue::Null(_) => Err(SysQueryError::NamespaceNotFound.into()),
     _ => Ok({
-      let mut x = base64::decode(res.try_unwrap_string()?)?;
+      let mut x = res.try_unwrap_bytes()?.clone();
       x.push(0);
       x
     }),
@@ -65,6 +70,11 @@ pub async fn lookup_query_script(ns_id: &str, qs_id: &str) -> Result<QueryScript
         SerializedVmValue::String(ns_id.into()),
         SerializedVmValue::String(qs_id.into()),
       ],
+      &VmValueEncodeConfig {
+        enable_bytes: true,
+        enable_double: true,
+        enable_int64: true,
+      },
     )
     .await?;
   match res {
@@ -73,7 +83,7 @@ pub async fn lookup_query_script(ns_id: &str, qs_id: &str) -> Result<QueryScript
       let m = res.try_unwrap_map(&["id", "create_time", "associated_deployment", "script"])?;
       Ok(QueryScript {
         id: m.get("id").unwrap().try_unwrap_string()?.clone(),
-        create_time: m.get("create_time").unwrap().try_unwrap_string()?.parse()?,
+        create_time: m.get("create_time").unwrap().try_unwrap_int64()?,
         associated_deployment: m
           .get("associated_deployment")
           .unwrap()
@@ -98,6 +108,11 @@ pub async fn lookup_deployment(namespace_id: &str, deployment_id: &str) -> Resul
         SerializedVmValue::String(namespace_id.into()),
         SerializedVmValue::String(deployment_id.into()),
       ],
+      &VmValueEncodeConfig {
+        enable_bytes: true,
+        enable_double: true,
+        enable_int64: true,
+      },
     )
     .await?;
   let res = res.try_unwrap_map(&["id", "create_time", "description", "schema", "plan"])?;
@@ -105,12 +120,8 @@ pub async fn lookup_deployment(namespace_id: &str, deployment_id: &str) -> Resul
     id: res.get("id").unwrap().try_unwrap_string()?.clone(),
     description: res.get("description").unwrap().try_unwrap_string()?.clone(),
     schema: res.get("schema").unwrap().try_unwrap_string()?.clone(),
-    plan: base64::decode(res.get("plan").unwrap().try_unwrap_string()?)?,
-    create_time: res
-      .get("create_time")
-      .unwrap()
-      .try_unwrap_string()?
-      .parse()?,
+    plan: res.get("plan").unwrap().try_unwrap_bytes()?.clone(),
+    create_time: res.get("create_time").unwrap().try_unwrap_int64()?,
   };
   Ok(depl)
 }

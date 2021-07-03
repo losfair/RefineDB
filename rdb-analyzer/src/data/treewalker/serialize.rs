@@ -101,6 +101,18 @@ impl SerializedVmValue {
       _ => Err(SerializeError::UnwrapTypeMismatch.into()),
     }
   }
+  pub fn try_unwrap_bytes(&self) -> Result<&Vec<u8>> {
+    match self {
+      Self::Bytes(x) => Ok(x),
+      _ => Err(SerializeError::UnwrapTypeMismatch.into()),
+    }
+  }
+  pub fn try_unwrap_int64(&self) -> Result<i64> {
+    match self {
+      Self::Int64(x) => Ok(*x),
+      _ => Err(SerializeError::UnwrapTypeMismatch.into()),
+    }
+  }
 
   pub fn encode(v: &VmValue, config: &VmValueEncodeConfig) -> Result<Self> {
     match v {

@@ -4,11 +4,16 @@ use anyhow::Result;
 use bumpalo::Bump;
 use bytes::Bytes;
 use rdb_analyzer::{
-  data::treewalker::serialize::SerializedVmValue,
+  data::treewalker::serialize::{SerializedVmValue, VmValueEncodeConfig},
   schema::{compile::compile, grammar::parse},
   storage_plan::StoragePlan,
 };
-use warp::{reject::Reject, reply::Json, Filter, Rejection};
+use warp::{
+  hyper::{Body, Response},
+  reject::Reject,
+  reply::Json,
+  Filter, Rejection,
+};
 
 use crate::{
   exec_core::{ExecContext, SchemaContext},
@@ -73,9 +78,16 @@ async fn invoke_query(
   graph_name: String,
   graph_params: Vec<SerializedVmValue>,
 ) -> Result<Json, Rejection> {
-  do_invoke_query(namespace_id, query_script_id, graph_name, graph_params)
-    .await
-    .map_err(|e| warp::reject::custom(ApiReject::new(e)))
+  do_invoke_query(
+    namespace_id,
+    query_script_id,
+    graph_name,
+    graph_params,
+    &Default::default(),
+  )
+  .await
+  .map(|x| warp::reply::json(&x))
+  .map_err(|e| warp::reject::custom(ApiReject::new(e)))
 }
 
 async fn invoke_query_msgpack(
@@ -83,12 +95,29 @@ async fn invoke_query_msgpack(
   query_script_id: String,
   graph_name: String,
   graph_params: Bytes,
-) -> Result<Json, Rejection> {
+) -> Result<Response<Body>, Rejection> {
   let graph_params: Vec<SerializedVmValue> = rmp_serde::from_slice(&graph_params)
     .map_err(|e| warp::reject::custom(ApiReject::new(anyhow::Error::from(e))))?;
-  do_invoke_query(namespace_id, query_script_id, graph_name, graph_params)
-    .await
-    .map_err(|e| warp::reject::custom(ApiReject::new(e)))
+  do_invoke_query(
+    namespace_id,
+    query_script_id,
+    graph_name,
+    graph_params,
+    &VmValueEncodeConfig {
+      enable_bytes: true,
+      enable_double: true,
+      enable_int64: true,
+    },
+  )
+  .await
+  .and_then(|x| rmp_serde::to_vec_named(&x).map_err(anyhow::Error::from))
+  .and_then(|x| {
+    Response::builder()
+      .header("Content-Type", "application/x-msgpack")
+      .body(Body::from(x))
+      .map_err(anyhow::Error::from)
+  })
+  .map_err(|e| warp::reject::custom(ApiReject::new(e)))
 }
 
 async fn do_invoke_query(
@@ -96,7 +125,8 @@ async fn do_invoke_query(
   query_script_id: String,
   graph_name: String,
   graph_params: Vec<SerializedVmValue>,
-) -> Result<Json> {
+  serialization_config: &VmValueEncodeConfig,
+) -> Result<SerializedVmValue> {
   let st = get_state();
   let kv_prefix = ns_to_kv_prefix_with_appended_zero(&namespace_id).await?;
   let kv = (st.data_store_generator)(&kv_prefix);
@@ -132,7 +162,7 @@ async fn do_invoke_query(
   }
 
   let output = exec_ctx
-    .run_exported_graph(&*kv, &graph_name, &graph_params)
+    .run_exported_graph(&*kv, &graph_name, &graph_params, serialization_config)
     .await?;
-  Ok(warp::reply::json(&output))
+  Ok(output)
 }

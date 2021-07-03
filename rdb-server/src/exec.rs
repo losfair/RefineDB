@@ -4,7 +4,11 @@ use anyhow::Result;
 use futures::FutureExt;
 use rdb_analyzer::data::{
   kv::KeyValueStore,
-  treewalker::{exec::Executor, serialize::SerializedVmValue, vm_value::VmType},
+  treewalker::{
+    exec::Executor,
+    serialize::{SerializedVmValue, VmValueEncodeConfig},
+    vm_value::VmType,
+  },
 };
 use tokio::{task::yield_now, time::sleep};
 
@@ -31,8 +35,11 @@ impl ExecContext {
     kv: &dyn KeyValueStore,
     name: &str,
     params: &[SerializedVmValue],
+    serialization_config: &VmValueEncodeConfig,
   ) -> Result<SerializedVmValue> {
-    let run_fut = AssertUnwindSafe(self.run_exported_graph_inner(kv, name, params)).catch_unwind();
+    let run_fut =
+      AssertUnwindSafe(self.run_exported_graph_inner(kv, name, params, serialization_config))
+        .catch_unwind();
     let timeout_fut = sleep(QUERY_TIMEOUT);
     tokio::select! {
       res = run_fut => {
@@ -47,6 +54,7 @@ impl ExecContext {
     kv: &dyn KeyValueStore,
     name: &str,
     params: &[SerializedVmValue],
+    serialization_config: &VmValueEncodeConfig,
   ) -> Result<SerializedVmValue> {
     let graph_index = self.vm().lookup_exported_graph_by_name(name)?;
     let param_types = &self.type_info().graphs[graph_index].params;
@@ -76,7 +84,7 @@ impl ExecContext {
     let output = executor
       .run_graph(graph_index, &params)
       .await?
-      .map(|x| SerializedVmValue::encode(&*x, &Default::default()))
+      .map(|x| SerializedVmValue::encode(&*x, serialization_config))
       .transpose()?;
     Ok(output.unwrap_or_else(|| SerializedVmValue::Null(None)))
   }
