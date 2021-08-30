@@ -35,27 +35,11 @@ struct PlanState<'a> {
 struct OldTreePoint<'a> {
   name: &'a str,
   ty: &'a FieldType,
-  annotations: &'a [FieldAnnotation],
+  _annotations: &'a [FieldAnnotation],
   node: &'a StorageNode,
 }
 
 impl<'a> OldTreePoint<'a> {
-  fn reduce_optional(mut self) -> Self {
-    if let FieldType::Optional(x) = self.ty {
-      log::trace!(
-        "optional field `{}` of type `{}` reduced to `{}`.",
-        self.name,
-        self.ty,
-        x
-      );
-      self.ty = &**x;
-    } else {
-      log::info!("field `{}` was mandatory but now optional", self.name);
-    }
-
-    self
-  }
-
   fn reduce_set(mut self) -> Option<Self> {
     if let FieldType::Set(x) = self.ty {
       log::trace!(
@@ -87,51 +71,12 @@ impl<'a> OldTreePoint<'a> {
   fn validate_type(
     self,
     expected_ty: &FieldType,
-    expected_annotations: &[FieldAnnotation],
+    _expected_annotations: &[FieldAnnotation],
   ) -> Option<Self> {
     if self.ty != expected_ty {
-      let mut mandatory_to_optional = false;
-      if let FieldType::Optional(x) = expected_ty {
-        if &**x == self.ty {
-          mandatory_to_optional = true;
-        }
-      }
-      if !mandatory_to_optional {
-        log::warn!(
-          "field `{}` had type `{}` but the new type is `{}` - previous value will not be preserved",
-          self.name,
-          self.ty,
-          expected_ty,
-        );
-      }
       return None;
     }
 
-    if self.annotations.iter().find(|x| x.is_packed()).is_some()
-      && !expected_annotations
-        .iter()
-        .find(|x| x.is_packed())
-        .is_some()
-    {
-      log::warn!(
-        "field `{}` was not packed but is packed now - previous value will not be preserved",
-        self.name
-      );
-      return None;
-    }
-
-    if !self.annotations.iter().find(|x| x.is_packed()).is_some()
-      && expected_annotations
-        .iter()
-        .find(|x| x.is_packed())
-        .is_some()
-    {
-      log::warn!(
-        "field `{}` was packed but is not packed now - previous value will not be preserved",
-        self.name
-      );
-      return None;
-    }
     Some(self)
   }
 
@@ -190,7 +135,7 @@ impl<'a> OldTreePoint<'a> {
     Some(Self {
       name: &**child_name,
       ty: &child_ty.0,
-      annotations: child_ty.1.as_slice(),
+      _annotations: child_ty.1.as_slice(),
       node: child_node,
     })
   }
@@ -256,7 +201,7 @@ pub fn generate_plan_for_schema(
       .map(|(ty, node)| OldTreePoint {
         name: &**export_name,
         ty,
-        annotations: &[],
+        _annotations: &[],
         node,
       })
       .and_then(|x| x.validate_type(export_field, &[]));
@@ -276,32 +221,8 @@ fn generate_field(
   old_point: Option<OldTreePoint>,
 ) -> Result<StorageNode> {
   match field {
-    FieldType::Optional(x) => {
-      // Push down optional
-      generate_field(
-        plan_st,
-        schema,
-        x,
-        annotations,
-        old_point.map(|x| x.reduce_optional()),
-      )
-    }
     FieldType::Table(table_name) => {
       // This type has children. Push down.
-
-      // For packed types, don't go down further...
-      if annotations.iter().find(|x| x.is_packed()).is_some() {
-        return Ok(StorageNode {
-          key: old_point
-            .map(|x| x.node.key)
-            .unwrap_or_else(|| rand_storage_key(plan_st)),
-          flattened: false,
-          subspace_reference: None,
-          packed: true,
-          set: None,
-          children: BTreeMap::new(),
-        });
-      }
 
       // First, check whether we are resolving something recursively...
       if let Some(&key) = plan_st.fields_in_stack.get(table_name) {
@@ -311,7 +232,6 @@ fn generate_field(
             .unwrap_or_else(|| rand_storage_key(plan_st)),
           flattened: false,
           subspace_reference: Some(key),
-          packed: false,
           set: None,
           children: BTreeMap::new(),
         });
@@ -385,7 +305,6 @@ fn generate_field(
         key: storage_key,
         flattened: true,
         subspace_reference: None,
-        packed: false,
         set: None,
         children,
       })
@@ -398,7 +317,6 @@ fn generate_field(
           .unwrap_or_else(|| rand_storage_key(plan_st)),
         flattened: false,
         subspace_reference: None,
-        packed: false,
         set: None,
         children: BTreeMap::new(),
       })
@@ -420,7 +338,6 @@ fn generate_field(
           .unwrap_or_else(|| rand_storage_key(plan_st)),
         flattened: false,
         subspace_reference: None,
-        packed: false,
         set: Some(Box::new(inner)),
         children: BTreeMap::new(),
       })
@@ -468,13 +385,6 @@ fn collect_special_types(
   set_member_types_sink: &mut HashSet<Arc<str>>,
 ) -> Result<()> {
   match ty {
-    FieldType::Optional(x) => collect_special_types(
-      x,
-      schema,
-      state,
-      recursive_types_sink,
-      set_member_types_sink,
-    ),
     FieldType::Set(x) => {
       if let FieldType::Table(x) = &**x {
         set_member_types_sink.insert(x.clone());
@@ -500,12 +410,7 @@ fn collect_special_types(
         .get(table_name)
         .ok_or_else(|| PlannerError::MissingType(table_name.clone()))?;
 
-      for (_, (field, annotations)) in &specialized_ty.fields {
-        // Skip packed fields
-        if annotations.as_slice().is_packed() {
-          continue;
-        }
-
+      for (_, (field, _)) in &specialized_ty.fields {
         collect_special_types(
           field,
           schema,

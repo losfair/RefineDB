@@ -20,7 +20,6 @@ pub struct StorageNode<SK = StorageKey> {
   pub key: SK,
   pub flattened: bool,
   pub subspace_reference: Option<SK>,
-  pub packed: bool,
   pub set: Option<Box<StorageNode<SK>>>,
   pub children: BTreeMap<Arc<str>, StorageNode<SK>>,
 }
@@ -50,14 +49,13 @@ impl StorageNode {
   fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(
       f,
-      " {}{}{}{}",
+      " {}{}{}",
       hex::encode(&self.key.as_ref()),
       if let Some(x) = self.subspace_reference {
         format!(" subspace_reference({})", base64::encode(&x))
       } else {
         "".into()
       },
-      if self.packed { " packed" } else { "" },
       if self.flattened { " flattened" } else { "" },
     )?;
     write!(f, "\n")?;

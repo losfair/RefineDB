@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use bumpalo::Bump;
 use maplit::btreemap;
 use rand::RngCore;
-use rdb_analyzer::data::fixup::migrate_schema;
 use rdb_analyzer::data::treewalker::serialize::{
   SerializedVmValue, TaggedVmValue, VmValueEncodeConfig,
 };
@@ -164,15 +163,6 @@ impl RdbControl for ControlServer {
     {
       Err(ServerError::InvalidStoragePlan).translate_err()?;
     }
-
-    // Try migration
-    let kv_prefix = ns_to_kv_prefix_with_appended_zero(&r.namespace_id)
-      .await
-      .translate_err()?;
-    let kv = (st.data_store_generator)(&kv_prefix);
-    migrate_schema(&new_schema, &generated_plan, &*kv)
-      .await
-      .translate_err()?;
 
     // And finally, update our system schema.
     let res = st

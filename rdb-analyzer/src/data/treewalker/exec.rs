@@ -1,10 +1,4 @@
-use std::{
-  collections::{BTreeMap, BTreeSet, HashMap},
-  future::Future,
-  pin::Pin,
-  sync::{Arc, Mutex},
-  time::Duration,
-};
+use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use async_recursion::async_recursion;
@@ -42,7 +36,6 @@ pub struct Executor<'a, 'b> {
   kv: &'b dyn KeyValueStore,
   type_info: &'b GlobalTypeInfo<'a>,
   fire_rule_tables: Vec<FireRuleTable>,
-  path_integrity_assertions: Mutex<HashMap<Vec<u8>, BTreeSet<Vec<&'a str>>>>,
   yield_fn: Option<fn() -> Pin<Box<dyn Future<Output = ()> + Send>>>,
   sleep_fn: Option<fn(Duration) -> Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
@@ -74,9 +67,6 @@ pub enum ExecError {
 
   #[error("export type not supported")]
   ExportTypeNotSupported,
-
-  #[error("missing value for non-optional field `{0}` of table `{1}`")]
-  MissingValueForNonOptionalField(String, Arc<str>),
 
   #[error("max recursion depth exceeded: {0}")]
   MaxRecursionDepthExceeded(usize),
@@ -114,7 +104,6 @@ impl<'a, 'b> Executor<'a, 'b> {
       kv,
       type_info,
       fire_rule_tables,
-      path_integrity_assertions: Mutex::new(HashMap::new()),
       yield_fn: None,
       sleep_fn: None,
     }
@@ -134,36 +123,10 @@ impl<'a, 'b> Executor<'a, 'b> {
     graph_params: &[Arc<VmValue<'a>>],
   ) -> Result<Option<Arc<VmValue<'a>>>> {
     for i in 0..10 {
-      self.path_integrity_assertions.get_mut().unwrap().clear();
       let txn = self.kv.begin_transaction().await?;
       let ret = self
         .recursively_run_graph(graph_index, graph_params, 0, &*txn)
         .await?;
-      let assertions = self.path_integrity_assertions.get_mut().unwrap();
-      let checks = assertions.iter().map(|(key, segments)| {
-        let txn = &*txn;
-        async move { txn.get(key).await.map(|x| (x.is_some(), segments)) }
-      });
-      let res = futures::future::join_all(checks)
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>>>()?;
-      let mut failures = Vec::new();
-      for (exists, segments) in res.iter() {
-        if !*exists {
-          failures.push(format!(
-            "{}",
-            segments
-              .iter()
-              .map(|x| x.join("."))
-              .collect::<Vec<_>>()
-              .join(", ")
-          ));
-        }
-      }
-      if !failures.is_empty() {
-        return Err(ExecError::PathIntegrityFailure(failures.join("; ")).into());
-      }
 
       match txn.commit().await {
         Ok(()) => {
@@ -411,15 +374,6 @@ impl<'a, 'b> Executor<'a, 'b> {
             .get(&**field)
             .cloned()
             .unwrap_or_else(|| Arc::new(VmValue::Null(VmType::from(ty))));
-          if field_value.is_null() && !ty.is_optional() {
-            return Err(
-              ExecError::MissingValueForNonOptionalField(
-                field.to_string(),
-                specialized_ty.name.clone(),
-              )
-              .into(),
-            );
-          }
           table.insert(&**field, field_value);
         }
         Some(Arc::new(VmValue::Table(VmTableValue {
@@ -510,7 +464,6 @@ impl<'a, 'b> Executor<'a, 'b> {
             txn.put(&fast_scan_key, &[]).await?;
 
             let walker = walker.enter_set_raw(&primary_key_value).unwrap();
-            self.assert_path_integrity(&walker);
             self.walk_and_insert(txn, walker, value).await?;
           }
           VmSetValueKind::Fresh(_) => {
@@ -528,7 +481,6 @@ impl<'a, 'b> Executor<'a, 'b> {
         match &table.kind {
           VmTableValueKind::Resident(walker) => {
             let walker = walker.enter_field(key.as_str()).unwrap();
-            self.assert_path_integrity(&walker);
             self.walk_and_insert(txn, walker, value).await?;
           }
           VmTableValueKind::Fresh(_) => {
@@ -802,7 +754,7 @@ impl<'a, 'b> Executor<'a, 'b> {
           .enter_field(key)
           .expect("inconsistency: field not found in table");
 
-        match field.optional_unwrapped() {
+        match field {
           x @ FieldType::Primitive(_) => {
             // This is a primitive type - we cannot defer any more.
             // Let's load from the database.
@@ -826,21 +778,9 @@ impl<'a, 'b> Executor<'a, 'b> {
             ty: &**x,
             kind: VmTableValueKind::Resident(walker),
           })),
-          _ => unreachable!(),
         }
       }
     })
-  }
-
-  /// Path integrity check (on insertions):
-  ///
-  /// We should not insert anything to a table or set whose path contains non-existent nodes.
-  fn assert_path_integrity(&self, walker: &Arc<PathWalker<'a>>) {
-    let path = walker.all_non_intermediate_keys_on_path_excluding_self();
-    let mut assertions = self.path_integrity_assertions.lock().unwrap();
-    for (key, segments) in path {
-      assertions.entry(key).or_default().insert(segments);
-    }
   }
 
   #[async_recursion]

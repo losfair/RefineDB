@@ -1,4 +1,3 @@
-pub mod fixup;
 pub mod kv;
 pub mod pathwalker;
 pub mod treewalker;
@@ -9,6 +8,3 @@ mod mock_kv;
 
 #[cfg(test)]
 mod pathwalker_test;
-
-#[cfg(test)]
-mod fixup_test;

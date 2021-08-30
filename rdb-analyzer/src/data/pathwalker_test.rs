@@ -60,10 +60,6 @@ fn print_path_examples(
       let node = node.set.as_ref().unwrap();
       print_path_examples(schema, &**ty, &**node, walker, &path, recursion_set);
     }
-    FieldType::Optional(x) => {
-      let path = format!("{}!", path);
-      print_path_examples(schema, &**x, node, walker, &path, recursion_set);
-    }
   }
 }
 
@@ -82,8 +78,8 @@ fn basic() {
   type RecursiveItem<T> {
     @primary
     id: string,
-    value: T?,
-    recursive: RecursiveItem<T>?,
+    value: T,
+    recursive: RecursiveItem<T>,
   }
   type Duration<T> {
     start: T,

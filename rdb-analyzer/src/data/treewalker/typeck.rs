@@ -13,7 +13,7 @@ use crate::{
     bytecode::TwGraphNode,
     vm_value::{VmListType, VmSetType, VmTableType},
   },
-  schema::compile::{FieldAnnotationList, FieldType, PrimitiveType},
+  schema::compile::{FieldAnnotationList, PrimitiveType},
 };
 
 use super::{bytecode::TwGraph, vm::TwVm, vm_value::VmType};
@@ -58,8 +58,6 @@ pub enum TypeckError {
   TableTypeNotFound(String),
   #[error("map field `{0}` is not present in table `{1}`")]
   MapFieldNotPresentInTable(String, Arc<str>),
-  #[error("non-optional table field `{0}` is not present in map `{1}`")]
-  TableFieldNotPresentInMap(Arc<str>, String),
   #[error("graph output index out of bounds")]
   GraphOutputIndexOob,
   #[error("graph effect index out of bounds")]
@@ -78,12 +76,8 @@ pub enum TypeckError {
   FieldNotPresentInTable(String, Arc<str>),
   #[error("field `{0}` is not present in map")]
   FieldNotPresentInMap(String),
-  #[error("cannot unwrap non-optional type `{0}`")]
-  CannotUnwrapNonOptional(String),
   #[error("field `{0}` of type `{1}` is not a primary key")]
   NotPrimaryKey(String, Arc<str>),
-  #[error("deleting non-optional field `{0}` of table `{1}`")]
-  DeletingNonOptionalTableField(String, Arc<str>),
   #[error("unknown type of param {0} is not resolved in subgraph {1}")]
   UnknownParamTypeNotResolved(u32, u32),
   #[error("multiple candidate types for param {0} in subgraph {1}: {2}")]
@@ -330,7 +324,8 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
             .ok_or_else(|| TypeckError::TableTypeNotFound(table_ty.clone()))?;
           match map_ty {
             VmType::Map(x) => {
-              // Bi-directional field existence & type check
+              // Check that all keys that exist in the value also exist in the type,
+              // and the actual type matches the declared type.
               for (name, actual_ty) in x {
                 if let Some((field_ty, _)) = table_ty.fields.get(*name) {
                   let field_ty = VmType::from(field_ty);
@@ -340,17 +335,6 @@ impl<'a, 'b> GlobalTyckContext<'a, 'b> {
                     TypeckError::MapFieldNotPresentInTable(name.to_string(), table_ty.name.clone())
                       .into(),
                   );
-                }
-              }
-              for (name, (field_ty, _)) in &table_ty.fields {
-                if !x.contains_key(&**name) {
-                  if let FieldType::Optional(_) = field_ty {
-                  } else {
-                    return Err(
-                      TypeckError::TableFieldNotPresentInMap(name.clone(), format!("{:?}", map_ty))
-                        .into(),
-                    );
-                  }
                 }
               }
             }

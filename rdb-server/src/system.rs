@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bumpalo::Bump;
 use console::Style;
 use rdb_analyzer::{
-  data::{fixup::migrate_schema, kv::KeyValueStore},
+  data::kv::KeyValueStore,
   schema::{compile::compile, grammar::parse},
   storage_plan::{planner::generate_plan_for_schema, StoragePlan},
 };
@@ -22,7 +22,7 @@ pub const SYS_RASM: &str = include_str!("./sys.rasm");
 impl SystemSchema {
   pub async fn new(
     migration_hash: Option<String>,
-    store: &dyn KeyValueStore,
+    _store: &dyn KeyValueStore,
     meta_store: &dyn KeyValueStore,
   ) -> Self {
     let schema = compile(&parse(&Bump::new(), SCHEMA).unwrap()).unwrap();
@@ -86,8 +86,6 @@ impl SystemSchema {
       txn.commit().await.unwrap();
       new_plan
     };
-
-    migrate_schema(&schema, &plan, store).await.unwrap();
 
     let exec_ctx = ExecContext::load(Arc::new(SchemaContext { schema, plan }), SYS_RASM).unwrap();
 

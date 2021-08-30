@@ -13,7 +13,7 @@ use super::planner::generate_plan_for_schema;
 
 const SIMPLE_SCHEMA: &str = r#"
 type Item<T> {
-  @packed inner: T,
+  inner: T,
   inner2: T,
   @primary
   something_else: string,
@@ -23,19 +23,19 @@ type Duration<T> {
   end: T,
 }
 type Recursive<T> {
-  inner: Recursive<T>?,
+  inner: Recursive<T>,
 }
 type BinaryTree<T> {
-  left: BinaryTree<T>?,
-  right: BinaryTree<T>?,
-  value: T?,
+  left: BinaryTree<T>,
+  right: BinaryTree<T>,
+  value: T,
 }
 
 type TrinaryTree<T> {
-  left: TrinaryTree<T>?,
-  middle: TrinaryTree<T>?,
-  right: TrinaryTree<T>?,
-  value: T?,
+  left: TrinaryTree<T>,
+  middle: TrinaryTree<T>,
+  right: TrinaryTree<T>,
+  value: T,
 }
 
 type InternalSet {
@@ -87,8 +87,8 @@ fn planner_example_1() {
   type RecursiveItem<T> {
     @primary
     id: string,
-    value: T?,
-    recursive: RecursiveItem<T>?,
+    value: T,
+    recursive: RecursiveItem<T>,
   }
   type Duration<T> {
     start: T,
@@ -122,8 +122,8 @@ fn recursion_cycles() {
     value: B<T>,
   }
   type B<T> {
-    value1: A<T>?,
-    value2: C<T>?,
+    value1: A<T>,
+    value2: C<T>,
   }
   type C<T> {
     value: T,
@@ -170,9 +170,9 @@ fn test_many_binary_trees() {
     &alloc,
     r#"
     type BinaryTree<T> {
-      left: BinaryTree<T>?,
-      right: BinaryTree<T>?,
-      value: T?,
+      left: BinaryTree<T>,
+      right: BinaryTree<T>,
+      value: T,
     }
     type Tuple<A, B> {
       @primary
@@ -376,45 +376,22 @@ fn test_planner_migration_add_and_remove_field_simple() {
 }
 
 #[test]
-fn test_planner_migration_mandatory_to_optional() {
-  let _ = pretty_env_logger::try_init();
-  let old = r#"
-  type Item {
-    a: int64,
-  }
-  export Item data;
-  "#;
-  let new = r#"
-  type Item {
-    a: int64?,
-  }
-  export Item data;
-  "#;
-  let (insert_count_1, delete_count_1) = run_planner_migration_stats(old, new);
-  assert!(insert_count_1 == delete_count_1);
-  println!(
-    "test_planner_migration_mandatory_to_optional: insert {}, delete {}",
-    insert_count_1, delete_count_1
-  );
-}
-
-#[test]
 fn test_planner_migration_add_and_remove_field_complex() {
   let _ = pretty_env_logger::try_init();
   let old = r#"
   type BinaryTree<T> {
-    left: BinaryTree<T>?,
-    right: BinaryTree<T>?,
-    value: T?,
+    left: BinaryTree<T>,
+    right: BinaryTree<T>,
+    value: T,
   }
   export BinaryTree<int64> data;
   "#;
   let new = r#"
   type BinaryTree<T> {
-    left: BinaryTree<T>?,
-    right: BinaryTree<T>?,
-    value: T?,
-    value2: T?,
+    left: BinaryTree<T>,
+    right: BinaryTree<T>,
+    value: T,
+    value2: T,
   }
   export BinaryTree<int64> data;
   "#;

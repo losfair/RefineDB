@@ -4,7 +4,6 @@ use bumpalo::Bump;
 
 use crate::{
   data::{
-    fixup::migrate_schema,
     mock_kv::MockKv,
     treewalker::{
       bytecode::{TwGraph, TwGraphNode, TwScript},
@@ -103,7 +102,6 @@ async fn basic_exec() {
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 
   let kv = MockKv::new();
-  migrate_schema(&schema, &plan, &kv).await.unwrap();
   let mut executor = Executor::new(&vm, &kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
@@ -114,11 +112,11 @@ async fn basic_exec() {
   match &*output {
     VmValue::Map(x) => {
       match &**x.elements.get("field_1").unwrap() {
-        VmValue::Primitive(PrimitiveValue::String(x)) if x == "" => {}
+        VmValue::Null(VmType::Primitive(PrimitiveType::String)) => {}
         _ => unreachable!(),
       }
       match &**x.elements.get("field_2").unwrap() {
-        VmValue::Primitive(PrimitiveValue::Int64(x)) if *x == 0 => {}
+        VmValue::Null(VmType::Primitive(PrimitiveType::Int64)) => {}
         _ => unreachable!(),
       }
     }
@@ -217,7 +215,6 @@ async fn set_queries() {
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 
   let kv = MockKv::new();
-  migrate_schema(&schema, &plan, &kv).await.unwrap();
   let mut executor = Executor::new(&vm, &kv, &type_info);
   executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])

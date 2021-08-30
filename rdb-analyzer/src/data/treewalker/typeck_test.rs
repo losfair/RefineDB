@@ -22,7 +22,7 @@ use super::{bytecode::TwScript, vm_value::VmTableType};
 
 const SIMPLE_SCHEMA: &str = r#"
 type Item<T> {
-  @packed inner: T,
+  inner: T,
   inner2: T,
   @primary
   something_else: string,
@@ -32,19 +32,19 @@ type Duration<T> {
   end: T,
 }
 type Recursive<T> {
-  inner: Recursive<T>?,
+  inner: Recursive<T>,
 }
 type BinaryTree<T> {
-  left: BinaryTree<T>?,
-  right: BinaryTree<T>?,
-  value: T?,
+  left: BinaryTree<T>,
+  right: BinaryTree<T>,
+  value: T,
 }
 
 type TrinaryTree<T> {
-  left: TrinaryTree<T>?,
-  middle: TrinaryTree<T>?,
-  right: TrinaryTree<T>?,
-  value: T?,
+  left: TrinaryTree<T>,
+  middle: TrinaryTree<T>,
+  right: TrinaryTree<T>,
+  value: T,
 }
 
 type InternalSet {

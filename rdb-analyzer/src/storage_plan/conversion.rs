@@ -28,7 +28,6 @@ impl From<&StorageNode<StorageKey>> for StorageNode<String> {
       key: base64::encode(&that.key),
       flattened: that.flattened,
       subspace_reference: that.subspace_reference.map(|x| base64::encode(&x)),
-      packed: that.packed,
       set: that.set.as_ref().map(|x| Box::new(Self::from(&**x))),
       children: that
         .children
@@ -76,7 +75,6 @@ impl TryFrom<&StorageNode<String>> for StorageNode<StorageKey> {
             .map_err(|_| StorageKeyConversionError::Base64Decode)
         })
         .transpose()?,
-      packed: that.packed,
       set: that
         .set
         .as_ref()

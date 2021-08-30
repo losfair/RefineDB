@@ -188,7 +188,6 @@ impl<'a, T: From<&'a str> + Clone + Ord + PartialOrd + Eq + PartialEq> From<&'a 
 {
   fn from(that: &'a FieldType) -> Self {
     match that {
-      FieldType::Optional(x) => VmType::from(&**x),
       FieldType::Primitive(x) => VmType::Primitive(*x),
       FieldType::Table(x) => VmType::Table(VmTableType {
         name: T::from(&**x),
@@ -337,14 +336,6 @@ impl<'a> VmValue<'a> {
             );
           }
           fields.insert(&**field_name, Arc::new(field_value));
-        }
-        for (name, (field_ty, _)) in &ty.fields {
-          if !fields.contains_key(&**name) {
-            if let FieldType::Optional(_) = field_ty {
-            } else {
-              return Err(VmValueError::MissingField(name.clone(), ty.name.clone()).into());
-            }
-          }
         }
         Ok(Self::Table(VmTableValue {
           ty: &*ty.name,

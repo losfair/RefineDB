@@ -49,12 +49,6 @@ impl MockKv {
   }
 }
 
-impl MockKv {
-  pub async fn dump(&self) -> RedBlackTreeMapSync<Vec<u8>, (Option<Vec<u8>>, u64)> {
-    self.store.data.lock().await.clone()
-  }
-}
-
 #[async_trait]
 impl KeyValueStore for MockKv {
   async fn begin_transaction(&self) -> Result<Box<dyn KvTransaction>> {

@@ -10,7 +10,7 @@ fn test_compile_simple() {
     &alloc,
     r#"
     type Item<T> {
-      @packed inner: T,
+      inner: T,
       something_else: string,
     }
     type Duration<T> {
@@ -18,7 +18,7 @@ fn test_compile_simple() {
       end: T,
     }
     type Recursive<T> {
-      inner: Recursive<T>?,
+      inner: Recursive<T>,
     }
     export set<Item<Duration<int64>>> items;
     export Recursive<int64> item;
@@ -57,7 +57,7 @@ fn index_constraints_case_1a() {
     r#"
     type Item<T> {
       @unique key1: T,
-      @unique key2: T?,
+      @unique key2: T,
     }
     export Item<int64> item;
   "#,
@@ -65,31 +65,6 @@ fn index_constraints_case_1a() {
   .unwrap();
   let output = compile(&ast).unwrap();
   println!("{}", output);
-}
-
-/// Don't allow indexes on packed fields, yet
-#[test]
-fn index_constraints_case_1b() {
-  let _ = pretty_env_logger::try_init();
-  let alloc = Bump::new();
-  let ast = parse(
-    &alloc,
-    r#"
-    type Item<T> {
-      @unique key1: T,
-      @unique @packed key2: Wrapped<T>,
-    }
-    type Wrapped<T> {
-      inner: T,
-    }
-    export Item<int64> item;
-  "#,
-  )
-  .unwrap();
-  assert!(compile(&ast)
-    .unwrap_err()
-    .to_string()
-    .ends_with("indexes are only allowed on primitive fields"));
 }
 
 #[test]
@@ -142,26 +117,6 @@ fn primary_keys() {
   )
   .unwrap();
   compile(&ast).unwrap();
-}
-
-#[test]
-fn primary_keys_cannot_be_optional() {
-  let _ = pretty_env_logger::try_init();
-  let alloc = Bump::new();
-  let ast = parse(
-    &alloc,
-    r#"
-    type Item<T> {
-      @primary key: T?,
-    }
-    export Item<int64> something;
-  "#,
-  )
-  .unwrap();
-  assert!(compile(&ast)
-    .unwrap_err()
-    .to_string()
-    .contains("is a primary key and cannot be optional"));
 }
 
 #[test]

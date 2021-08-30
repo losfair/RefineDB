@@ -5,7 +5,6 @@ use bumpalo::Bump;
 
 use crate::{
   data::{
-    fixup::migrate_schema,
     mock_kv::MockKv,
     treewalker::{
       asm::codegen::compile_twscript,
@@ -13,11 +12,14 @@ use crate::{
       serialize::{SerializedVmValue, TaggedVmValue},
       typeck::GlobalTyckContext,
       vm::TwVm,
-      vm_value::VmValue,
+      vm_value::{VmType, VmValue},
     },
     value::PrimitiveValue,
   },
-  schema::{compile::compile, grammar::parse},
+  schema::{
+    compile::{compile, PrimitiveType},
+    grammar::parse,
+  },
   storage_plan::planner::generate_plan_for_schema,
 };
 
@@ -34,7 +36,6 @@ async fn simple_test_with_error<F: FnMut(Result<Option<Arc<VmValue>>>)>(
   let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
 
   let kv = MockKv::new();
-  migrate_schema(&schema, &plan, &kv).await.unwrap();
 
   for &code in scripts {
     let start = Instant::now();
@@ -120,7 +121,6 @@ async fn basic_exec() {
     @primary
     id: string,
     name: string,
-    @default("hello")
     altname: string,
     duration: Duration<int64>,
   }
@@ -177,10 +177,10 @@ async fn basic_exec() {
             x.elements.get("name").unwrap().unwrap_primitive(),
             &PrimitiveValue::String("test_name".into())
           );
-          assert_eq!(
-            x.elements.get("altname").unwrap().unwrap_primitive(),
-            &PrimitiveValue::String("hello".into())
-          );
+          assert!(matches!(
+            &**x.elements.get("altname").unwrap(),
+            VmValue::Null(VmType::Primitive(PrimitiveType::String)),
+          ),);
           assert_eq!(
             x.elements.get("value").unwrap().unwrap_primitive(),
             &PrimitiveValue::Int64(2)
@@ -491,36 +491,6 @@ async fn list_ops() {
   .await;
 
   assert_eq!(chkindex, 2);
-}
-
-#[tokio::test]
-async fn path_integrity() {
-  let _ = pretty_env_logger::try_init();
-  let mut ok = false;
-  simple_test_with_error(
-    r#"
-    type Item {
-      @primary
-      id: int64,
-      value: int64,
-    }
-    export set<Item> items1;
-    export set<Item> items2;
-  "#,
-    &[r#"
-    graph main(root: schema) {
-      t_insert(value) (point_get root.items1 42) 1;
-      t_insert(value) (point_get root.items2 42) 1;
-    }
-    "#],
-    |x| {
-      assert!(x.unwrap_err().to_string().contains("missing path(s)"));
-      ok = true;
-    },
-  )
-  .await;
-
-  assert!(ok);
 }
 
 #[tokio::test]

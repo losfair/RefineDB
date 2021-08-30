@@ -7,7 +7,6 @@ use anyhow::Result;
 use thiserror::Error;
 
 use super::grammar::ast::{self, TypeExpr};
-use crate::data::value::PrimitiveValue;
 use crate::schema::grammar::ast::Literal;
 use crate::schema::grammar::ast::SchemaItem;
 use serde::{Deserialize, Serialize};
@@ -51,17 +50,11 @@ pub enum SchemaCompileError {
   #[error("field `{0}` of type `{1}`: indexes are only allowed on primitive fields")]
   IndexOnNonPrimitiveField(String, String),
 
-  #[error("field `{0}` of type `{1}` is a primary key and cannot be optional")]
-  OptionalPrimaryKey(String, String),
-
   #[error("type `{0}` has multiple primary keys")]
   MultiplePrimaryKeys(String),
 
   #[error("type name must start with an upper-case letter: `{0}`")]
   TypeNameMustStartWithUpperCaseLetter(String),
-
-  #[error("optional field `{0}` in type `{1}` cannot have default value")]
-  OptionalFieldCannotHaveDefaultValue(String, String),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
@@ -168,16 +161,13 @@ pub enum FieldAnnotation {
   PrimaryKey,
   Unique,
   Index,
-  Packed,
   RenameFrom(String),
-  Default(PrimitiveValue),
 }
 
 pub trait FieldAnnotationList {
   fn is_primary(&self) -> bool;
   fn is_unique(&self) -> bool;
   fn is_index(&self) -> bool;
-  fn is_packed(&self) -> bool;
 }
 
 impl FieldAnnotationList for &[FieldAnnotation] {
@@ -192,19 +182,9 @@ impl FieldAnnotationList for &[FieldAnnotation] {
   fn is_index(&self) -> bool {
     self.iter().find(|x| x.is_index()).is_some()
   }
-
-  fn is_packed(&self) -> bool {
-    self.iter().find(|x| x.is_packed()).is_some()
-  }
 }
 
 impl FieldAnnotation {
-  pub fn is_packed(&self) -> bool {
-    match self {
-      FieldAnnotation::Packed => true,
-      _ => false,
-    }
-  }
   pub fn is_index(&self) -> bool {
     match self {
       FieldAnnotation::Index => true,
@@ -223,12 +203,6 @@ impl FieldAnnotation {
       _ => false,
     }
   }
-  pub fn is_default(&self) -> bool {
-    match self {
-      FieldAnnotation::Default(_) => true,
-      _ => false,
-    }
-  }
 }
 
 impl Display for FieldAnnotation {
@@ -237,9 +211,7 @@ impl Display for FieldAnnotation {
       Self::PrimaryKey => write!(f, "@primary"),
       Self::Unique => write!(f, "@unique"),
       Self::Index => write!(f, "@index"),
-      Self::Packed => write!(f, "@packed"),
       Self::RenameFrom(x) => write!(f, "@rename_from({})", serde_json::to_string(x).unwrap()),
-      Self::Default(x) => write!(f, "@default({})", x),
     }
   }
 }
@@ -249,23 +221,6 @@ pub enum FieldType {
   Table(Arc<str>),
   Primitive(PrimitiveType),
   Set(Box<FieldType>),
-  Optional(Box<FieldType>),
-}
-
-impl FieldType {
-  pub fn optional_unwrapped(&self) -> &Self {
-    match self {
-      Self::Optional(x) => &**x,
-      _ => self,
-    }
-  }
-
-  pub fn is_optional(&self) -> bool {
-    match self {
-      Self::Optional(_) => true,
-      _ => false,
-    }
-  }
 }
 
 impl Display for FieldType {
@@ -274,7 +229,6 @@ impl Display for FieldType {
       Self::Table(x) => write!(f, "{}", x),
       Self::Primitive(x) => write!(f, "{}", x),
       Self::Set(x) => write!(f, "set<{}>", x),
-      Self::Optional(x) => write!(f, "{}?", x),
     }
   }
 }
@@ -426,10 +380,7 @@ impl<'a> TypeResolutionContext<'a> {
           .into(),
         );
       }
-      let mut field_ty = self.resolve_type_expr(&local_context, &x.value)?;
-      if x.optional {
-        field_ty = FieldType::Optional(Box::new(field_ty));
-      }
+      let field_ty = self.resolve_type_expr(&local_context, &x.value)?;
 
       let mut annotations = vec![];
       for ann in &x.annotations {
@@ -443,14 +394,8 @@ impl<'a> TypeResolutionContext<'a> {
           ("index", []) => {
             annotations.push(FieldAnnotation::Index);
           }
-          ("packed", []) => {
-            annotations.push(FieldAnnotation::Packed);
-          }
           ("rename_from", [Literal::String(x)]) => {
             annotations.push(FieldAnnotation::RenameFrom(x.to_string()));
-          }
-          ("default", [x]) => {
-            annotations.push(FieldAnnotation::Default(literal_to_primitive(x)));
           }
           _ => {
             return Err(
@@ -466,13 +411,13 @@ impl<'a> TypeResolutionContext<'a> {
       }
 
       // Validate constraints.
-      // Rule 1: Currently, a primary/unique/non-unique index is only allowed on either packed or primitive fields.
+      // Rule 1: Currently, a primary/unique/non-unique index is only allowed on primitive fields.
       if annotations
         .iter()
         .find(|x| x.is_primary() || x.is_unique() || x.is_index())
         .is_some()
       {
-        match field_ty.optional_unwrapped() {
+        match field_ty {
           FieldType::Primitive(_) => {}
           _ => {
             return Err(
@@ -484,29 +429,6 @@ impl<'a> TypeResolutionContext<'a> {
             );
           }
         }
-      }
-      // Rule 2: Primary keys cannot be optional.
-      if annotations.as_slice().is_primary() {
-        match field_ty {
-          FieldType::Optional(_) => {
-            return Err(
-              SchemaCompileError::OptionalPrimaryKey(x.name.0.to_string(), ty.name.0.to_string())
-                .into(),
-            );
-          }
-          _ => {}
-        }
-      }
-      // Rule 3: an optional field cannot have a default value.
-      // Maybe we can relax this in the future.
-      if annotations.iter().find(|x| x.is_default()).is_some() && field_ty.is_optional() {
-        return Err(
-          SchemaCompileError::OptionalFieldCannotHaveDefaultValue(
-            x.name.0.to_string(),
-            ty.name.0.to_string(),
-          )
-          .into(),
-        );
       }
       fields.insert(Arc::from(x.name.0), (field_ty, annotations));
     }
@@ -527,13 +449,5 @@ impl<'a> TypeResolutionContext<'a> {
     self.resolved.get_mut(&repr).unwrap().fields = fields;
 
     Ok(FieldType::Table(repr))
-  }
-}
-
-fn literal_to_primitive(lit: &ast::Literal) -> PrimitiveValue {
-  match lit {
-    ast::Literal::Bytes(x) => PrimitiveValue::Bytes(x.to_vec()),
-    ast::Literal::Integer(x) => PrimitiveValue::Int64(*x),
-    ast::Literal::String(x) => PrimitiveValue::String(x.to_string()),
   }
 }
