@@ -28,4 +28,4 @@ jobs:
           cd rdb-analyzer
           cargo test
           cargo test --features test-with-fdb
-          cargo test --features test-with-sqlite --test-threads 1 # SQLite is currently broken with multiple threads
+          cargo test --features test-with-sqlite -- --test-threads 1 # SQLite is currently broken with multiple threads
