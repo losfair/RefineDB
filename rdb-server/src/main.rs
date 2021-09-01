@@ -2,17 +2,19 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use foundationdb::{tuple::Subspace, Database};
-use rdb_analyzer::data::kv::KeyValueStore;
+use rdb_analyzer::{
+  data::kv::KeyValueStore,
+  kv_backend::{
+    foundationdb::FdbKvStore,
+    sqlite::{GlobalSqliteStore, SqliteKvStore},
+  },
+};
 use rdb_proto::{proto::rdb_control_server::RdbControlServer, tonic::transport::Server};
 use structopt::StructOpt;
 use tokio::runtime::Runtime;
 
 use crate::{
   httpapi::run_http_server,
-  kv_backend::{
-    foundationdb::FdbKvStore,
-    sqlite::{GlobalSqliteStore, SqliteKvStore},
-  },
   opt::Opt,
   query_cache::{QueryCache, QueryCacheParams},
   server::ControlServer,
@@ -22,7 +24,6 @@ use crate::{
 mod exec;
 mod exec_core;
 mod httpapi;
-mod kv_backend;
 mod opt;
 mod query_cache;
 mod server;
@@ -55,13 +56,8 @@ async fn run() -> Result<()> {
       panic!("cannot select multiple kv backends");
     }
     let db = Arc::new(Database::new(Some(x))?);
-    let keyspace = Subspace::from_bytes(
-      opt
-        .fdb_keyspace
-        .as_ref()
-        .expect("missing fdb-keyspace")
-        .as_bytes(),
-    );
+    let keyspace =
+      Subspace::all().subspace(opt.fdb_keyspace.as_ref().expect("missing fdb-keyspace"));
 
     system_store = Box::new(FdbKvStore::new(
       db.clone(),
@@ -87,7 +83,7 @@ async fn run() -> Result<()> {
     if opt.fdb_cluster.is_some() || opt.fdb_keyspace.is_some() {
       panic!("cannot select multiple kv backends");
     }
-    let backend = GlobalSqliteStore::open_leaky(x)?;
+    let backend = GlobalSqliteStore::open_leaky(Some(x))?;
     system_store = Box::new(SqliteKvStore::new(backend.clone(), "system", b""));
     system_metadata_store = Box::new(SqliteKvStore::new(backend.clone(), "system_meta", b""));
     data_store_generator = Box::new(move |namespace| {

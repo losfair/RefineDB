@@ -4,7 +4,6 @@ use bumpalo::Bump;
 
 use crate::{
   data::{
-    mock_kv::MockKv,
     treewalker::{
       bytecode::{TwGraph, TwGraphNode, TwScript},
       exec::{generate_root_map, Executor},
@@ -19,6 +18,7 @@ use crate::{
     grammar::parse,
   },
   storage_plan::{planner::generate_plan_for_schema, StoragePlan},
+  test_util::create_kv,
 };
 
 use super::vm_value::VmValue;
@@ -101,8 +101,8 @@ async fn basic_exec() {
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 
-  let kv = MockKv::new();
-  let mut executor = Executor::new(&vm, &kv, &type_info);
+  let kv = create_kv();
+  let mut executor = Executor::new(&vm, &*kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -143,7 +143,7 @@ async fn basic_exec() {
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let mut executor = Executor::new(&vm, &kv, &type_info);
+  let mut executor = Executor::new(&vm, &*kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -214,8 +214,8 @@ async fn set_queries() {
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
 
-  let kv = MockKv::new();
-  let mut executor = Executor::new(&vm, &kv, &type_info);
+  let kv = create_kv();
+  let mut executor = Executor::new(&vm, &*kv, &type_info);
   executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -243,7 +243,7 @@ async fn set_queries() {
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let mut executor = Executor::new(&vm, &kv, &type_info);
+  let mut executor = Executor::new(&vm, &*kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -278,7 +278,7 @@ async fn set_queries() {
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let mut executor = Executor::new(&vm, &kv, &type_info);
+  let mut executor = Executor::new(&vm, &*kv, &type_info);
   executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await
@@ -306,7 +306,7 @@ async fn set_queries() {
   };
   let vm = TwVm::new(&schema, &plan, &script).unwrap();
   let type_info = GlobalTyckContext::new(&vm).unwrap().typeck().unwrap();
-  let mut executor = Executor::new(&vm, &kv, &type_info);
+  let mut executor = Executor::new(&vm, &*kv, &type_info);
   let output = executor
     .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
     .await

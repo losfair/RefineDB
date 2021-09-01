@@ -1,10 +1,10 @@
 use std::{pin::Pin, sync::Arc};
 
+use crate::data::kv::{KeyValueStore, KvError, KvKeyIterator, KvTransaction};
 use anyhow::Result;
 use async_trait::async_trait;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rdb_analyzer::data::kv::{KeyValueStore, KvError, KvKeyIterator, KvTransaction};
 use rusqlite::{named_params, OptionalExtension, Transaction};
 use std::future::Future;
 use thiserror::Error;
@@ -37,8 +37,12 @@ pub struct GlobalSqliteStore {
 type Task = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()>>> + Send>;
 
 impl GlobalSqliteStore {
-  pub fn open_leaky(path: &str) -> Result<Arc<Self>> {
-    let manager = SqliteConnectionManager::file(path).with_init(|c| {
+  pub fn open_leaky(path: Option<&str>) -> Result<Arc<Self>> {
+    let manager = match path {
+      Some(path) => SqliteConnectionManager::file(path),
+      None => SqliteConnectionManager::memory(),
+    };
+    let manager = manager.with_init(|c| {
       c.execute_batch(
         r#"
       PRAGMA journal_mode=WAL;

@@ -31,6 +31,11 @@ async-trait = "0.1"
 futures = "0.3"
 async-recursion = "0.3.2"
 petgraph = "0.5"
+foundationdb = { version = "0.5", optional = true }
+rusqlite = { version = "0.25", optional = true }
+r2d2 = { version = "0.8", optional = true }
+r2d2_sqlite = { version = "0.18", optional = true }
+tokio = { version = "1", optional = true, features = ["full"] }
 
 [build-dependencies]
 lalrpop = "0.19.6"
@@ -38,3 +43,10 @@ lalrpop = "0.19.6"
 [dev-dependencies]
 console = "0.14.0"
 tokio = { version = "1", features = ["full"] }
+
+[features]
+default = ["fdb-backend", "sqlite-backend"]
+fdb-backend = ["foundationdb", "tokio"]
+sqlite-backend = ["rusqlite", "r2d2", "r2d2_sqlite", "tokio"]
+test-with-fdb = ["fdb-backend"]
+test-with-sqlite = ["sqlite-backend"]

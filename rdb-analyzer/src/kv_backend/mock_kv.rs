@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use rpds::RedBlackTreeMapSync;
 use tokio::sync::Mutex;
 
-use super::kv::{KeyValueStore, KvError, KvKeyIterator, KvTransaction};
+use crate::data::kv::{KeyValueStore, KvError, KvKeyIterator, KvTransaction};
 use anyhow::Result;
 
 /// A mocked KV store that simulates MVCC with snapshot isolation.

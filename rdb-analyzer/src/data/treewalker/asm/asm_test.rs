@@ -5,7 +5,6 @@ use bumpalo::Bump;
 
 use crate::{
   data::{
-    mock_kv::MockKv,
     treewalker::{
       asm::codegen::compile_twscript,
       exec::{generate_root_map, Executor},
@@ -21,6 +20,7 @@ use crate::{
     grammar::parse,
   },
   storage_plan::planner::generate_plan_for_schema,
+  test_util::create_kv,
 };
 
 async fn simple_test_with_error<F: FnMut(Result<Option<Arc<VmValue>>>)>(
@@ -35,7 +35,7 @@ async fn simple_test_with_error<F: FnMut(Result<Option<Arc<VmValue>>>)>(
   drop(alloc);
   let plan = generate_plan_for_schema(&Default::default(), &Default::default(), &schema).unwrap();
 
-  let kv = MockKv::new();
+  let kv = create_kv();
 
   for &code in scripts {
     let start = Instant::now();
@@ -51,7 +51,7 @@ async fn simple_test_with_error<F: FnMut(Result<Option<Arc<VmValue>>>)>(
     let tyck_end = Instant::now();
     println!("tyck took {:?}", tyck_end.duration_since(start));
 
-    let mut executor = Executor::new(&vm, &kv, &type_info);
+    let mut executor = Executor::new(&vm, &*kv, &type_info);
     let output = executor
       .run_graph(0, &[Arc::new(generate_root_map(&schema, &plan).unwrap())])
       .await;
