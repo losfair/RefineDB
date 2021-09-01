@@ -43,6 +43,7 @@ lalrpop = "0.19.6"
 [dev-dependencies]
 console = "0.14.0"
 tokio = { version = "1", features = ["full"] }
+lazy_static = "1.4"
 
 [features]
 default = ["fdb-backend", "sqlite-backend"]

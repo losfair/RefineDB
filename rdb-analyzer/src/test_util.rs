@@ -52,3 +52,23 @@ pub fn create_kv() -> Box<dyn KeyValueStore> {
       .bytes(),
   ))
 }
+
+#[cfg(feature = "test-with-sqlite")]
+pub fn create_kv() -> Box<dyn KeyValueStore> {
+  use crate::kv_backend::sqlite::{GlobalSqliteStore, SqliteKvStore};
+  use rand::RngCore;
+  use std::sync::Arc;
+
+  lazy_static::lazy_static! {
+    static ref GLOBAL: Arc<GlobalSqliteStore> = GlobalSqliteStore::open_leaky(None).unwrap();
+  }
+
+  let mut isolation_id = [0u8; 16];
+  rand::thread_rng().fill_bytes(&mut isolation_id[..]);
+
+  Box::new(SqliteKvStore::new(
+    GLOBAL.clone(),
+    "user_data",
+    &isolation_id,
+  ))
+}

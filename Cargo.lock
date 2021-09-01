@@ -1590,6 +1590,7 @@ dependencies = [
  "indexmap",
  "lalrpop",
  "lalrpop-util",
+ "lazy_static",
  "log",
  "petgraph",
  "phf",

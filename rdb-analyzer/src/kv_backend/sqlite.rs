@@ -14,7 +14,7 @@ use tokio::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     oneshot, Mutex,
   },
-  task::{block_in_place, spawn_local, LocalSet},
+  task::{spawn_blocking, spawn_local, LocalSet},
 };
 
 pub struct SqliteKvStore {
@@ -90,7 +90,10 @@ impl SqliteKvStore {
 #[async_trait]
 impl KeyValueStore for SqliteKvStore {
   async fn begin_transaction(&self) -> Result<Box<dyn KvTransaction>> {
-    let conn = block_in_place(|| self.global.conn_pool.get())?;
+    let conn = {
+      let g = self.global.clone();
+      spawn_blocking(move || g.conn_pool.get()).await??
+    };
 
     let (work_tx, work_rx) = unbounded_channel();
     self
