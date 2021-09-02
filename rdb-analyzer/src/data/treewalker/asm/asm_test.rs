@@ -539,3 +539,97 @@ async fn throw_null() {
 
   assert!(ok);
 }
+
+#[tokio::test]
+async fn partial_table_replacement() {
+  let _ = pretty_env_logger::try_init();
+  let mut chkindex = 0usize;
+  simple_test(
+    r#"
+    type Table {
+      fields: Fields,
+    }
+    type Fields {
+      a: int64,
+      b: int64,
+    }
+    export Table t;
+  "#,
+    &[
+      r#"
+    graph main(root: schema) {
+      t = build_table(Fields) $
+        m_insert(a) 1 $
+        m_insert(b) 2 $
+        create_map;
+      t_insert(fields) root.t t;
+    }
+    "#,
+      r#"
+    graph main(root: schema): map {
+      a: int64,
+      b: int64,
+    } {
+      return m_insert(a) root.t.fields.a $
+        m_insert(b) root.t.fields.b $
+        create_map;
+    }
+    "#,
+      r#"
+    graph main(root: schema) {
+      t = build_table(Fields) $
+        m_insert(a) 3 $
+        create_map;
+      t_insert(fields) root.t t;
+    }
+    "#,
+      r#"
+    graph main(root: schema): map {
+      a: int64,
+      b: int64,
+    } {
+      return m_insert(a) root.t.fields.a $
+        m_insert(b) root.t.fields.b $
+        create_map;
+    }
+    "#,
+    ],
+    |x| {
+      match chkindex {
+        0 => {}
+        1 => match &**x.as_ref().unwrap() {
+          VmValue::Map(x) => {
+            assert_eq!(
+              **x.elements.get("a").unwrap(),
+              VmValue::Primitive(PrimitiveValue::Int64(1))
+            );
+            assert_eq!(
+              **x.elements.get("b").unwrap(),
+              VmValue::Primitive(PrimitiveValue::Int64(2))
+            );
+          }
+          _ => unreachable!(),
+        },
+        2 => {}
+        3 => match &**x.as_ref().unwrap() {
+          VmValue::Map(x) => {
+            assert_eq!(
+              **x.elements.get("a").unwrap(),
+              VmValue::Primitive(PrimitiveValue::Int64(3))
+            );
+            assert_eq!(
+              **x.elements.get("b").unwrap(),
+              VmValue::Null(VmType::Primitive(PrimitiveType::Int64))
+            );
+          }
+          _ => unreachable!(),
+        },
+        _ => unreachable!(),
+      }
+      chkindex += 1;
+    },
+  )
+  .await;
+
+  assert_eq!(chkindex, 4);
+}
