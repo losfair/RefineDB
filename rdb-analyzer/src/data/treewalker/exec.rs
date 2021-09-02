@@ -332,10 +332,7 @@ impl<'a, 'b> Executor<'a, 'b> {
 
     Ok(match n {
       TwGraphNode::BuildSet => {
-        let list = match &*params[0] {
-          VmValue::List(x) => x,
-          _ => unreachable!(),
-        };
+        let list = unwrap_enum!(&*params[0], VmValue::List(x) => x);
         let mut members = BTreeMap::new();
         let (primary_key, _) = VmType::Set(VmSetType {
           ty: Box::new(list.member_ty.clone()),
@@ -362,10 +359,7 @@ impl<'a, 'b> Executor<'a, 'b> {
         Some(Arc::new(VmValue::Set(set)))
       }
       TwGraphNode::BuildTable(table_ty) => {
-        let map = match &*params[0] {
-          VmValue::Map(x) => &x.elements,
-          _ => unreachable!(),
-        };
+        let map = unwrap_enum!(&*params[0], VmValue::Map(x) => &x.elements);
         let ty = self.vm.script.idents[*table_ty as usize].as_str();
         let mut table: BTreeMap<&'a str, Arc<VmValue<'a>>> = BTreeMap::new();
         let specialized_ty = self.vm.schema.types.get(ty).unwrap();
@@ -409,18 +403,9 @@ impl<'a, 'b> Executor<'a, 'b> {
         }
       }
       TwGraphNode::GetSetElement => {
-        let primary_key_value = match &*params[0] {
-          VmValue::Primitive(x) => x,
-          _ => unreachable!(),
-        };
-        let set = match &*params[1] {
-          VmValue::Set(x) => x,
-          _ => unreachable!(),
-        };
-        let member_ty = match &set.member_ty {
-          VmType::Table(x) => x.name,
-          _ => unreachable!(),
-        };
+        let primary_key_value = unwrap_enum!(&*params[0], VmValue::Primitive(x) => x);
+        let set = unwrap_enum!(&*params[1], VmValue::Set(x) => x);
+        let member_ty = unwrap_enum!(&set.member_ty, VmType::Table(x) => x.name);
         match &set.kind {
           VmSetValueKind::Resident(walker) => {
             let walker = walker.enter_set(primary_key_value).unwrap();
@@ -495,14 +480,8 @@ impl<'a, 'b> Executor<'a, 'b> {
       }
       TwGraphNode::LoadParam(param_index) => Some(graph_params[*param_index as usize].clone()),
       TwGraphNode::DeleteFromSet => {
-        let primary_key_value = match &*params[0] {
-          VmValue::Primitive(x) => x,
-          _ => unreachable!(),
-        };
-        let set = match &*params[1] {
-          VmValue::Set(x) => x,
-          _ => unreachable!(),
-        };
+        let primary_key_value = unwrap_enum!(&*params[0], VmValue::Primitive(x) => x);
+        let set = unwrap_enum!(&*params[1], VmValue::Set(x) => x);
         match &set.kind {
           VmSetValueKind::Resident(walker) => {
             self

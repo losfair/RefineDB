@@ -14,3 +14,12 @@ where
   }
   None
 }
+
+macro_rules! unwrap_enum {
+  ($value:expr, $pattern:pat => $extracted_value:expr) => {
+    match $value {
+      $pattern => $extracted_value,
+      _ => panic!("enum variant mismatch"),
+    }
+  };
+}
