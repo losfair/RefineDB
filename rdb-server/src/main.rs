@@ -83,7 +83,7 @@ async fn run() -> Result<()> {
     if opt.fdb_cluster.is_some() || opt.fdb_keyspace.is_some() {
       panic!("cannot select multiple kv backends");
     }
-    let backend = GlobalSqliteStore::open_leaky(Some(x))?;
+    let backend = GlobalSqliteStore::open_leaky(x)?;
     system_store = Box::new(SqliteKvStore::new(backend.clone(), "system", b""));
     system_metadata_store = Box::new(SqliteKvStore::new(backend.clone(), "system_meta", b""));
     data_store_generator = Box::new(move |namespace| {

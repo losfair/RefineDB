@@ -37,12 +37,8 @@ pub struct GlobalSqliteStore {
 type Task = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()>>> + Send>;
 
 impl GlobalSqliteStore {
-  pub fn open_leaky(path: Option<&str>) -> Result<Arc<Self>> {
-    let manager = match path {
-      Some(path) => SqliteConnectionManager::file(path),
-      None => SqliteConnectionManager::memory(),
-    };
-    let manager = manager.with_init(|c| {
+  pub fn open_leaky(path: &str) -> Result<Arc<Self>> {
+    let manager = SqliteConnectionManager::file(path).with_init(|c| {
       c.execute_batch(
         r#"
       PRAGMA journal_mode=WAL;

@@ -57,10 +57,16 @@ pub fn create_kv() -> Box<dyn KeyValueStore> {
 pub fn create_kv() -> Box<dyn KeyValueStore> {
   use crate::kv_backend::sqlite::{GlobalSqliteStore, SqliteKvStore};
   use rand::RngCore;
-  use std::sync::Arc;
+  use std::{sync::Arc, time::SystemTime};
 
   lazy_static::lazy_static! {
-    static ref GLOBAL: Arc<GlobalSqliteStore> = GlobalSqliteStore::open_leaky(None).unwrap();
+    static ref TEMP_FILE: String = format!(
+      "{}/rdb-test-sqlite-{}-{}.db",
+      std::env::temp_dir().to_string_lossy(),
+      SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis(),
+      std::process::id(),
+    );
+    static ref GLOBAL: Arc<GlobalSqliteStore> = GlobalSqliteStore::open_leaky(&*TEMP_FILE).unwrap();
   }
 
   let mut isolation_id = [0u8; 16];
