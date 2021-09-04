@@ -41,6 +41,8 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+      - name: Install rustfmt
+        run: rustup component add rustfmt
       - name: Install FoundationDB client
         run: |
           wget https://www.foundationdb.org/downloads/6.3.15/ubuntu/installers/foundationdb-clients_6.3.15-1_amd64.deb
