@@ -43,6 +43,10 @@ jobs:
           profile: minimal
           toolchain: nightly
           override: true
+      - name: Install FoundationDB client
+        run: |
+          wget https://www.foundationdb.org/downloads/6.3.15/ubuntu/installers/foundationdb-clients_6.3.15-1_amd64.deb
+          sudo dpkg -i foundationdb-clients_6.3.15-1_amd64.deb
       - name: Build rdb-server
         run: |
           cd rdb-server
