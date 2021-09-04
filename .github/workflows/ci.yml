@@ -29,3 +29,23 @@ jobs:
           cargo test
           cargo test --features test-with-fdb
           cargo test --features test-with-sqlite
+  build-docker:
+    runs-on: ubuntu-latest
+    name: Build docker image
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: 'true'
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+      - name: Build rdb-server
+        run: |
+          cd rdb-server
+          cargo build --release
+      - name: Build image
+        run: ./build_docker.sh
